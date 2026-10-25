@@ -167,7 +167,7 @@ function show(id) {
 
 function stock() {
   const rows = N.mapping.map(r => `<tr><td>${r.label}</td><td class="num">${r.models.join(' · ')}</td><td class="num">${r.registered_photographs}/${r.training_photographs}</td><td class="num">${r.focal_outside_half_to_triple}</td></tr>`).join('');
-  body.innerHTML = `<h2>COLMAP on 77 licensed Commons photographs</h2>
+  body.innerHTML = `<h2>COLMAP on licensed Commons photographs</h2>
     <p>The match graph is nearly one piece (65 of 67 matched photographs connect), yet the mapper returns disconnected fragments with no scale, and some focal lengths blow up.</p>
     <table><tr><th>Mapping</th><th class="num">cameras per model</th><th class="num">registered</th><th class="num">focal ratio outside 0.5–3</th></tr>${rows}</table>
     <p><b>Extension 1 — EXIF-anchored calibration.</b> Photographs whose EXIF gives the focal length keep it fixed; the others are bounded. Focal blow-ups fall from ${N.mapping[0].focal_outside_half_to_triple} to ${N.mapping[2].focal_outside_half_to_triple}, but the fragments do <b>not</b> merge.</p>
@@ -302,7 +302,8 @@ function mirror() {
     <p>Every Boardman postcard looks toward the Boardman site, but from the <b>south-west</b>: in those poses Boardman would appear to the right of the tower. In the postcards it is on the left. They were taken from the Arts Quad, north-east of the site.</p>
     <div class="finding">All 22 modern photographers in this fragment stand west or south-west of the tower (blue), so the modern model contains only the tower's and library's west and south faces. McGraw Tower has the same clock face on every side; the matcher paired the postcards' east-face features with west-face points, producing a <b>mirror-image pose</b> that fits every anchor to a few pixels.</div>
     <p>The certificates are honest about the ambiguity <i>along</i> the ray, but not about this alias. Found by checking the left–right order of Boardman, tower and library against the map; the pipeline did not flag it.</p>
-    <p><b>The fix is data, not tuning:</b> modern photographs of the tower and library from the Arts Quad side. They exist on Commons; the 300-photo snapshot that includes them is being reconstructed.</p>`;
+    <p><b>Confirmed on a larger set:</b> the 228-photo snapshot registers ${N.mapping[3].registered_photographs} of ${N.mapping[3].training_photographs} photographs (first cameras on Tjaden, Sibley and Lincoln), yet all 26 photographers in its tower fragment again stand west or south-west — Commons photos of McGraw Tower come from Libe Slope and Ho Plaza.</p>
+    <p><b>The fix is data, not tuning:</b> photographs of the tower and library taken from the Arts Quad.</p>`;
   legend([['#2a6fdb', 'modern photographers (all on the west / south side)'], ['#d0453a', 'recovered postcard cameras (mirror poses)'], ['#e0a21a', 'Boardman Hall site']]);
   frame(tower, 480, 0.9, -1.2);
 }

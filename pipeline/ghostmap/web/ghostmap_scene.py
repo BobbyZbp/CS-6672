@@ -25,6 +25,8 @@ from ghostmap.paths import ROOT
 EXIF_ANCHORED_RUN = ROOT / 'artifacts/artsquad_modern/runs/18f9388978b18815f239'
 BASELINE_RUN = ROOT / 'artifacts/artsquad_modern/runs/2b7e3fa97872072dccbd'
 FIXED_RADIAL_RUN = ROOT / 'artifacts/artsquad_modern/runs/bd1208237efd7b33d52d'
+# Stock learned COLMAP on the 228-photo snapshot (finished 2026-10-25 after batched matching).
+LARGER_SNAPSHOT_RUN = ROOT / 'artifacts/artsquad_modern/runs/6a31738f0df5d4b04328'
 OUT = ROOT / 'dist/assets/ghostmap'
 CROP_HALF_M = 260.0
 TERRAIN_CELL_M = 1.5
@@ -136,7 +138,8 @@ def build(output=OUT, anchored_run=EXIF_ANCHORED_RUN):
     numbers = {
         'mapping': [mapping_row(BASELINE_RUN, 'stock learned COLMAP (SuperPoint + LightGlue)'),
                     mapping_row(FIXED_RADIAL_RUN, 'radial distortion fixed at zero'),
-                    mapping_row(EXIF_ANCHORED_RUN, 'EXIF-anchored calibration (this extension)')],
+                    mapping_row(EXIF_ANCHORED_RUN, 'EXIF-anchored calibration (this extension)'),
+                    mapping_row(LARGER_SNAPSHOT_RUN, 'stock learned COLMAP, 228-photo snapshot (139 training)')],
         'anchored_run': str(anchored_run),
         'anchoring': {k: ref.report[k] for k in ('scale_status', 'scale_checks', 'gate', 'metric_frame_usable')}
                      | {'tower': ref.report['metrics']['tower'], 'library_wall_distance_m': ref.report['metrics']['neighbour_wall_distance_m'],

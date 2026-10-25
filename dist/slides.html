@@ -58,7 +58,7 @@
 <section class="slide" data-n="3">
   <div class="kicker">Stock COLMAP · Extension 1</div>
   <h2>Fragments, no scale, focal lengths that blow up</h2>
-  <table id="mapping"><tr><th>Mapping on the same 77 training photographs</th><th class="n">cameras per model</th><th class="n">registered</th><th class="n">focal ratio outside 0.5–3</th></tr></table>
+  <table id="mapping"><tr><th>Mapping (the 145-photo snapshot has 77 training photographs)</th><th class="n">cameras per model</th><th class="n">registered</th><th class="n">focal ratio outside 0.5–3</th></tr></table>
   <p><b>Extension 1, EXIF-anchored calibration:</b> photographs whose EXIF gives the focal length keep it fixed (<code>constant_cameras</code>); the rest are bounded.</p>
   <div class="finding">Focal blow-ups mostly vanish, but the fragments do <b>not</b> merge. Missing views, not calibration, split the scene.</div>
 </section>
@@ -127,7 +127,7 @@
         <li>The postcards were taken from the Arts Quad, north-east of the site.</li>
         <li>McGraw Tower looks alike from every side: east-face features matched west-face points. The pose fits every anchor and even faces the Boardman site — from the wrong side.</li>
       </ul>
-      <div class="finding">Found by checking left–right order against the map, not by the pipeline. So no bound on Boardman is shown. The fix is data: modern photos from the Quad side.</div>
+      <div class="finding">Found by checking left–right order against the map, not by the pipeline. Confirmed on the 228-photo snapshot: all 26 tower photographers again stand west or south-west. No bound on Boardman is shown; the fix is data from the Quad side.</div>
     </div>
     <img src="assets/ghostmap/shots/mirror.png" alt="Modern photographers vs mirrored postcard cameras">
   </div>
@@ -152,7 +152,7 @@
   <ul>
     <li><b>Can:</b> COLMAP extended with EXIF focal priors, a lidar anchor and a measured-ground prior; certificates that say how far along its ray each photograph is undetermined; people as a cue.</li>
     <li><b>Cannot (yet):</b> any geometry of Boardman Hall. Every registered pose is mirrored; the frame's two scales differ by 5.4 %; principal point and lens distortion are not modelled.</li>
-    <li><b>Next:</b> photographs from the Arts Quad side (a 228-photo reconstruction is running); an automatic handedness check; carving a 2.5-D bound once poses are right; calibrating certificates on simulated demolition.</li>
+    <li><b>Next:</b> photographs of the tower from the Arts Quad side (the 228-photo snapshot still has none); an automatic handedness check; carving a 2.5-D bound once poses are right (implemented, tested on synthetic data); calibrating certificates on simulated demolition.</li>
   </ul>
   <p class="muted">Live demo: ghostmap.html · code and reports: github.com/BobbyZbp/CS-6672</p>
 </section>

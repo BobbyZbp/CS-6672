@@ -113,11 +113,41 @@ caps every column a sky ray passes over) is implemented and passes a synthetic
 containment test, but is deliberately not applied: carving from mirror poses
 would put free space on the wrong side of the site.
 
+### The 228-photo snapshot (reconstructed 2026-10-25, after batched matching)
+
+Stock learned COLMAP on the snapshot frozen on 2026-10-24 (139 training
+photographs) registers **82 of 139**, against 36 of 77 on the 145-photo
+snapshot. It gives Uris Library and McGraw Tower 26 cameras (3,289 points;
+four further models are overlapping copies of it), Goldwin Smith Hall 14,
+Morrill and White halls 11, and the first cameras on Tjaden, Sibley, Lincoln,
+Rand and Milstein (two to four each).
+
+Anchoring its 26-camera tower fragment: 1,596 library points lie within 3 m of
+the library walls (median **0.25 m**) and the yaw is unique, but the two
+independent scales differ by **10.5 %** (15.4 vs 17.0 m per unit) and one
+camera falls inside Willard Straight Hall (the photograph may well have been
+taken from its terrace), so by the rule above the frame is not marked usable
+and the demo keeps the 145-photo frame. Photographer heights are far more
+plausible here: half of them lie within a few metres of the lidar ground.
+
+**Finding, confirmed:** all 26 photographers in this tower fragment again
+stand west or south-west of the tower (bearings 213–305°). Commons photographs
+of McGraw Tower come overwhelmingly from Libe Slope and Ho Plaza; none of the
+registered ones looks at the tower from the Arts Quad, so the Boardman poses
+cannot be corrected with this data.
+
+Both earlier attempts on this snapshot were stopped by the out-of-memory
+killer during LightGlue matching (about 3 GB of 7.6 GB);
+`pipeline/ghostmap/sfm/match_in_batches.py` finishes the missing pairs in
+short-lived processes.
+
 ## What would change these results
 
-1. Modern photographs of McGraw Tower and Uris Library from the Arts Quad
-   side. The 228-photo snapshot frozen on 2026-10-24 (38 Uris and 34 tower
-   photographs) was being reconstructed when this was written.
+1. Modern photographs of McGraw Tower and Uris Library taken from the Arts
+   Quad. The 228-photo snapshot has none among its registered photographs; the
+   104 located photographs still downloading are mostly campus context, so a
+   targeted search (for example Commons searches for the Arts Quad facing
+   south-west) is the next data step.
 2. An automatic handedness check for mirror poses, for example by requiring
    that the matched anchors' surface normals face the camera.
 
