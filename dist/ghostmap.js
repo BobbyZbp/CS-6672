@@ -172,7 +172,7 @@ function stock() {
     <table><tr><th>Mapping</th><th class="num">cameras per model</th><th class="num">registered</th><th class="num">focal ratio outside 0.5–3</th></tr>${rows}</table>
     <p><b>EXIF-anchored calibration.</b> Photographs whose EXIF gives the focal length keep it fixed; the others are bounded. Focal blow-ups fall from ${N.mapping[0].focal_outside_half_to_triple} to ${N.mapping[2].focal_outside_half_to_triple}, but the fragments do <b>not</b> merge.</p>
     <div class="finding">Diagnosis: calibration is not what splits the scene; missing views are. Eight of fourteen target buildings have no registered camera at all.</div>
-    <p class="note">The 3D view shows the largest fragment (Uris Library and McGraw Tower, 22 photographers) after it was snapped to lidar in metres.</p>`;
+    <p class="note">The 3D view shows the largest fragment (Uris Library and McGraw Tower, ${scene.photographers.length} photographers) after it was snapped to lidar in metres.</p>`;
   legend([['#2a6fdb', 'reconstructed points (photo colours)'], ['#cdbda8', 'lidar buildings'], ['#7f9a6c', 'lidar ground']]);
   frame(tower, 380);
 }
@@ -270,11 +270,11 @@ function postcards() {
       const c = q.cues[cue], base = q.cues[CUE_ANCHORS];
       document.getElementById('pc-stats').innerHTML = `<div class="stat">
         <div>Photographer's distance to the anchors, 95 %</div><div>${fmt(c.distance_to_anchors_m_95[0])}–${fmt(c.distance_to_anchors_m_95[1])} m</div>
-        <div>Width of that interval</div><div class="${c.distance_interval_m < 20 ? 'ok' : 'bad'}">${fmt(c.distance_interval_m, 1)} m ${cue !== CUE_ANCHORS ? `(${fmt(100 * c.distance_interval_shrink_vs_anchors_only)} % narrower)` : ''}</div>
+        <div>Width of that interval${c.grid_limited ? ' (limited by the focal grid)' : ''}</div><div class="${c.distance_interval_m < 20 ? 'ok' : 'bad'}">${c.grid_limited ? '≤ ' : ''}${fmt(c.distance_interval_m, 1)} m ${cue !== CUE_ANCHORS ? `(${fmt(100 * c.distance_interval_shrink_vs_anchors_only)} % narrower)` : ''}</div>
         <div>Focal length, 95 %</div><div>${fmt(c.focal_px_95[0])}–${fmt(c.focal_px_95[1])} px (×${fmt(c.focal_interval_ratio, 2)})</div>
         <div>Camera height above lidar ground, 95 %</div><div>${fmt(c.camera_height_above_ground_m_95[0], 1)} to ${fmt(c.camera_height_above_ground_m_95[1], 1)} m</div>
         <div>Anchors with clear line of sight (weak test)</div><div>${fmt(100 * c.anchors_visible_fraction)} %</div></div>
-        ${q.people ? `<p>${q.people.length} standing people detected. At this cue's most likely pose they would be <b>${fmt(median(q.people_implied_heights_m[cue].filter(Boolean)), 2)} m</b> tall (median)${cue.includes('people') ? ' — near the 1.70 m prior by construction, so a consistency readout' : ' — the anchors alone cannot tell people from ants'}.</p>` : ''}
+        ${q.people ? `<p>${q.people.length} standing people detected. At this cue's most likely pose they would be <b>${fmt(median(q.people_implied_heights_m[cue].filter(Boolean)), 2)} m</b> tall (median)${cue.includes('people') ? ' — pulled toward the 1.70 m prior by construction, so a consistency readout' : ' — what the anchors alone imply'}.</p>` : ''}
         ${q.mirror_pose ? `<p class="bad">Mirror pose (${q.mirror_pose}). A narrow interval here is precision, not correctness; see chapter 5.</p>` : ''}
         <p class="note">${q.inlier_anchors} anchor correspondences · <a href="${q.source_url}" target="_blank" rel="noopener">${q.license}</a>${q.duplicate_of ? ` · same exposure as ${q.duplicate_of}` : ''}</p>`;
     };
@@ -301,11 +301,11 @@ function mirror() {
   }
   body.innerHTML = `<h2>What fooled it — and what would fix it</h2>
     <p>Every Boardman postcard looks toward the Boardman site, but from the <b>south-west</b>: in those poses Boardman would appear to the right of the tower. In the postcards it is on the left. They were taken from the Arts Quad, north-east of the site.</p>
-    <div class="finding">All 22 modern photographers in this fragment stand west or south-west of the tower (blue), so the modern model contains only the tower's and library's west and south faces. McGraw Tower has the same clock face on every side; the matcher paired the postcards' east-face features with west-face points, producing a <b>mirror-image pose</b> that fits every anchor to a few pixels.</div>
+    <div class="finding">The ${scene.photographers.length} modern photographers (blue) stand between ${fmt(N.coverage.min_deg)}° and ${fmt(N.coverage.max_deg)}° from the tower (0° = north). The Arts Quad sector, ${N.coverage.arts_quad_sector_deg[0]}–${N.coverage.arts_quad_sector_deg[1]}°, has <b>${N.coverage.photographers_in_arts_quad_sector}</b> — and every Boardman postcard was taken from it. McGraw Tower has the same clock face on every side, so the matcher pairs the postcards' quad-side features with faces seen from elsewhere, producing a <b>mirror-image pose</b> that fits every anchor to a few pixels.</div>
     <p>The certificates are honest about the ambiguity <i>along</i> the ray, but not about this alias. Found by checking the left–right order of Boardman, tower and library against the map; the pipeline did not flag it.</p>
-    <p><b>Confirmed on a larger set:</b> the 228-photo snapshot registers ${N.mapping[3].registered_photographs} of ${N.mapping[3].training_photographs} photographs (first cameras on Tjaden, Sibley and Lincoln), yet all 26 photographers in its tower fragment again stand west or south-west — Commons photos of McGraw Tower come from Libe Slope and Ho Plaza.</p>
-    <p><b>The fix is data, not tuning:</b> photographs of the tower and library taken from the Arts Quad.</p>`;
-  legend([['#2a6fdb', 'modern photographers (all on the west / south side)'], ['#d0453a', 'recovered postcard cameras (mirror poses)'], ['#e0a21a', 'Boardman Hall site']]);
+    <p><b>What more data did:</b> the 228-photo Commons snapshot registers ${N.mapping[3].registered_photographs} of ${N.mapping[3].training_photographs}; adding 77 Openverse (Flickr CC) photographs registers ${N.mapping[4].registered_photographs} of ${N.mapping[4].training_photographs} and adds the plaza east of the tower, but still nobody stands in the Arts Quad sector. Commons and Flickr photographers shoot McGraw Tower from Libe Slope, Ho Plaza and the Olin plaza.</p>
+    <p><b>The fix is data, not tuning:</b> photographs of the tower and library taken from the Arts Quad lawn.</p>`;
+  legend([['#2a6fdb', 'modern photographers (none on the Arts Quad side)'], ['#d0453a', 'recovered postcard cameras (mirror poses)'], ['#e0a21a', 'Boardman Hall site']]);
   frame(tower, 480, 0.9, -1.2);
 }
 

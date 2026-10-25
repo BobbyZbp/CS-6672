@@ -14,15 +14,16 @@ CS 6672 hacker presentation ([plan](docs/plans/colmap-extension-plan.md),
 
 - EXIF-anchored calibration removes most focal blow-ups but does not merge the
   fragments (missing views, not calibration, split the scene);
-- the 22-photographer Uris Library and McGraw Tower fragment is placed in
-  metres on public-domain USGS lidar (two independent scales agree within 5.4 %);
+- the Uris Library and McGraw Tower fragment (63 photographers after adding 77
+  Openverse / Flickr CC photographs) is placed in metres on public-domain USGS
+  lidar; two independent scales agree within 2.0 %;
 - archival photographs are placed through surviving buildings with an
   identifiability certificate; the measured ground narrows the uncertainty
   along the viewing ray several-fold, and on a 1914 postcard 16 standing people
   narrow it to 7 m (around the mirrored position described next);
-- every Boardman pose found so far is a mirror image, because the modern
-  fragment only sees the tower's west and south faces; no bound on Boardman
-  Hall is claimed.
+- every Boardman pose found so far is a mirror image: no modern photographer
+  stands in the Arts Quad sector (0–110° from the tower) from which all the
+  postcards were taken; no bound on Boardman Hall is claimed.
 
 Live demo: `http://127.0.0.1:8080/ghostmap.html` (serve `dist/`, below).
 
@@ -108,7 +109,7 @@ python3 -m http.server 8080 --directory dist
 # http://127.0.0.1:8080/artsquad.html   Arts Quad Atlas (diagnostic workbench, not the multi-building demo)
 # http://127.0.0.1:8080/surface-lab.html  legacy OpenMVS Surface Lab
 # http://127.0.0.1:8080/baseline-v1.html  frozen v1 Boardman baseline
-.venv/bin/python -m unittest discover -s tests -p 'test_artsquad*.py'   # 341 tests
+.venv/bin/python -m unittest discover -s tests -p 'test_artsquad*.py'   # 343 tests
 ```
 
 ## Legacy work

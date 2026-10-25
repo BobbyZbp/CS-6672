@@ -27,6 +27,8 @@ BASELINE_RUN = ROOT / 'artifacts/artsquad_modern/runs/2b7e3fa97872072dccbd'
 FIXED_RADIAL_RUN = ROOT / 'artifacts/artsquad_modern/runs/bd1208237efd7b33d52d'
 # Stock learned COLMAP on the 228-photo snapshot (finished 2026-10-25 after batched matching).
 LARGER_SNAPSHOT_RUN = ROOT / 'artifacts/artsquad_modern/runs/6a31738f0df5d4b04328'
+# The same plus 77 Openverse (Flickr CC) photographs: the demo's reference frame (63-camera tower fragment).
+DEMO_RUN = ROOT / 'artifacts/artsquad_modern/runs/6406b8eaae260163b303'
 OUT = ROOT / 'dist/assets/ghostmap'
 CROP_HALF_M = 260.0
 TERRAIN_CELL_M = 1.5
@@ -42,6 +44,14 @@ def mapping_row(run, label):
             'focal_outside_half_to_triple': sum(not (0.5 <= c['focal_max_dimension_ratio'] <= 3) for c in cams)}
 
 
+def finite(value):
+    """Replace non-finite numbers (unknown ground outside the lidar crop) by null: JSON has no NaN."""
+    if isinstance(value, float): return value if np.isfinite(value) else None
+    if isinstance(value, dict): return {k: finite(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)): return [finite(v) for v in value]
+    return value
+
+
 def thumbnail(source, dest):
     if dest.exists(): return
     with Image.open(source) as im:
@@ -49,7 +59,7 @@ def thumbnail(source, dest):
         im.save(dest, quality=85)
 
 
-def build(output=OUT, anchored_run=EXIF_ANCHORED_RUN):
+def build(output=OUT, anchored_run=DEMO_RUN):
     from ghostmap.archival.reference import Reference
     output = Path(output); (output / 'photos').mkdir(parents=True, exist_ok=True)
     anchored_run = Path(anchored_run)
@@ -128,22 +138,23 @@ def build(output=OUT, anchored_run=EXIF_ANCHORED_RUN):
                               'focal_px': g['focal_px']} for g in cert['grid']]
             entry['cues'] = {name: {k: c[k] for k in ('focal_px_95', 'focal_interval_ratio', 'distance_to_anchors_m_95',
                                                        'distance_interval_m', 'camera_height_above_ground_m_95', 'map_centre',
-                                                       'anchors_visible_fraction', 'distance_interval_shrink_vs_anchors_only')}
+                                                       'anchors_visible_fraction', 'distance_interval_shrink_vs_anchors_only', 'grid_limited')}
                              | {'weights': np.round(c['weights'], 6).tolist()} for name, c in cert['cues'].items()}
             entry['anchor_points'] = np.round(q['anchor_points'], 2).tolist()
             if q['pageid'] in people:
                 entry['people'] = people[q['pageid']]
                 entry['people_implied_heights_m'] = {name: c.get('people_implied_heights_m') for name, c in cert['cues'].items()}
             if q['subject'].startswith('Boardman'):
-                entry['mirror_pose'] = ('found by inspection on 2026-10-25: the pose sees Boardman to the right of the tower, '
-                                        'the postcard shows it to the left; the modern model has only the tower\'s west and south faces')
+                entry['mirror_pose'] = ('found by inspection on 2026-10-25: the postcard was taken from the Arts Quad, north-east of the '
+                                        'site, a sector in which the modern model has no photographer; the pose lands on the other side')
         postcards.append(entry)
 
     numbers = {
         'mapping': [mapping_row(BASELINE_RUN, 'stock learned COLMAP (SuperPoint + LightGlue)'),
                     mapping_row(FIXED_RADIAL_RUN, 'radial distortion fixed at zero'),
                     mapping_row(EXIF_ANCHORED_RUN, 'EXIF-anchored calibration (this extension)'),
-                    mapping_row(LARGER_SNAPSHOT_RUN, 'stock learned COLMAP, 228-photo snapshot (139 training)')],
+                    mapping_row(LARGER_SNAPSHOT_RUN, 'stock learned COLMAP, 228-photo snapshot (139 training)'),
+                    mapping_row(DEMO_RUN, 'same + 77 Openverse (Flickr CC) photographs (216 training)')],
         'anchored_run': str(anchored_run),
         'anchoring': {k: ref.report[k] for k in ('scale_status', 'scale_checks', 'gate', 'metric_frame_usable')}
                      | {'tower': ref.report['metrics']['tower'], 'library_wall_distance_m': ref.report['metrics']['neighbour_wall_distance_m'],
@@ -153,6 +164,16 @@ def build(output=OUT, anchored_run=EXIF_ANCHORED_RUN):
         'lidar': {k: json.loads((ROOT / 'data/lidar/NY_FingerLakes_1_2020/report.json').read_text())[k]
                   for k in ('points_kept', 'class_counts', 'license', 'source')},
     }
+    # Coverage around the tower: bearing of every modern photographer and every Boardman camera.
+    def bearing(xy): d = np.asarray(xy)[:2] - tower[:2]; return float(np.degrees(np.arctan2(d[0], d[1])) % 360)
+    modern = sorted(bearing(p['centre']) for p in photographers)
+    boardman = [bearing(q['cues']['anchors + measured ground']['map_centre']) for q in postcards
+                if q.get('cues') and q['subject'].startswith('Boardman')]
+    numbers['coverage'] = {'photographer_bearings_deg': modern, 'min_deg': modern[0], 'max_deg': modern[-1],
+                           'arts_quad_sector_deg': [0, 110],
+                           'photographers_in_arts_quad_sector': sum(0 <= b <= 110 for b in modern),
+                           'boardman_camera_bearings_deg': boardman,
+                           'meaning': 'bearing from McGraw Tower, 0 = north, 90 = east; the Arts Quad lies at roughly 0-110 degrees'}
     scene = {'schema_version': 1, 'title': 'GhostMap — what the surviving world can prove about a vanished building',
              'generated_utc': datetime.now(timezone.utc).isoformat(),
              'frame': {'crs': 'EPSG:32618 (UTM 18N) minus origin', 'origin_utm18n': ref.origin.tolist(), 'up': 'z, metres'},
@@ -165,14 +186,14 @@ def build(output=OUT, anchored_run=EXIF_ANCHORED_RUN):
              'attribution': ['Lidar: USGS 3DEP NY_FingerLakes_1_2020, public domain.',
                              'Building footprints: (c) OpenStreetMap contributors, ODbL.',
                              'Photographs: Wikimedia Commons; licence and author per photo.']}
-    (output / 'scene.json').write_text(json.dumps(scene) + '\n')
+    (output / 'scene.json').write_text(json.dumps(finite(scene), allow_nan=False) + '\n')
     return scene
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, default=OUT)
-    parser.add_argument('--run', type=Path, default=EXIF_ANCHORED_RUN, help='run with anchor/ and archival/ results to show')
+    parser.add_argument('--run', type=Path, default=DEMO_RUN, help='run with anchor/ and archival/ results to show')
     args = parser.parse_args()
     scene = build(args.output, args.run)
     print(len(scene['photographers']), 'photographers,', len(scene['postcards']), 'archival photographs,',

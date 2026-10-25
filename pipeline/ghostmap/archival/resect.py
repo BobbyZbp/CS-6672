@@ -183,7 +183,14 @@ def certificate(rows, anchor_centroid, ground_height, people=None, width=None, h
         f_lo, f_hi = interval(np.log(focals), w)
         a_lo, a_hi = interval(along, w); h_lo, h_hi = interval(heights, w)
         best = int(np.argmax(w))
+        # The focal grid limits resolution: an interval narrower than the spacing
+        # between neighbouring grid poses is reported as that spacing.
+        neighbours = [abs(along[j] - along[best]) for j in (best - 1, best + 1) if 0 <= j < len(along)]
+        step = float(max(neighbours)) if neighbours else 0.0
+        grid_limited = (a_hi - a_lo) < step
+        if grid_limited: a_lo, a_hi = along[best] - step / 2, along[best] + step / 2
         out['cues'][name] = {
+            'grid_limited': bool(grid_limited),
             'focal_px_95': [float(np.exp(f_lo)), float(np.exp(f_hi))],
             'focal_interval_ratio': float(np.exp(f_hi - f_lo)),
             'distance_to_anchors_m_95': [a_lo, a_hi], 'distance_interval_m': a_hi - a_lo,

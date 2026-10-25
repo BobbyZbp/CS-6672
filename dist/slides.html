@@ -104,13 +104,13 @@
 
 <section class="slide" data-n="7">
   <div class="kicker">People as cross-century anchors</div>
-  <h2>1914: sixteen people shrink the uncertainty to 7 m</h2>
+  <h2>1914: sixteen people shrink the uncertainty to <span id="q-p2"></span></h2>
   <div class="cols">
     <div>
       <p>Pedestrians stand on today's measured ground and are about 1.70 m tall, at many depths — exactly the depth spread that breaks the dolly-zoom ambiguity.</p>
       <p class="big"><span id="q-a"></span> m → <span id="q-g"></span> m → <span class="ok" id="q-p"></span> m</p>
       <p class="muted">anchors only → + measured ground → + people</p>
-      <p>Without the people, the most likely pose would make the pedestrians <b id="q-h0"></b> tall: the surviving anchors alone cannot tell people from ants. The people cue moves the camera to where they are human-sized (median <span id="q-h"></span> m; near the 1.70 m prior by construction, so a consistency readout, not an independent check).</p>
+      <p>At the most likely pose without the people, the pedestrians would be <b id="q-h0"></b> tall. The people cue moves the camera to where they come out at a median of <span id="q-h"></span> m — pulled toward the 1.70 m prior by construction, so a consistency readout, not an independent check.</p>
       <p class="bad">Precision, not correctness: this tight interval surrounds a mirror-image position (next slide).</p>
       <p class="muted">In the spirit of Virtual Correspondence (humans as geometry where surfaces don't overlap), but linking one photo to a measured ground across a century.</p>
     </div>
@@ -124,11 +124,11 @@
   <div class="cols">
     <div>
       <ul>
-        <li>All 22 modern photographers in the fragment stand west or south-west of the tower, so the model only has its west and south faces.</li>
+        <li>The <span id="m-n"></span> modern photographers stand between <span id="m-lo"></span>° and <span id="m-hi"></span>° from the tower; the Arts Quad sector (0–110°) has <b id="m-q"></b>.</li>
         <li>The postcards were taken from the Arts Quad, north-east of the site.</li>
-        <li>McGraw Tower looks alike from every side: east-face features matched west-face points. The pose fits every anchor and even faces the Boardman site — from the wrong side.</li>
+        <li>McGraw Tower looks alike from every side: quad-side features match faces seen from elsewhere. The pose fits every anchor and even faces the Boardman site — from the wrong side.</li>
       </ul>
-      <div class="finding">Found by checking left–right order against the map, not by the pipeline. Confirmed on the 228-photo snapshot: all 26 tower photographers again stand west or south-west. No bound on Boardman is shown; the fix is data from the Quad side.</div>
+      <div class="finding">Found by checking left–right order against the map, not by the pipeline. Adding 77 Openverse (Flickr CC) photographs grew the tower fragment to <span id="m-n2"></span> cameras but still none from the quad. No bound on Boardman is shown; the fix is data from the Arts Quad lawn.</div>
     </div>
     <img src="assets/ghostmap/shots/mirror.png" alt="Modern photographers vs mirrored postcard cameras">
   </div>
@@ -152,7 +152,7 @@
   <h2>What we can and cannot claim</h2>
   <ul>
     <li><b>Can:</b> COLMAP extended with EXIF focal priors, a lidar anchor and a measured-ground prior; certificates that say how far along its ray each photograph is undetermined; people as a cue.</li>
-    <li><b>Cannot (yet):</b> any geometry of Boardman Hall. Every registered pose is mirrored; the frame's two scales differ by 5.4 %; principal point and lens distortion are not modelled.</li>
+    <li><b>Cannot (yet):</b> any geometry of Boardman Hall. Every registered Boardman pose is mirrored; the frame's two scales differ by <span id="s-diff2"></span>; principal point and lens distortion are not modelled.</li>
     <li><b>Next:</b> photographs of the tower from the Arts Quad side (the 228-photo snapshot still has none); an automatic handedness check; carving a 2.5-D bound once poses are right (implemented, tested on synthetic data); calibrating certificates on simulated demolition.</li>
   </ul>
   <p class="muted">Live demo: ghostmap.html · code and reports: github.com/BobbyZbp/CS-6672</p>
@@ -167,7 +167,10 @@ const sc = N.anchoring.scale_checks;
 $('lidar-points').textContent = f(N.lidar.points_kept); $('s-vert').textContent = f(sc.vertical_from_photographers_and_tower_top, 1);
 $('s-lib').textContent = f(sc.horizontal_from_library_walls, 1); $('s-diff').textContent = f(100 * Math.abs(sc.library_vs_vertical_ratio - 1), 1) + ' %';
 $('lib-miss').textContent = f(N.anchoring.library_wall_distance_m.median, 2);
-const P = scene.photographers; $('off-ground').textContent = `${P.filter(p => p.height_above_ground_m < 0.5 || p.height_above_ground_m > 4).length} of ${P.length}`;
+const P = scene.photographers, cov = N.coverage;
+for (const id of ['m-n', 'm-n2']) $(id).textContent = P.length;
+$('m-lo').textContent = f(cov.min_deg); $('m-hi').textContent = f(cov.max_deg); $('m-q').textContent = cov.photographers_in_arts_quad_sector;
+$('s-diff2').textContent = f(100 * Math.abs(N.anchoring.scale_checks.library_vs_vertical_ratio - 1), 1) + ' %'; $('off-ground').textContent = `${P.filter(p => p.height_above_ground_m < 0.5 || p.height_above_ground_m > 4).length} of ${P.length}`;
 const pc = N.positive_control['postcard-like']; $('pc-a').textContent = f(pc['surviving anchors only'].median_distance_interval_m, 1); $('pc-g').textContent = f(pc['anchors + measured ground'].median_distance_interval_m, 1);
 for (const q of scene.postcards.filter(q => q.status === 'registered' && !q.duplicate_of && q.subject.startsWith('Boardman'))) {
   const c = q.cues, p = c['anchors + measured ground + people'];
@@ -175,7 +178,8 @@ for (const q of scene.postcards.filter(q => q.status === 'registered' && !q.dupl
 }
 const q = scene.postcards.find(x => x.pageid === '150099180');
 $('q-a').textContent = f(q.cues['surviving anchors only'].distance_interval_m); $('q-g').textContent = f(q.cues['anchors + measured ground'].distance_interval_m);
-$('q-p').textContent = f(q.cues['anchors + measured ground + people'].distance_interval_m);
+const qp = q.cues['anchors + measured ground + people'];
+$('q-p').textContent = (qp.grid_limited ? '≤ ' : '') + f(qp.distance_interval_m); $('q-p2').textContent = (qp.grid_limited ? '≤ ' : '') + f(qp.distance_interval_m) + ' m';
 const med = a => { const s = a.filter(Boolean).sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
 $('q-h').textContent = f(med(q.people_implied_heights_m['anchors + measured ground + people']), 2);
 const g0 = q.people_implied_heights_m['anchors + measured ground'].filter(Boolean);

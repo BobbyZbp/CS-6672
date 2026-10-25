@@ -93,10 +93,10 @@ inliers). Width of the 95 % interval along the viewing ray:
 
 On the 1914 postcard the detector keeps 16 standing people. At the most
 likely pose without the people cue (anchors plus measured ground) they would
-be 0.6–3.7 cm tall: the surviving anchors alone cannot tell people from ants.
-With the cue their implied heights have median 1.76 m, close to the 1.70 m
-prior by construction, so that number is a consistency readout, not an
-independent check. The 7 m interval is precision, not correctness: it
+be 0.6–3.7 cm tall in the 22-camera frame and 54–160 cm (median 1.14 m) in the
+63-camera frame. With the cue their implied heights have a median of 1.76 m and
+2.04 m respectively, pulled toward the 1.70 m prior by construction, so those
+numbers are a consistency readout, not an independent check. The 7 m interval is precision, not correctness: it
 surrounds the mirror-image position described next.
 
 **Finding (identified by inspection, not by the pipeline):** every registered
@@ -145,10 +145,39 @@ killer during LightGlue matching (about 3 GB of 7.6 GB);
 `pipeline/ghostmap/sfm/match_in_batches.py` finishes the missing pairs in
 short-lived processes.
 
+### Openverse (Flickr CC) supplement: the demo's reference frame
+
+77 Flickr photographs (CC BY / BY-SA / CC0; title or tags naming the place; no
+historic marker; not near-duplicates of Commons photographs; capture dates
+unknown) were added to the 228-photo snapshot as training-only photographs
+(`pipeline/ghostmap/acquire/openverse.py`, `pipeline/ghostmap/prepare/supplement.py`).
+
+- Stock learned COLMAP registers **132 of 216**; the Uris Library and McGraw
+  Tower fragment grows to **63 cameras** (38 of them from Openverse, 5,777
+  points).
+- Anchoring: the two independent scales agree within **2.0 %** (20.85 vs
+  21.27 m per unit); 2,426 library points lie within 3 m of the library walls
+  (median 0.5 m); the yaw is unique. Three of 63 cameras fall inside building
+  footprints (two of them plausibly photographed from a building), so the
+  usability rule was revised to allow at most 5 % (decisions log entry 12);
+  under the original rule this frame would not be usable.
+- Positive control on its 63 photographers, postcard-like anchors: median 95 %
+  interval along the ray **9.4 m → 6.1 m** with the measured ground; cameras
+  undetermined by more than 20 m: 23 → 14. COLMAP's own bundle places 46 of 63
+  outside 0.5–4 m above the lidar ground.
+- **Coverage, the decisive number:** the 63 photographers stand between 114°
+  and 303° from the tower (0° = north). The Arts Quad sector, 0–110°, has
+  **none**, and every Boardman postcard was taken from it. Re-placed against
+  this frame, the Boardman cameras again land at 118–259°: the poses stay
+  mirrored. Results: `artifacts/artsquad_modern/runs/6406b8eaae260163b303/archival/report.json`.
+
 ## What would change these results
 
 1. Modern photographs of McGraw Tower and Uris Library taken from the Arts
-   Quad. The 228-photo snapshot has none among its registered photographs; the
+   Quad lawn (bearings 0–110° from the tower). Neither Commons nor Openverse's
+   Flickr set has a registered one; the remaining routes are a Flickr API key
+   (paid), Mapillary street-level imagery (free account) or a single walk with a
+   phone, which the project's online-only rule excludes. The 228-photo snapshot has none among its registered photographs; the
    104 located photographs still downloading contain no tower photographs
    ("Uris Hall" is a different building). A keyless Openverse probe on
    2026-10-25 returned 118 CC BY / BY-SA / CC0 results for "McGraw Tower" and
