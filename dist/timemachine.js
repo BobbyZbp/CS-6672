@@ -2,8 +2,6 @@
 // (built by web/timemachine_scene.py from report files); nothing is typed in here.
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/OrbitControls.js';
-import { MTLLoader } from './vendor/MTLLoader.js';
-import { OBJLoader } from './vendor/OBJLoader.js';
 
 const BASE = 'assets/timemachine/';
 const fmt = (x, d = 0) => (x === null || x === undefined || Number.isNaN(x)) ? '—' : Number(x).toLocaleString('en-US', { maximumFractionDigits: d });
@@ -45,6 +43,8 @@ function texture(url) {
   if (!textures[url]) { const t = loader.load(BASE + url); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; textures[url] = t; }
   return textures[url];
 }
+const covered = new Set(scene.reconstructions.flatMap(r => r.covers || []));  // buildings a dense surface replaces when shown
+let surfaceOn = false;
 const qt = scene.sites.quad.terrain;  // extent of the Quad terrain grid, used to trim the other sites' terrains
 const quadExtent = [qt.x0, qt.y_top - (qt.rows - 1) * qt.cell_m, qt.x0 + (qt.cols - 1) * qt.cell_m, qt.y_top];
 const terrains = {};
@@ -83,9 +83,10 @@ for (const [site, s] of Object.entries(scene.sites)) {
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); g.setIndex(index); g.computeVertexNormals();
   const mesh = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ map: null, polygonOffset: clip, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }));
   world.add(mesh);
-  // Vertices inside each changed building's footprint: flattened to the ground for years before it stood.
+  // Vertices inside each changed building's footprint: flattened to the ground for years before it stood;
+  // the buildings a dense surface covers are flattened while that surface is shown, so it stands alone.
   const flats = [];
-  for (const b of changed.filter(b => b.site === site)) {
+  for (const b of changed.concat(scene.buildings.filter(b => covered.has(b.name))).filter(b => b.site === site)) {
     const idx = [];
     for (let i = 0; i < n; i++) if (inside(b.ring, pos[3 * i], pos[3 * i + 1])) idx.push(i);
     flats.push({ building: b, idx, original: idx.map(i => pos[3 * i + 2]) });
@@ -135,14 +136,14 @@ for (const r of scene.reconstructions) {
   g.setAttribute('color', new THREE.BufferAttribute(colour, 3));
   const pts = new THREE.Points(g, new THREE.PointsMaterial({ size: 1.3, vertexColors: true }));
   world.add(pts); const cloud = { pts, g, rgb: colour, first, last, meta: r, surface: null }; clouds.push(cloud);
-  // A dense textured surface of the fragment, loaded in the background and shown on request.
-  if (r.mesh && r.mesh.mtl_url) {
-    new MTLLoader().setPath(BASE + 'mesh/').loadAsync(r.mesh.mtl_url.split('/').pop()).then(materials => {
-      materials.preload();
-      return new OBJLoader().setMaterials(materials).loadAsync(BASE + r.mesh.obj_url);
-    }).then(obj => {
-      obj.traverse(o => { if (o.isMesh) o.material.side = THREE.DoubleSide; });
-      obj.visible = false; world.add(obj); cloud.surface = obj;
+  // A dense surface of the fragment (vertex colours from the dense cloud), loaded in the background and shown on request.
+  if (r.mesh && r.mesh.faces_url) {
+    Promise.all([binary(r.mesh.xyz_url, Float32Array), binary(r.mesh.rgb_url, Uint8Array), binary(r.mesh.faces_url, Uint32Array)]).then(([xyz, rgb, faces]) => {
+      const mg = new THREE.BufferGeometry(); mg.setAttribute('position', new THREE.BufferAttribute(xyz, 3));
+      const col = new Float32Array(rgb.length); for (let i = 0; i < rgb.length; i++) col[i] = rgb[i] / 255;
+      mg.setAttribute('color', new THREE.BufferAttribute(col, 3)); mg.setIndex(new THREE.BufferAttribute(faces, 1));
+      const surface = new THREE.Mesh(mg, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }));
+      surface.visible = false; world.add(surface); cloud.surface = surface;
       const box = document.getElementById('surface'); if (box) box.disabled = false;
     }).catch(e => console.warn('dense surface not loaded', e));
   }
@@ -170,10 +171,11 @@ function setYear(y) {
   for (const t of Object.values(terrains)) {
     const o = t.orthos[String(fy)]; if (o) t.mesh.material.map = texture(o.url); t.mesh.material.needsUpdate = true;
     const z = t.geometry.attributes.position;
-    for (const f of t.flats) { const s = state(f.building, y); f.idx.forEach((i, k) => z.setZ(i, s === 'present' ? f.original[k] : f.building.ground + 0.1)); }
+    const standing = f => { const s = state(f.building, y); return s === 'present' || (s === 'stable' && !surfaceOn); };
+    for (const f of t.flats) { const up = standing(f); f.idx.forEach((i, k) => z.setZ(i, up ? f.original[k] : f.building.ground + 0.1)); }
     z.needsUpdate = true;
     // Which changed buildings stand this year decides the flattened sites, so the walls and normals follow that key.
-    const key = t.flats.map(f => state(f.building, y) === 'present' ? '1' : '0').join('');
+    const key = t.flats.map(f => standing(f) ? '1' : '0').join('');
     if (key !== t.wallKey) {
       t.wallKey = key; t.geometry.computeVertexNormals();
       t.walls.setIndex(t.wallsStatic.concat(...t.flats.filter((f, k) => key[k] === '1').map(f => f.walls))); t.walls.computeVertexNormals();
@@ -230,7 +232,7 @@ function groundRecord(b) {
   if (!rc) return `${who}${when}; not yet reconstructed.`;
   const biggest = rc.largest_fragment ? ` (the largest holds ${rc.largest_fragment.cameras} cameras and ${fmt(rc.largest_fragment.points)} points)` : '';
   const tried = rc.anchoring.filter(a => !a.usable);
-  const why = tried.length ? ` Anchoring the largest fragment to the lidar through the footprint of ${tried[0].building} was attempted and is not usable (${tried[0].status}): the photographs are close-ups of the entrance, the stairs and the undercroft, not of the facades the lidar measures, and a fragment of a few cameras holds too little for the walls to fix a frame. No ground model is shown; the dates above are the ground record.` : '';
+  const why = tried.length ? ` Anchoring the largest fragment to the lidar through the building's footprint was attempted and is not usable: the photographs are close-ups of the entrance, the stairs and the undercroft, not of the facades the lidar measures. No ground model is shown; the dates above are the ground record.` : '';
   return `${who}${when}. Of the ${rc.photographs_mapped} in the training split after the duplicate screen, ${rc.registered} register, in ${rc.fragments} fragment${rc.fragments === 1 ? '' : 's'}${biggest}.${why}`;
 }
 function recordStrip(b) {
@@ -269,10 +271,10 @@ const chapters = [
         <p>Each reconstructed point carries the years in which photographs observed it. The slider shows the points seen by that year; "colour by first year" shows when each point first appeared in a photograph.</p>
         <div class="yearbar">${Array.from({ length: MAX_YEAR - MIN_YEAR + 1 }, (_, i) => MIN_YEAR + i).map(y => `<div data-year="${y}" style="height:${100 * (counts[y] || 0) / maxc}%" title="${y}: ${counts[y] || 0} dated photographs"></div>`).join('')}</div>
         <div class="yearlabels"><span>${MIN_YEAR}</span><span>dated photographs per year</span><span>${MAX_YEAR}</span></div>
-        <div class="cues"><label><input type="radio" name="col" value="photo" checked>photo colours</label><label><input type="radio" name="col" value="first">colour by first year seen</label>${r.mesh ? `<label><input type="checkbox" id="surface" ${clouds.some(c => c.surface) ? '' : 'disabled'}>dense textured surface (${fmt(r.mesh.faces)} faces)</label>` : ''}</div>
+        <div class="cues"><label><input type="radio" name="col" value="photo" checked>photo colours</label><label><input type="radio" name="col" value="first">colour by first year seen</label>${r.mesh ? `<label><input type="checkbox" id="surface" ${clouds.some(c => c.surface) ? '' : 'disabled'}>dense surface (${fmt(r.mesh.faces)} faces, vertex colours)</label>` : ''}</div>
         <p>Click a photographer (sphere) to see the photograph; red = taken in the selected year.</p><div id="pick"></div>`;
       for (const x of document.querySelectorAll('input[name=col]')) x.onchange = () => { colourMode = x.value; setYear(year); };
-      const sf = document.getElementById('surface'); if (sf) sf.onchange = () => { for (const c of clouds) if (c.surface) { c.surface.visible = sf.checked; c.pts.visible = !sf.checked; } };
+      const sf = document.getElementById('surface'); if (sf) sf.onchange = () => { surfaceOn = sf.checked; for (const c of clouds) if (c.surface) { c.surface.visible = sf.checked; c.pts.visible = !sf.checked; } setYear(year); };
       legend([['#2a6fdb', 'photographers before the selected year'], ['#d0453a', 'photographers in the selected year'], ['#9aa5b1', 'later photographers']]);
       const t = scene.buildings.find(b => b.name === 'McGraw Tower'), c = centroid(t.ring);
       flyTo([c[0], c[1], t.ground + 20], 220, 0.35, -2.4); setYear(year);

@@ -24,7 +24,7 @@ report files named below; nothing here is typed from memory.
    shape; the single-facade scale ambiguity; the Boardman mirror-pose finding from the earlier work.
 
 Build command for the current page (the builder's defaults omit the ground records):
-`PYTHONPATH=pipeline .venv/bin/python -m ghostmap.web.timemachine_scene --run artifacts/artsquad_modern/runs/6406b8eaae260163b303 --snapshot artifacts/artsquad_modern/snapshots/90d1dc5d21b4f9c5c08e15ab/snapshot.json --ground-run <the run mapped on the Gates photographs of that snapshot>`.
+`PYTHONPATH=pipeline .venv/bin/python -m ghostmap.web.timemachine_scene --run artifacts/artsquad_modern/runs/6406b8eaae260163b303 --snapshot artifacts/artsquad_modern/snapshots/90d1dc5d21b4f9c5c08e15ab/snapshot.json --ground-run artifacts/artsquad_modern/runs/6da4ccc327cb12bf14df`.
 
 Slides: `dist/timemachine-slides.html` (ten slides; the tower and Gates numbers are filled from
 `scene.json`). Check: `ghostmap/qa/timemachine_page.py` walks every chapter, year and slide
@@ -39,7 +39,7 @@ Slides: `dist/timemachine-slides.html` (ten slides; the tower and Gates numbers 
 | Aerial outline score per building per flight (diagnostic) | `data/orthoimagery/*/roof-presence/report.json` |
 | Footprint anchoring recovers a known similarity on a synthetic hall: scale within 3 %, yaw within 0.1 degrees, photographers within 2 m | `tests/test_artsquad_footprint_anchor.py` |
 | Goldwin Smith portico fragment (15 photographs): anchoring attempted, frame not usable | `runs/6406b8eaae260163b303/anchor/2/report.json` |
-| Gates Hall: 37 photographs, 24 distinct after the duplicate screen, mapping into fragments of 3, 3 and 2 cameras; anchoring of the largest attempted, not usable | `runs/323064cf0ac9718e0e90/report.json`, `.../anchor/0/report.json` |
+| Gates Hall: 37 licensed photographs (35 dated); the 35 Commons ones in the training split map into fragments of 11, 8 and 3 cameras; anchoring of the largest attempted, not usable (42 % of its points within a metre of a wall) | `runs/6da4ccc327cb12bf14df/report.json`, `.../anchor/0/report.json` |
 
 ## Findings worth saying out loud
 
@@ -56,9 +56,10 @@ Slides: `dist/timemachine-slides.html` (ten slides; the tower and Gates numbers 
 
 ## Not done yet
 
-- A dense textured surface of the tower fragment (OpenMVS on CPU): the full-resolution fusion was
-  killed by the 7.6 GB memory limit; a half-resolution run is in progress; the builder and viewer
-  already accept such a mesh.
+- The dense textured surface of the tower fragment exists at half resolution (OpenMVS on CPU;
+  the full-resolution fusion was killed by the 7.6 GB memory limit): 368,530 faces, shown on request
+  in the tower chapter in place of the points. It covers what the photographs see (the tower's
+  Quad-facing sides and parts of the library), not the whole buildings.
 - The complete photograph collection (393 eligible pages) is still downloading; the Quad
   reconstruction has not been rerun on it.
 - Tower-top photographs placed on the belfry; negative evidence of absence; dense surfaces per site.

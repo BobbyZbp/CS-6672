@@ -90,39 +90,67 @@ def aerial_crops(site, ring_utm, name, out, years):
     return urls
 
 
-def export_mesh(obj_path, sim, shift, out_dir, tag):
-    """Copy an OpenMVS textured mesh (native model units) into the scene's local metric frame:
-    vertices through the anchor similarity plus the frame shift, normals through its rotation;
-    the material file and its texture images are copied beside it. Returns the published paths."""
-    import shutil
+def read_ply(path, wanted=('x', 'y', 'z', 'red', 'green', 'blue')):
+    """Binary little-endian PLY. Elements without list properties are read in one go; an element with
+    list properties (OpenMVS dense clouds carry per-vertex view lists) is walked record by record and
+    only the `wanted` scalar properties kept; a face element with a uniform list of three indices is
+    returned as (n, 3) indices."""
+    import struct
+    types = {'float': '<f4', 'float32': '<f4', 'double': '<f8', 'uchar': 'u1', 'uint8': 'u1', 'char': 'i1', 'int8': 'i1',
+             'int': '<i4', 'int32': '<i4', 'uint': '<u4', 'uint32': '<u4', 'ushort': '<u2', 'uint16': '<u2', 'short': '<i2', 'int16': '<i2'}
+    with open(path, 'rb') as f:
+        elements, current = [], None
+        while True:
+            line = f.readline().decode('ascii').strip()
+            if line == 'end_header': break
+            parts = line.split()
+            if parts[:1] == ['format'] and parts[1] != 'binary_little_endian': raise ValueError('binary little-endian PLY expected')
+            if parts[:1] == ['element']: current = {'name': parts[1], 'count': int(parts[2]), 'props': []}; elements.append(current)
+            elif parts[:1] == ['property']: current['props'].append(('list', parts[2], parts[3], parts[4]) if parts[1] == 'list' else (parts[1], parts[2]))
+        out = {}
+        for el in elements:
+            lists = [p for p in el['props'] if p[0] == 'list']
+            if not lists:
+                arr = np.fromfile(f, dtype=np.dtype([(p[1], types[p[0]]) for p in el['props']]), count=el['count'])
+                out[el['name']] = {p[1]: arr[p[1]] for p in el['props']}
+            elif len(el['props']) == 1:  # faces: a uniform list of three indices
+                arr = np.fromfile(f, dtype=np.dtype([('n', types[lists[0][1]]), ('v', types[lists[0][2]], 3)]), count=el['count'])
+                if not (arr['n'] == 3).all(): raise ValueError('non-triangular faces')
+                out[el['name']] = {lists[0][3]: arr['v']}
+            else:  # scalars mixed with lists: walk the records
+                keep = [(i, p) for i, p in enumerate(el['props']) if p[0] != 'list' and p[1] in wanted]
+                cols = {p[1]: np.empty(el['count'], dtype=types[p[0]]) for _, p in keep}
+                sizes = {k: np.dtype(v).itemsize for k, v in types.items()}
+                buf = f.read(); off = 0
+                for r in range(el['count']):
+                    for p in el['props']:
+                        if p[0] == 'list':
+                            n = int(np.frombuffer(buf, dtype=types[p[1]], count=1, offset=off)[0]); off += sizes[p[1]] + n * sizes[p[2]]
+                        else:
+                            if p[1] in cols: cols[p[1]][r] = np.frombuffer(buf, dtype=types[p[0]], count=1, offset=off)[0]
+                            off += sizes[p[0]]
+                out[el['name']] = cols
+        return out
+
+
+def export_mesh(dense_dir, sim, shift, out_dir, tag):
+    """The OpenMVS surface of an anchored fragment in the scene's local metric frame (vertices through the
+    anchor similarity plus the frame shift), coloured per vertex from the nearest dense point, written as
+    compact binary arrays for the viewer. Returns the published paths and sizes."""
+    from scipy.spatial import cKDTree
+    dense_dir = Path(dense_dir)
+    surface, dense = read_ply(dense_dir / 'surface.ply'), read_ply(dense_dir / 'dense.ply')
+    v = np.column_stack([surface['vertex'][k] for k in ('x', 'y', 'z')]).astype(np.float64)
+    faces = surface['face']['vertex_indices'].astype(np.uint32)
+    d = np.column_stack([dense['vertex'][k] for k in ('x', 'y', 'z')]).astype(np.float64)
+    rgb = np.column_stack([dense['vertex'][k] for k in ('red', 'green', 'blue')]).astype(np.uint8)
+    _, nearest = cKDTree(d).query(v, k=1)
     s, R, t = sim
     out_dir.mkdir(parents=True, exist_ok=True)
-    obj_path = Path(obj_path); lines = []
-    for line in obj_path.read_text().splitlines():
-        if line.startswith('v '):
-            v = np.array([float(x) for x in line.split()[1:4]])
-            w = s * (R @ v) + t + shift
-            lines.append('v %.4f %.4f %.4f' % tuple(w))
-        elif line.startswith('vn '):
-            n = R @ np.array([float(x) for x in line.split()[1:4]])
-            lines.append('vn %.5f %.5f %.5f' % tuple(n))
-        elif line.startswith('mtllib '):
-            lines.append(f'mtllib {tag}.mtl')
-        else: lines.append(line)
-    (out_dir / f'{tag}.obj').write_text('\n'.join(lines) + '\n')
-    mtl = obj_path.with_suffix('.mtl'); textures = []
-    if mtl.exists():
-        mtl_lines = []
-        for line in mtl.read_text().splitlines():
-            if line.split() and line.split()[0] in ('map_Kd', 'map_Ka'):
-                src = obj_path.parent / line.split()[-1]
-                if src.exists():
-                    dest = f'{tag}-{src.name}'; shutil.copy2(src, out_dir / dest); textures.append(dest)
-                    lines_ = line.split(); lines_[-1] = dest; line = ' '.join(lines_)
-            mtl_lines.append(line)
-        (out_dir / f'{tag}.mtl').write_text('\n'.join(mtl_lines) + '\n')
-    return {'obj_url': f'mesh/{tag}.obj', 'mtl_url': f'mesh/{tag}.mtl' if mtl.exists() else None, 'textures': textures,
-            'vertices': sum(1 for l in lines if l.startswith('v ')), 'faces': sum(1 for l in lines if l.startswith('f '))}
+    (s * (v @ R.T) + t + shift).astype(np.float32).tofile(out_dir / f'{tag}-xyz.f32')
+    rgb[nearest].tofile(out_dir / f'{tag}-rgb.u8'); faces.tofile(out_dir / f'{tag}-faces.u32')
+    return {'xyz_url': f'mesh/{tag}-xyz.f32', 'rgb_url': f'mesh/{tag}-rgb.u8', 'faces_url': f'mesh/{tag}-faces.u32',
+            'vertices': int(len(v)), 'faces': int(len(faces)), 'colour': 'per vertex, from the nearest dense point'}
 
 
 def build(output=OUT, anchored_runs=None, record_snapshot=None, ground_runs=None):
@@ -188,17 +216,18 @@ def build(output=OUT, anchored_runs=None, record_snapshot=None, ground_runs=None
                                   'reconstruction': tag})
         # A dense textured surface of this fragment, when the dense stage has produced one for its model.
         mesh = None
-        for obj in sorted((Path(run) / 'dense').glob('*/textured.obj')):
-            dense_report = json.loads((obj.parent / 'report.json').read_text()) if (obj.parent / 'report.json').exists() else {}
+        for ply in sorted((Path(run) / 'dense').glob('*/surface.ply')):
+            dense_report = json.loads((ply.parent / 'report.json').read_text()) if (ply.parent / 'report.json').exists() else {}
             if Path(dense_report.get('model', '')).resolve() != (Path(run) / ref.report['model_path']).resolve(): continue
             sim = (ref.report['similarity']['scale_m_per_model_unit'], np.array(ref.report['similarity']['rotation']),
                    np.array(ref.report['similarity']['translation_utm18n']) - ref.origin)
-            mesh = export_mesh(obj, sim, shift, output / 'mesh', tag); mesh['dense_report'] = str(obj.parent / 'report.json')
+            mesh = export_mesh(ply.parent, sim, shift, output / 'mesh', tag); mesh['dense_report'] = str(ply.parent / 'report.json')
             break
         reconstructions.append({'tag': tag, 'run': str(run), 'anchor_report': str(report), 'intervals_report': str(intervals_path) if intervals else None, 'mesh': mesh,
                                 'points': len(ids), 'dated_photographs': intervals['dated_photographs'] if intervals else None,
                                 'xyz_url': f'points-{tag}.f32', 'rgb_url': f'points-{tag}.u8', 'first_url': f'points-{tag}-first.i16', 'last_url': f'points-{tag}-last.i16',
-                                'scale_status': ref.report['scale_status'], 'anchored_through': ref.report.get('landmark_building')})
+                                'scale_status': ref.report['scale_status'], 'anchored_through': ref.report.get('landmark_building'),
+                                'covers': [b for b in (ref.report.get('landmark_building'), ref.report.get('neighbour_building')) if b]})
 
     # The ground record per building: the licensed photographs of its acquisition target in the snapshot
     # (deduplicated), their photographers and capture dates, whether or not they could be reconstructed.
