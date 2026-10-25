@@ -68,3 +68,4 @@ the legacy OpenMVS outputs `cpu_mvs_modern_full_v2/`, `cpu_mvs_masked08_v3/`,
 `cpu_mvs_target_fixed08_v2/`, `cpu_mvs_target_fixed_v2/` and
 `cpu_mvs_archive_target_v2/` (their built copies remain under
 `dist/assets/repair/` for the Surface Lab page); and the pip cache.
+Deleted 2026-10-25 (night): the depth maps and undistorted images of the full-resolution OpenMVS attempt on the tower fragment, `artsquad_modern/runs/6406b8eaae260163b303/dense/tower/` (841 MB; fusion was killed by the memory limit; `report.json` and the tool logs remain). The half-resolution attempt lives beside it in `dense/tower-half/`.
