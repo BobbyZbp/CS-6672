@@ -66,7 +66,11 @@ the camera's position along its viewing ray:
 undetermined by more than 20 m along their viewing rays; that is why its bundle
 adjustment can put them 30–50 m in the air or underground at under 2 px
 reprojection error. The measured ground narrows the median interval by about
-75 %. Caveat: even with the ground cue, most height intervals do not reach
+75 %. Calibration of the anchors-only intervals: the bundle-adjusted position
+lies inside the nominal 95 % interval for 18 of 22 cameras (all anchors) and 18
+of 21 (postcard-like), so the intervals are slightly under-covering. With the
+ground cue only 7 of 22 contain the bundle-adjusted position, which is
+expected, since those positions are themselves off the ground. Caveat: even with the ground cue, most height intervals do not reach
 standing height, so a residual systematic error remains in the frame or in the
 cameras (not resolved).
 
@@ -103,9 +107,11 @@ left). An automatic line-of-sight test against lidar building heights did not
 catch it, and neither did a test of whether the vanished site would have
 hidden the matched anchors; both were checked and the second was removed.
 
-**Consequence:** no bound on Boardman Hall is shown. The carving step is not
-done, because carving from mirror poses would place free space on the wrong
-side of the site.
+**Consequence:** no bound on Boardman Hall is shown. The carving step
+(`pipeline/ghostmap/archival/carve.py`: sky pixels prove their rays empty, which
+caps every column a sky ray passes over) is implemented and passes a synthetic
+containment test, but is deliberately not applied: carving from mirror poses
+would put free space on the wrong side of the site.
 
 ## What would change these results
 

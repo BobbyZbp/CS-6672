@@ -120,3 +120,36 @@ class GeosearchAdmissionTests(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+
+class CarvingTests(unittest.TestCase):
+    def test_sky_rays_cap_columns_without_ever_cutting_into_the_true_building(self):
+        from ghostmap.archival import carve
+        W, H, F = 240, 150, 220
+        box = (np.array([-5., -5., 0.]), np.array([5., 5., 12.]))
+
+        def render_sky(R, t):
+            C = -R.T @ t; sky = np.zeros((H, W), bool)
+            for v in range(H):
+                for u in range(W):
+                    d = R.T @ np.array([(u - W / 2) / F, (v - H / 2) / F, 1.]); d /= np.linalg.norm(d)
+                    if d[2] <= 0: continue  # looking down hits the ground
+                    with np.errstate(divide='ignore', invalid='ignore'):
+                        t0, t1 = (box[0] - C) / d, (box[1] - C) / d
+                    tn, tf = np.nanmax(np.minimum(t0, t1)), np.nanmin(np.maximum(t0, t1))
+                    sky[v, u] = not (tf >= max(tn, 0))
+            return sky
+        poses = []
+        for C in (np.array([0., -60., 1.6]), np.array([-60., 0., 1.6])):
+            R, t = look_at(C, [0, 0, 8.])
+            poses.append((R, t, F, 0.5, render_sky(R, t)))
+        xs = np.arange(-14, 15, 2.0); grid = np.array([(x, y) for x in xs for y in xs])
+        truth = np.where((np.abs(grid[:, 0]) < 5) & (np.abs(grid[:, 1]) < 5), 12.0, 0.0)
+        heights = np.arange(0.5, 40, 0.5)
+        caps = []
+        for R, t, f, w, sky in poses:
+            cap, _ = carve.column_caps(grid, np.zeros(len(grid)), [(R, t, f, 1.0)], sky, heights, W, H)
+            caps.append(cap)
+        cap = np.minimum(*caps)
+        self.assertEqual(carve.containment(cap, truth), 1.0)
+        self.assertTrue(np.isfinite(cap[truth > 0]).any())
