@@ -24,7 +24,7 @@ report files named below; nothing here is typed from memory.
    shape; the single-facade scale ambiguity; the Boardman mirror-pose finding from the earlier work.
 
 Build command for the current page (the builder's defaults omit the ground records):
-`PYTHONPATH=pipeline .venv/bin/python -m ghostmap.web.timemachine_scene --run artifacts/artsquad_modern/runs/6406b8eaae260163b303 --snapshot artifacts/artsquad_modern/snapshots/90d1dc5d21b4f9c5c08e15ab/snapshot.json --ground-run artifacts/artsquad_modern/runs/6da4ccc327cb12bf14df`.
+`PYTHONPATH=pipeline .venv/bin/python -m ghostmap.web.timemachine_scene --run artifacts/artsquad_modern/runs/6406b8eaae260163b303 --snapshot artifacts/artsquad_modern/snapshots/f1dccd0c8a49b760445a9a71/snapshot.json --ground-run artifacts/artsquad_modern/runs/6da4ccc327cb12bf14df`.
 
 Slides: `dist/timemachine-slides.html` (ten slides; the tower and Gates numbers are filled from
 `scene.json`). Check: `ghostmap/qa/timemachine_page.py` walks every chapter, year and slide
