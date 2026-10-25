@@ -21,7 +21,8 @@ from PIL import Image
 
 from ghostmap.paths import ROOT
 
-ANCHORED_RUN = ROOT / 'artifacts/artsquad_modern/runs/18f9388978b18815f239'
+# The EXIF-anchored re-mapping of the 145-photo snapshot; also the default anchored fragment.
+EXIF_ANCHORED_RUN = ROOT / 'artifacts/artsquad_modern/runs/18f9388978b18815f239'
 BASELINE_RUN = ROOT / 'artifacts/artsquad_modern/runs/2b7e3fa97872072dccbd'
 FIXED_RADIAL_RUN = ROOT / 'artifacts/artsquad_modern/runs/bd1208237efd7b33d52d'
 OUT = ROOT / 'dist/assets/ghostmap'
@@ -46,10 +47,11 @@ def thumbnail(source, dest):
         im.save(dest, quality=85)
 
 
-def build(output=OUT):
+def build(output=OUT, anchored_run=EXIF_ANCHORED_RUN):
     from ghostmap.archival.reference import Reference
     output = Path(output); (output / 'photos').mkdir(parents=True, exist_ok=True)
-    anchor_report = ANCHORED_RUN / 'anchor/0/report.json'
+    anchored_run = Path(anchored_run)
+    anchor_report = next(iter(sorted((anchored_run / 'anchor').glob('*/report.json'))))
     ref = Reference(anchor_report)
     tower = np.array([ref.model.points3D[i].xyz for i in ref.report['tower_point_ids'] if i in ref.model.points3D]).mean(0)
     centre = tower[:2]
@@ -81,15 +83,15 @@ def build(output=OUT):
     tower_set = set(ref.report['tower_point_ids'])
     np.array([i in tower_set for i in ids], np.uint8).tofile(output / 'fragment-tower.u8')
 
-    snapshot = json.loads(Path(json.loads((ANCHORED_RUN / 'report.json').read_text())['snapshot_path']).read_text())
+    snapshot = json.loads(Path(json.loads((anchored_run / 'report.json').read_text())['snapshot_path']).read_text())
     records = {r['filename']: r for r in snapshot['images']}
-    control = json.loads((ANCHORED_RUN / 'archival/modern-control.json').read_text())
+    control = json.loads((anchored_run / 'archival/modern-control.json').read_text())
     control_by_name = {c['name']: c for c in control['cameras']}
     photographers = []
     for image in sorted(ref.model.images.values(), key=lambda im: im.name):
         cam = ref.model.cameras[image.camera_id]; rec = records.get(image.name, {})
         thumb = 'photos/' + image.name
-        thumbnail(ANCHORED_RUN / 'images' / image.name, output / thumb)
+        thumbnail(anchored_run / 'images' / image.name, output / thumb)
         C = np.asarray(image.projection_center())
         entry = {'name': image.name, 'title': rec.get('title', image.name), 'license': rec.get('license'),
                  'license_url': rec.get('license_url'), 'artist': rec.get('artist'), 'source_url': rec.get('source_url'),
@@ -105,7 +107,7 @@ def build(output=OUT):
         photographers.append(entry)
 
     # Archival photographs.
-    archival = json.loads((ANCHORED_RUN / 'archival/report.json').read_text())
+    archival = json.loads((anchored_run / 'archival/report.json').read_text())
     people = json.loads((ROOT / 'artifacts/archival-people/people.json').read_text())
     postcards = []
     for q in archival['queries']:
@@ -134,12 +136,13 @@ def build(output=OUT):
     numbers = {
         'mapping': [mapping_row(BASELINE_RUN, 'stock learned COLMAP (SuperPoint + LightGlue)'),
                     mapping_row(FIXED_RADIAL_RUN, 'radial distortion fixed at zero'),
-                    mapping_row(ANCHORED_RUN, 'EXIF-anchored calibration (this extension)')],
+                    mapping_row(EXIF_ANCHORED_RUN, 'EXIF-anchored calibration (this extension)')],
+        'anchored_run': str(anchored_run),
         'anchoring': {k: ref.report[k] for k in ('scale_status', 'scale_checks', 'gate', 'metric_frame_usable')}
                      | {'tower': ref.report['metrics']['tower'], 'library_wall_distance_m': ref.report['metrics']['neighbour_wall_distance_m'],
                         'photographer_heights_m': ref.report['metrics']['camera_height_above_ground_m'],
                         'report': str(anchor_report)},
-        'positive_control': control['summary'] | {'report': str(ANCHORED_RUN / 'archival/modern-control.json')},
+        'positive_control': control['summary'] | {'report': str(anchored_run / 'archival/modern-control.json')},
         'lidar': {k: json.loads((ROOT / 'data/lidar/NY_FingerLakes_1_2020/report.json').read_text())[k]
                   for k in ('points_kept', 'class_counts', 'license', 'source')},
     }
@@ -162,7 +165,9 @@ def build(output=OUT):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, default=OUT)
-    scene = build(parser.parse_args().output)
+    parser.add_argument('--run', type=Path, default=EXIF_ANCHORED_RUN, help='run with anchor/ and archival/ results to show')
+    args = parser.parse_args()
+    scene = build(args.output, args.run)
     print(len(scene['photographers']), 'photographers,', len(scene['postcards']), 'archival photographs,',
           scene['fragment']['count'], 'points')
 
