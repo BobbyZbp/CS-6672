@@ -12,3 +12,6 @@ artifacts/*
 dist/assets/*
 !dist/assets/ghostmap/
 third_party/
+
+# Credentials (never committed)
+.secrets/
