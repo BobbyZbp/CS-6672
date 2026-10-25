@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="GhostMap v1: an auditable zero-human-in-the-loop feasibility test for reconstructing Cornell's Boardman Hall from public imagery." />
+    <title>GhostMap — Frozen V1 Feasibility Report</title>
+    <link rel="stylesheet" href="styles.css?v=20261023c" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="wordmark" href="#top"><span class="mark" aria-hidden="true"></span>GHOSTMAP <sup>v1</sup></a>
+      <nav aria-label="Main navigation">
+        <a href="#verdict">Verdict</a><a href="#pipeline">Pipeline</a><a href="#evidence">Evidence</a><a href="#method">Method</a>
+      </nav>
+      <a class="run-link" href="assets/hloc-joint-report.json">RAW REPORT ↗</a>
+    </header>
+
+    <main id="top">
+      <div style="padding:22px 6vw;background:#dce8dd;border-bottom:1px solid">
+        <a href="surface-lab.html" style="font:14px/1.6 ui-monospace,monospace">OPEN V2 SURFACE LAB → CPU stereo, photograph-textured meshes, recovered camera views, and calibration comparisons</a>
+      </div>
+      <section class="hero" id="verdict">
+        <div class="eyebrow">ZERO-HUMAN PIPELINE · FORMAL V1 RUN · 23 OCT 2026</div>
+        <div class="hero-grid">
+          <h1>Boardman Hall<br /><em>was not recovered.</em></h1>
+          <div class="verdict-card">
+            <span>PUBLICATION VERDICT</span>
+            <strong>REJECT</strong>
+            <p>The run found real cross-era correspondences, but did not produce a validated dense Boardman Hall surface. No 3D demo is released.</p>
+          </div>
+        </div>
+        <div class="hero-footer">
+          <div id="global-status" class="status-chip loading"><span></span>Reading audited artifacts</div>
+          <p>This page reports the evidence boundary. It does not turn a sparse diagnostic into a building.</p>
+        </div>
+      </section>
+
+      <section class="summary-band" aria-label="Top-line result">
+        <div><span>ONLINE INPUTS</span><strong id="sum-inputs">—</strong><small>licensed images</small></div>
+        <div><span>LEARNED CROSS-ERA</span><strong id="sum-cross-pairs">—</strong><small>verified pairs</small></div>
+        <div><span>JOINT CAMERAS</span><strong id="sum-cameras">—</strong><small>historical + modern</small></div>
+        <div class="critical"><span>ACCEPTED SURFACE</span><strong>0</strong><small>Boardman meshes</small></div>
+      </section>
+
+      <section class="pipeline-section" id="pipeline">
+        <div class="section-label"><span>01</span> EXECUTION TRACE</div>
+        <div class="section-heading">
+          <h2>Where the pipeline<br />actually stopped.</h2>
+          <p>Each stage is backed by a downloadable artifact. Passing camera registration is not the same as recovering the demolished building.</p>
+        </div>
+        <div class="stage-flow" id="stage-flow" aria-live="polite"></div>
+        <div class="target-panel">
+          <div class="target-copy">
+            <span class="kicker">TARGET-SPECIFIC GATE</span>
+            <h3>Did the model triangulate Boardman—not just Uris and McGraw?</h3>
+            <p id="target-explanation">Reading the full learned-feature joint reconstruction…</p>
+          </div>
+          <div class="target-metrics" id="target-metrics"></div>
+        </div>
+      </section>
+
+      <section class="demo-section" id="demo">
+        <div class="section-label light"><span>02</span> INTERACTIVE DEMO GATE</div>
+        <div class="withheld-grid">
+          <div>
+            <div class="blocked-label">WITHHELD · QUALITY GATE FAILED</div>
+            <h2>No fake building.</h2>
+            <p>A rotatable surface would imply geometry the run did not recover. The publication slot therefore fails closed instead of displaying a hand-authored facade, extruded footprint, or point cloud as a finished result.</p>
+          </div>
+          <div class="blocked-visual" aria-label="No accepted geometry"><span>3D</span><i></i><strong>NO ACCEPTED<br />GEOMETRY</strong></div>
+        </div>
+        <details class="diagnostic" id="diagnostic">
+          <summary><span>Inspect rejected sparse diagnostic</span><small>RAW HLOC + COLMAP OUTPUT · NOT THE DELIVERABLE</small></summary>
+          <div class="diagnostic-warning">This viewer is included for audit only. Points are triangulated observations; they are not a surface and do not establish architectural recovery.</div>
+          <div class="viewer-shell">
+            <canvas id="point-viewer" aria-label="Interactive rejected sparse point cloud"></canvas>
+            <div class="viewer-overlay"><span>LEARNED-FEATURE JOINT MODEL</span><strong>REJECTED SPARSE DIAGNOSTIC</strong></div>
+            <div class="viewer-stats"><b id="viewer-points">—</b> points <b id="viewer-cameras">—</b> cameras</div>
+            <button id="reset-view" type="button">RESET VIEW ↻</button>
+          </div>
+        </details>
+      </section>
+
+      <section class="audit-section" id="evidence">
+        <div class="section-label"><span>03</span> MEASURED EVIDENCE</div>
+        <div class="section-heading">
+          <h2>Two baselines,<br />one honest conclusion.</h2>
+          <p>Classic SIFT tests reproducibility; SuperPoint + LightGlue tests whether stronger cross-domain matching changes the feasibility verdict.</p>
+        </div>
+        <div class="audit-grid">
+          <article><span>BASELINE A · CLASSIC COLMAP</span><h3>SIFT failed to bridge eras.</h3><div class="mini-metrics" id="classic-metrics"></div><p>The selected joint component contained modern cameras only. A low reprojection error did not rescue the missing historical connection.</p></article>
+          <article><span>BASELINE B · HLOC + COLMAP</span><h3>Learned features recovered camera connectivity.</h3><div class="mini-metrics" id="hloc-metrics"></div><p>NetVLAD, SuperPoint, and LightGlue found genuine cross-era constraints. The stricter question remains whether enough Boardman-only structure survived to support a surface.</p></article>
+        </div>
+        <div class="gate-table-wrap">
+          <div class="table-head"><h3>Release gates</h3><span>ALL REQUIRED FOR A 3D DEMO</span></div>
+          <table><thead><tr><th>Gate</th><th>Requirement</th><th>Observed</th><th>Decision</th></tr></thead><tbody id="gate-body"></tbody></table>
+        </div>
+      </section>
+
+      <section class="data-section">
+        <div class="section-label"><span>04</span> PUBLIC INPUTS</div>
+        <div class="section-heading"><h2>Every image keeps<br />its provenance.</h2><p>Inputs were downloaded automatically from Wikimedia Commons and retained with source page, license, dimensions, and SHA-256.</p></div>
+        <div id="source-grid" class="source-grid"></div>
+        <div class="download-row">
+          <a href="assets/manifest.json" download><span>INPUT MANIFEST</span><strong>JSON ↓</strong></a>
+          <a href="assets/report.json" download><span>CLASSIC COLMAP</span><strong>JSON ↓</strong></a>
+          <a href="assets/hloc-cross-era-report.json" download><span>CROSS-ERA HLOC</span><strong>JSON ↓</strong></a>
+          <a href="assets/hloc-joint-report.json" download><span>FULL JOINT HLOC</span><strong>JSON ↓</strong></a>
+          <a href="assets/dense-mvs-report.json" download><span>DENSE MVS CHECK</span><strong>JSON ↓</strong></a>
+          <a href="assets/hloc-joint-sparse.ply" download><span>REJECTED SPARSE MODEL</span><strong>PLY ↓</strong></a>
+          <a href="assets/ghostmap-v1-source.zip" download><span>REPRODUCTION CODE</span><strong>ZIP ↓</strong></a>
+        </div>
+      </section>
+
+      <section class="method-section" id="method">
+        <div class="section-label"><span>05</span> METHOD</div>
+        <ol class="method-list">
+          <li><b>01</b><div><h3>Acquire</h3><p>Query Commons for Boardman, Uris, and McGraw; filter license and metadata; hash every accepted file.</p></div><span>ONLINE</span></li>
+          <li><b>02</b><div><h3>Retrieve + match</h3><p>Rank image overlap with NetVLAD, extract SuperPoint features, match with LightGlue, and verify geometry in COLMAP.</p></div><span>HLOC</span></li>
+          <li><b>03</b><div><h3>Joint reconstruction</h3><p>Estimate cameras and sparse tracks with COLMAP; count cross-era tracks and Boardman-only multiview tracks separately.</p></div><span>SFM</span></li>
+          <li><b>04</b><div><h3>Dense release gate</h3><p>Require target-specific support and a validated dense surface. On this machine, COLMAP PatchMatch is also blocked because the installed build has no CUDA.</p></div><span>FAIL CLOSED</span></li>
+        </ol>
+      </section>
+
+      <section class="conclusion"><span>V1 CONCLUSION</span><blockquote>Registration improved.<br />Recovery did not pass.</blockquote><p>The correct output under the zero-human-in-the-loop constraint is a negative feasibility result—not a prettier fake.</p></section>
+      <section class="references">
+        <div class="section-label"><span>06</span> PRECEDENT</div>
+        <a href="https://www.cs.cornell.edu/projects/chronology/" target="_blank" rel="noreferrer"><span>ECCV 2014 · BEST PAPER</span><strong>Scene Chronology</strong><small>Matzen &amp; Snavely ↗</small></a>
+        <a href="https://haotongl.github.io/neusc/" target="_blank" rel="noreferrer"><span>CVPR 2023</span><strong>Neural Scene Chronology</strong><small>Lin et al. ↗</small></a>
+      </section>
+    </main>
+    <footer><div><strong>GHOSTMAP v1</strong><span>Auditable zero-human historical reconstruction feasibility study.</span></div><div id="footer-status">REPORT PENDING</div><a href="#top">BACK TO TOP ↑</a></footer>
+    <script src="app.js?v=20261023c"></script>
+  </body>
+</html>

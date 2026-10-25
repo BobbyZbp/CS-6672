@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "project_id": "ghostmap-artsquad",
+  "title": "GhostMap: modern Arts Quad first, evidence-backed research and history",
+  "kickoff_date": "2026-10-24",
+  "timezone": "America/New_York",
+  "planned_duration_months": [9, 12],
+  "core_buildings": ["morrill", "mcgraw-hall", "white", "sibley", "tjaden", "goldwin-smith", "lincoln"],
+  "non_counting_anchors": ["uris", "mcgraw-tower"],
+  "priority_demo_candidates": ["morrill", "mcgraw-hall", "white"],
+  "milestones": {
+    "D0": {"title": "Multi-building feasibility sample", "target_date": "2026-11-07", "minimum_core_buildings": 2},
+    "D1": {"title": "First live multi-building demo", "window_start": "2026-11-21", "window_end": "2026-12-05", "minimum_core_buildings": 2, "preferred_core_buildings": 3},
+    "D2": {"title": "Complete modern Arts Quad reference scene", "window_start": "2026-12-19", "window_end": "2027-01-16", "minimum_core_buildings": 7},
+    "R1": {"title": "Research method and independent evaluation", "window_start": "2027-02-24", "window_end": "2027-06-24"},
+    "D3": {"title": "Evidence-backed historical time machine", "window_start": "2027-06-24", "window_end": "2027-08-24"},
+    "R2": {"title": "Reproducible research and public release", "window_start": "2027-08-24", "window_end": "2027-10-24"}
+  },
+  "demo_acceptance": {
+    "minimum_training_exposure_groups_per_building": 3,
+    "minimum_holdout_exposure_groups_per_building": 1,
+    "clip_duration_seconds": [45, 60],
+    "network_mbps": 20,
+    "desktop_cold_start_seconds_max": 5,
+    "minimum_sustained_fps": 30,
+    "real_device_performance_required": true,
+    "verified_https_required": true
+  },
+  "resource_plan": {
+    "gpu_memory_gib": 48,
+    "host_memory_gib": 128,
+    "working_storage_gib": 2048,
+    "initial_gpu_benchmark_hours_max": 50,
+    "purchase_authorized": false,
+    "remote_job_submission_authorized": false
+  },
+  "execution_policy": {
+    "confirmed_date": "2026-10-24",
+    "current_scope": "local CPU data preparation and small-scale validation",
+    "external_gpu_available": false,
+    "purchase_authorized": false,
+    "remote_job_submission_authorized": false,
+    "full_resolution_resource_plan_is_future_only": true
+  },
+  "local_draft_delivery": {
+    "confirmed_date": "2026-10-24",
+    "deadline": "2026-10-24T23:00:00-04:00",
+    "delivery": "local first draft; public HTTPS is not required for this draft",
+    "does_not_replace_D1_acceptance": true,
+    "does_not_reduce_seven_building_or_research_scope": true
+  },
+  "policies": {
+    "unknown_evidence": "pending, never passed",
+    "point_counts": "diagnostics only; cannot satisfy a milestone",
+    "component_alignment": "real shared observations only; never authored or map-placed geometry",
+    "adjacency": "requires a separate verified adjacency report, not merely a shared component",
+    "historical_completion": "Boardman remains required unless the user approves a scope change",
+    "public_release": "rights and HTTPS verification required; localhost is not public delivery",
+    "external_outcomes": "paper acceptance, university endorsement and press publication are not guaranteed deliverables"
+  }
+}

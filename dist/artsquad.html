@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="GhostMap's evidence-first reconstruction of Cornell's Arts Quad. Explore computed geometry, calibrated photographs, source coverage and the path to a multi-building demo.">
+  <meta name="theme-color" content="#f1eee7">
+  <title>Arts Quad Atlas — GhostMap</title>
+  <link rel="stylesheet" href="artsquad.css?v=20261024a">
+  <link rel="stylesheet" href="artsquad-evidence.css?v=20261024a">
+  <script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
+</head>
+<body>
+  <a class="skip-link" href="#explorer">Skip to the 3D explorer</a>
+  <header class="site-header">
+    <a class="brand" href="artsquad.html" aria-label="GhostMap Arts Quad Atlas"><span class="brand-symbol" aria-hidden="true">◇</span> GHOSTMAP <span class="brand-edition">FIELD NOTES / 01</span></a>
+    <nav aria-label="Page navigation"><a href="#explorer">Explore</a><a href="#coverage">Evidence</a><a href="#milestones">The next demo</a><a href="surface-lab.html">Earlier experiments ↗</a></nav>
+  </header>
+
+  <main>
+    <section class="intro" aria-labelledby="page-title">
+      <div><p class="eyebrow"><span class="red-rule"></span> CORNELL UNIVERSITY · MODERN REFERENCE SCENE</p><h1 id="page-title">The Arts Quad,<br><em>from photographs.</em></h1></div>
+      <div class="intro-note"><p>A shared spatial reference for the campus—and, eventually, its past.</p><p class="subtle">Only recovered observations belong in this atlas. Missing geometry stays missing.</p><a class="text-link" href="#milestones">First milestone: a real, connected multi-building demo <span aria-hidden="true">↓</span></a></div>
+    </section>
+
+    <section id="explorer" class="explorer" aria-labelledby="explorer-title">
+      <div class="explorer-topline"><div><span class="live-dot" aria-hidden="true"></span><span id="scene-status">READING RUN MANIFEST</span></div><span id="run-label">ARTS QUAD ATLAS / RESEARCH PREVIEW</span></div>
+      <div class="explorer-body">
+        <div class="scene-column">
+          <div class="viewer-heading"><div><p class="eyebrow">OBSERVATION SPACE</p><h2 id="explorer-title">One component at a time.</h2></div><label class="component-label">Scene component<select id="component-select" disabled><option>No component loaded</option></select></label></div>
+          <div id="viewport" tabindex="0" aria-label="Interactive reconstructed scene. Drag to orbit, scroll to zoom. Use Fit scene to reset the view.">
+            <div id="photo-overlay" class="registered-photo-overlay" hidden><img id="registered-photo" alt="Undistorted source photograph over its recovered camera projection"></div>
+            <div class="viewer-tag" id="geometry-tag">NO COMPUTED GEOMETRY LOADED</div>
+            <div id="empty-state" class="empty-state"><span class="empty-mark" aria-hidden="true">+</span><h3 id="empty-title">The atlas is being assembled.</h3><p id="empty-copy">Reading the data and reconstruction status. No synthetic campus is shown here.</p></div>
+            <div id="asset-error" class="asset-error" role="alert" hidden></div>
+            <div id="load-status" class="load-status" role="status" aria-live="polite">Loading manifest…</div>
+            <div class="viewer-caption"><span>DRAG TO ORBIT · SCROLL TO ZOOM</span><span id="coordinate-label">SCALE UNVERIFIED</span></div>
+          </div>
+          <div class="viewer-toolbar"><div class="mode-group" role="group" aria-label="Surface display"><button type="button" class="active" data-display="texture" aria-pressed="true" disabled>Photo texture</button><button type="button" data-display="solid" aria-pressed="false" disabled>Surface</button><button type="button" data-display="wire" aria-pressed="false" disabled>Wireframe</button></div><div class="viewer-actions"><label><input id="show-cameras" type="checkbox"> Cameras</label><button type="button" id="fit-scene" disabled>↗ Fit scene</button><button type="button" id="tour-toggle" disabled>▷ Orbit preview</button></div></div>
+          <div class="photo-comparison"><label><input id="photo-overlay-toggle" type="checkbox" disabled> Registered photo overlay</label><label class="comparison-opacity">Photo opacity<input id="photo-overlay-opacity" type="range" min="0" max="100" value="50" disabled><output id="photo-overlay-value" for="photo-overlay-opacity">50%</output></label><p id="photo-overlay-note">Choose a recovered camera view to compare its photograph. Training-view consistency is not independent validation.</p></div>
+          <div class="scene-stats" aria-label="Component statistics"><div><strong id="stat-cameras">—</strong><span>registered cameras</span></div><div><strong id="stat-points">—</strong><span id="point-label">computed points</span></div><div><strong id="stat-faces">—</strong><span>surface triangles</span></div><div><strong id="stat-core">—</strong><span>validated core targets</span></div></div>
+        </div>
+
+        <aside class="evidence-panel" aria-labelledby="evidence-title">
+          <div class="panel-heading"><span class="eyebrow">THE EVIDENCE</span><span class="index-number">01 / PHOTO</span></div><h2 id="evidence-title">A photograph,<br>not a promise.</h2>
+          <p id="source-explanation" class="small-copy">A source camera can be inspected only after a reconstruction has recovered its pose.</p>
+          <label class="stacked-label" for="source-select">Recovered source camera</label><select id="source-select" disabled><option>No recovered cameras</option></select>
+          <div class="photo-frame"><img id="source-photo" alt="" hidden><div id="photo-empty">SOURCE PHOTOGRAPH<br><span>Available when a calibrated view exists.</span></div></div>
+          <p id="source-name" class="source-name">No source selected</p><p id="source-metadata" class="source-metadata"></p>
+          <div class="source-buttons"><button type="button" id="snap-camera" disabled>View from this camera ↗</button><a id="source-link" href="#" hidden target="_blank" rel="noopener noreferrer">Open source ↗</a></div>
+          <div class="evidence-detail"><p class="eyebrow">WHAT THIS PROVES</p><p id="evidence-copy">Source counts are not geometric coverage. A point cloud is not a complete building.</p><p id="picked-location" hidden></p></div>
+          <section id="surface-evidence" class="surface-evidence" aria-labelledby="surface-evidence-title" hidden><h3 id="surface-evidence-title" class="eyebrow">ESTIMATED STEREO VISIBILITY</h3><p id="surface-evidence-status" role="status" aria-live="polite"></p><div id="surface-support-photos" class="support-photos"></div><details id="surface-groups-details" hidden><summary>Recorded source groups</summary><p id="surface-group-ids"></p></details><p class="support-caution">Recorded groups are not certified independent observations. Estimated stereo visibility is not proof of geometric accuracy.</p></section>
+          <div class="report-links"><a id="component-report" href="#" hidden target="_blank" rel="noopener noreferrer">Reconstruction report ↗</a><a id="component-evidence" href="#" hidden target="_blank" rel="noopener noreferrer">Observation records ↗</a><a id="component-holdout" href="#" hidden target="_blank" rel="noopener noreferrer">Held-out localization report ↗</a><a id="component-dense-support" href="#" hidden target="_blank" rel="noopener noreferrer">Dense observation-group report ↗</a><a id="component-face-evidence" href="#" hidden target="_blank" rel="noopener noreferrer">Facet visibility records ↗</a><a id="component-model-download" href="#" hidden target="_blank" rel="noopener noreferrer">Native COLMAP diagnostic ZIP ↓</a><a id="source-code-link" href="#" hidden target="_blank" rel="noopener noreferrer">Reproduction source ZIP ↓</a><a id="project-contract-link" href="#" hidden target="_blank" rel="noopener noreferrer">Demo acceptance contract ↗</a><a id="project-status-link" href="#" hidden target="_blank" rel="noopener noreferrer">Milestone checks ↗</a><a id="all-sources-link" href="#" hidden target="_blank" rel="noopener noreferrer">Source & rights index ↗</a><a id="manifest-link" href="assets/artsquad/scene.json" target="_blank" rel="noopener noreferrer">Run manifest ↗</a></div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="data-summary" aria-label="Dataset summary"><div class="section-number">01 / DATA IN HAND</div><div><strong id="data-downloaded">—</strong><span>downloaded files</span></div><div><strong id="data-candidates">—</strong><span>scene candidates</span></div><div><strong id="data-train">—</strong><span>reconstruction images</span></div><div><strong id="data-test">—</strong><span>held-out images</span></div><p>More photographs help only when they add real views. Repeated scans, interiors and diagrams are not independent building observations.</p></section>
+
+    <section id="coverage" class="coverage-section" aria-labelledby="coverage-title"><div class="section-heading"><div><p class="eyebrow">02 / FROM FILES TO A PLACE</p><h2 id="coverage-title">Every building needs evidence.</h2></div><p>Seven core targets. One shared coordinate system is the goal, not an assumption. These are source counts—not recovered façade coverage.</p></div><div class="coverage-layout"><div class="coverage-table-wrap"><table class="coverage-table"><thead><tr><th scope="col">Building / target</th><th scope="col">Files</th><th scope="col">Reconstruction</th><th scope="col">Held out</th></tr></thead><tbody id="coverage-rows"><tr><td colspan="4">Reading source inventory…</td></tr></tbody></table></div><aside class="quality-notes"><p class="eyebrow">THE BOUNDARY OF THE RESULT</p><h3>No evidence,<br>no building.</h3><ul id="limitations"><li>Awaiting run manifest.</li></ul><p class="quality-footnote">Uris Library and McGraw Tower are contextual anchors. They do not count toward the seven-building Arts Quad target.</p></aside></div></section>
+
+    <section id="milestones" class="milestone-section" aria-labelledby="milestone-title"><div class="section-heading"><div><p class="eyebrow">03 / A DEMO IS A DELIVERABLE</p><h2 id="milestone-title">Build the place.<br>Then travel through time.</h2></div><p>The first release must show two or three genuinely connected core buildings, their environment, and the photographs behind the geometry.</p></div><div class="milestone-grid" id="milestone-list"><article><span class="milestone-code">D0</span><p class="milestone-date">WEEK 2</p><h3>Prove the connection.</h3><p>Shared observations, recovered cameras and a first supported surface.</p><span class="stage-status" id="milestone-d0">Not yet verified</span></article><article class="milestone-priority"><span class="milestone-code">D1</span><p class="milestone-date">NOV 21 – DEC 5, 2026</p><h3>A real multi-building demo.</h3><p>Explore 2–3 core buildings, inspect photographs and see the honest boundaries.</p><span class="stage-status" id="milestone-d1">Not yet verified</span></article><article><span class="milestone-code">D2</span><p class="milestone-date">WEEKS 8–12</p><h3>The modern Arts Quad.</h3><p>Seven core buildings, high-resolution local detail and independent checks.</p><span class="stage-status" id="milestone-d2">Not yet verified</span></article><article><span class="milestone-code">R / D3</span><p class="milestone-date">MONTHS 4–12</p><h3>A defensible time machine.</h3><p>Research, verified historical localization and an evidence-backed public experience.</p><span class="stage-status" id="milestone-r1">Research ahead</span></article></div></section>
+
+    <section class="method-note" aria-labelledby="method-title"><p class="eyebrow">04 / HOW THIS ATLAS IS MADE</p><h2 id="method-title">Photographs → cameras → supported surfaces.</h2><p>Images are screened for exact duplicates and grouped by recorded source families; grouping remains uncertain. COLMAP estimates cameras and shared structure; multi-view stereo estimates depth and surfaces. Separate components remain separate. A visual improvement is not an accuracy claim.</p><div class="resource-line"><span id="resource-summary">Compute environment: reading manifest.</span><span id="generated-label"></span></div></section>
+    <section id="pipeline" class="pipeline-run" aria-labelledby="pipeline-title"><p class="eyebrow">05 / THIS RUN, END TO END</p><h2 id="pipeline-title">What actually ran.</h2><p>Execution status and scientific acceptance are different. Every number below belongs to the selected frozen run.</p><div class="pipeline-table-wrap"><table class="pipeline-table"><thead><tr><th scope="col">Stage</th><th scope="col">Recorded evidence</th><th scope="col">State</th></tr></thead><tbody id="pipeline-rows"><tr><td colspan="3">Awaiting the run record.</td></tr></tbody></table></div><a id="pipeline-report-link" class="text-link" href="#" hidden target="_blank" rel="noopener noreferrer">Download pipeline report ↗</a></section>
+  </main>
+
+  <footer><a class="brand" href="artsquad.html"><span class="brand-symbol" aria-hidden="true">◇</span> GHOSTMAP</a><p>Independent research prototype · Not an official Cornell University publication or endorsement.</p><a href="#page-title">Back to the atlas ↑</a></footer>
+  <script type="module" src="artsquad.js?v=20261024a"></script>
+</body>
+</html>

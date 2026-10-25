@@ -1,0 +1,6 @@
+.venv/
+data/raw/
+artifacts/work/
+*.pyc
+__pycache__/
+

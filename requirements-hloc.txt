@@ -1,0 +1,9 @@
+-r requirements.txt
+gdown==6.4.2
+h5py==3.16.0
+kornia==0.8.2
+opencv-python==5.0.0.93
+torch==2.14.1
+torchvision==0.29.1
+lightglue @ git+https://github.com/cvg/LightGlue@eb42fee2d71449efb0aa5c10549752b5d75384d8
+hloc @ git+https://github.com/cvg/Hierarchical-Localization.git@c13273bd0ecc2917a35910fd843712a1c6243193

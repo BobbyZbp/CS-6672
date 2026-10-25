@@ -1,0 +1,26 @@
+.surface-evidence{border-top:1px solid var(--line);margin-top:18px;padding-top:14px;min-width:0}
+.registered-photo-overlay{position:absolute;inset:0;z-index:1;pointer-events:none}
+.registered-photo-overlay img{display:block;width:100%;height:100%;object-fit:contain}
+.photo-comparison{padding:12px 20px 10px;border-bottom:1px solid var(--line);display:flex;align-items:center;flex-wrap:wrap;gap:9px 20px;font:9px/1.5 var(--mono)}
+.photo-comparison label{display:flex;align-items:center;gap:7px;max-width:100%}
+.photo-comparison input{accent-color:var(--green);margin:0}
+.comparison-opacity input{width:85px;max-width:30vw}.photo-comparison output{min-width:28px}
+.photo-comparison p{flex-basis:100%;font:9px/1.6 var(--sans);margin:0;color:var(--muted)}
+.surface-evidence .eyebrow{font-size:8px;color:var(--green);margin-bottom:8px}
+.surface-evidence p,.surface-evidence summary{font-size:10px;line-height:1.65;overflow-wrap:anywhere}
+.surface-evidence summary{cursor:pointer;color:var(--green);margin:9px 0}
+.support-photos{display:grid;gap:6px}
+.support-photos button{max-width:100%;text-align:left;border:1px solid var(--line);background:transparent;padding:7px;font:9px/1.5 var(--mono);overflow-wrap:anywhere}
+.support-photos button:hover{border-color:var(--green);background:#e5e9df}
+.support-caution{color:var(--muted);margin:10px 0 0}
+#surface-group-ids{white-space:pre-wrap;font:8px/1.7 var(--mono);color:var(--muted)}
+.pipeline-run{border-top:1px solid var(--line);margin-top:40px;padding:35px 0 25px}
+.pipeline-run h2{font:36px/1.15 var(--serif);font-weight:400;margin-bottom:14px}
+.pipeline-run>p:not(.eyebrow){font-size:12px;color:var(--muted)}
+.pipeline-table-wrap{overflow-x:auto;margin:20px 0}
+.pipeline-table{border-collapse:collapse;width:100%;font-size:11px;text-align:left}
+.pipeline-table th,.pipeline-table td{border-bottom:1px solid var(--line);padding:13px 12px;vertical-align:top}
+.pipeline-table th{font:9px var(--mono);color:var(--muted)}
+.pipeline-table td:first-child{width:23%;font-weight:600}.pipeline-table td:last-child{width:19%;font:9px/1.7 var(--mono);color:var(--green)}
+.pipeline-table a{color:var(--red);white-space:nowrap;font:9px var(--mono)}
+@media(max-width:600px){.pipeline-table{font-size:10px;min-width:330px}.pipeline-table th,.pipeline-table td{padding:11px 5px}.pipeline-table td:last-child{font-size:8px}.pipeline-run h2{font-size:29px}}

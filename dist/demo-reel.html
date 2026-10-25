@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="An actual-browser GhostMap local research checkpoint, with source-linked recording evidence and explicit limits.">
+  <title>GhostMap · Local demo recording</title>
+  <style>
+    :root{color-scheme:light;--paper:#f1eee7;--ink:#242820;--muted:#676d61;--line:#d4d0c5;--green:#425e4b;--red:#a82a25}*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.65 Arial,sans-serif}header,main,footer{width:min(1280px,92%);margin:auto}header{padding:24px 0;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:20px}a{color:inherit;text-underline-offset:5px}header>a{font-weight:700;text-decoration:none}header span{font:11px monospace;color:var(--muted)}main{padding:40px 0}h1{font:clamp(34px,5vw,62px)/1.06 Georgia,serif;letter-spacing:-1.7px;font-weight:400;margin:12px 0 18px}h2{font:28px/1.2 Georgia,serif;font-weight:400}.eyebrow{font:11px monospace;letter-spacing:.8px;color:var(--red)}.intro{max-width:800px}.intro p{color:var(--muted)}.boundary{border-left:3px solid var(--red);padding:14px 18px;background:#e8e3d8;font-size:13px;max-width:1000px}.status{font:11px/1.6 monospace;overflow-wrap:anywhere}.player{margin:30px 0;background:#202824;min-height:220px;padding:0;color:var(--paper)}video{display:block;width:100%;max-height:76vh;background:#202824}.empty{padding:35px}.empty h2{color:var(--paper)}.empty p{color:#c1c7b8;max-width:650px}.links{display:flex;gap:15px;flex-wrap:wrap;margin:18px 0}.links a{font:12px monospace}button{font:12px Arial,sans-serif;cursor:pointer;background:transparent;border:1px solid var(--line);padding:10px 12px;color:var(--ink)}button:hover,button:focus-visible{border-color:var(--green);background:#e3e6db}a:focus-visible,video:focus-visible{outline:2px solid var(--red);outline-offset:5px}.chapters{display:flex;gap:8px;flex-wrap:wrap}.trace{padding:20px 0;border-top:1px solid var(--line);margin-top:30px}.trace dl{display:grid;grid-template-columns:180px 1fr;gap:8px 20px;font:12px/1.7 monospace}.trace dt{color:var(--muted)}.trace dd{margin:0;overflow-wrap:anywhere}.captures{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.captures img{width:100%;border:1px solid var(--line);display:block}.captures a{text-decoration:none;font:11px monospace;overflow-wrap:anywhere}.captures span{display:block;margin:5px 0 12px}footer{padding:22px 0 32px;border-top:1px solid var(--line);font:11px/1.7 monospace;color:var(--muted)}[hidden]{display:none!important}@media(max-width:700px){header{display:block}header span{display:block;margin-top:8px}main{padding-top:26px}.captures{grid-template-columns:repeat(2,minmax(0,1fr))}.trace dl{display:block}.trace dt{margin-top:10px}.boundary{font-size:12px}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+  </style>
+</head>
+<body>
+  <header><a href="artsquad.html">◇ GHOSTMAP</a><span>LOCAL DRAFT · ACTUAL-BROWSER RECORDING</span></header>
+  <main>
+    <section class="intro"><p class="eyebrow">A RECORD OF THE WORK IN HAND</p><h1>See the result.<br>See its limits.</h1><p>A short, reproducible recording of real reconstructed artifacts, calibrated source photographs, and the evidence available for inspection. No artificial buildings or joined campus coordinates.</p></section>
+    <p class="boundary"><strong>Diagnostic checkpoint—not accepted D0 or D1.</strong> Local surface fragments and separate SfM components do not establish a complete building, a connected Arts Quad, metric accuracy, or public-release readiness.</p>
+    <p id="recording-status" class="status" role="status">Loading the local recording index…</p>
+    <section class="player" aria-label="Recorded browser demonstration">
+      <div id="empty" class="empty"><h2>No verified recording has been loaded.</h2><p id="empty-copy">The page will not substitute a synthetic animation or an unrelated reconstruction. The live atlas remains available.</p></div>
+      <video id="video" controls playsinline preload="metadata" aria-label="GhostMap diagnostic browser tour. Visible captions explain the incomplete reconstruction and separate components." hidden></video>
+    </section>
+    <div class="links"><a href="artsquad.html">Open the live interactive atlas ↗</a><a id="download-video" hidden download>Download actual WebM ↓</a><a id="report-link" hidden>Recording report ↗</a><a id="manifest-link" hidden>Recorded scene manifest ↗</a></div>
+    <section id="chapter-section" hidden><h2>Jump to the evidence.</h2><div id="chapters" class="chapters" aria-label="Recorded chapters"></div><p class="status">Seeking changes playback time only. The clip contains real browser frames; no camera interpolation or generated geometry.</p></section>
+    <section id="trace" class="trace" hidden><h2>The exact recorded checkpoint.</h2><dl id="trace-records"></dl><p id="current-comparison" class="status"></p></section>
+    <section id="capture-section" class="trace" hidden><h2>Actual chapter captures.</h2><div id="captures" class="captures"></div></section>
+  </main>
+  <footer>Independent local research prototype · Not an official Cornell University publication or endorsement. No external hosting or public rights clearance is implied.</footer>
+  <script type="module">
+    const $=s=>document.querySelector(s), indexURL='assets/artsquad/demo/latest.json';
+    function localAsset(value){if(typeof value!=='string')throw Error('Missing recording asset');const u=new URL(value,location.href);if(u.origin!==location.origin||!u.pathname.startsWith(new URL('assets/artsquad/demo/',location.href).pathname))throw Error('Recording asset is outside its local versioned bundle');return u.href;}
+    function link(id,value){const a=$(id);a.href=localAsset(value);a.hidden=false;}
+    try{
+      const response=await fetch(indexURL,{cache:'no-store'});if(!response.ok)throw Error(`Recording index HTTP ${response.status}`);
+      const record=await response.json();if(record.schema_version!==1||record.status!=='local_diagnostic_recording'||!record.video_url||!record.scene_manifest_sha256)throw Error('No verified local diagnostic recording index');
+      const video=$('#video');video.poster=localAsset(record.poster_url);
+      // The existing local Python static server does not advertise byte-range
+      // support. Load the actual small clip once into a verified Blob so native
+      // seeking works; do not replace its frames or require a new server.
+      $('#recording-status').textContent='Loading and verifying the actual local WebM…';
+      const clipResponse=await fetch(localAsset(record.video_url));if(!clipResponse.ok)throw Error(`Actual WebM HTTP ${clipResponse.status}`);
+      const clip=await clipResponse.blob();if(clip.size>64*1024*1024)throw Error('Local recording exceeds the 64 MiB playback budget; use the direct download');
+      const digest=await crypto.subtle.digest('SHA-256',await clip.arrayBuffer()),clipHash=[...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');if(clipHash!==record.video.sha256)throw Error('Actual WebM bytes differ from their recorded SHA-256');
+      const blobURL=URL.createObjectURL(clip);window.addEventListener('pagehide',()=>URL.revokeObjectURL(blobURL),{once:true});video.src=blobURL;video.hidden=false;$('#empty').hidden=true;
+      video.addEventListener('error',()=>{video.hidden=true;$('#empty').hidden=false;$('#empty-copy').textContent='The actual recording could not be played. Download the WebM or inspect the live atlas; no substitute clip has been inserted.';$('#recording-status').textContent='RECORDED ASSET UNAVAILABLE';});
+      $('#recording-status').textContent=`RECORDED DIAGNOSTIC ONLY · ${record.video.duration_seconds.toFixed(2)} s · ${record.video.width} × ${record.video.height} · ${record.recorded_utc}`;
+      link('#download-video',record.video_url);link('#report-link',record.report_url);link('#manifest-link',record.scene_manifest_url);
+      for(const chapter of record.chapters||[]){const button=document.createElement('button');button.type='button';button.textContent=`${Math.floor(chapter.start_seconds)}s · ${chapter.id.replaceAll('_',' ')}`;button.addEventListener('click',()=>{video.currentTime=Math.max(0,chapter.start_seconds);video.focus();});$('#chapters').append(button);}$('#chapter-section').hidden=false;
+      for(const [name,value]of [['Run',record.run_id],['Snapshot',record.snapshot_id||'not recorded'],['Scene SHA-256',record.scene_manifest_sha256],['Video SHA-256',record.video.sha256],['Recording report SHA-256',record.recording_report_sha256]]){const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=name;dd.textContent=value;$('#trace-records').append(dt,dd);}$('#trace').hidden=false;
+      for(const capture of record.captures||[]){const a=document.createElement('a'),image=document.createElement('img'),span=document.createElement('span');a.href=localAsset(capture.url);image.src=a.href;image.loading='lazy';image.alt=`Actual browser capture: ${capture.path.replace('.png','')}`;span.textContent=capture.path.replace('.png','').replaceAll('_',' ');a.append(image,span);$('#captures').append(a);}$('#capture-section').hidden=false;
+      try{const current=await fetch('assets/artsquad/scene.json',{cache:'no-store'});if(current.ok){const bytes=await current.arrayBuffer(),digest=await crypto.subtle.digest('SHA-256',bytes),hash=[...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');$('#current-comparison').textContent=hash===record.scene_manifest_sha256?'This clip records the exact currently selected scene manifest.':'This clip is an archived checkpoint. The live atlas now selects a different manifest; the recording does not verify that newer scene.';}}catch{$('#current-comparison').textContent='Current-scene comparison unavailable; use the recorded manifest and hashes above.';}
+    }catch(error){$('#recording-status').textContent='NO VERIFIED RECORDING AVAILABLE';$('#empty-copy').textContent=`${error.message}. Open the live atlas or create a local recording with the documented recorder.`;}
+  </script>
+</body>
+</html>
