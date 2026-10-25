@@ -44,8 +44,7 @@ glog files that used to sit in the repository root).
 | Path | Size | Referenced by |
 | --- | ---: | --- |
 | `cpu_mvs_modern_full_v2/` | 576 M | `run_repair.sh`, `build_repair_site.py` (171,351 dense points, Uris/Tower only) |
-| `cpu_mvs_modern_v2/` | 299 M | `run_repair.sh`, `build_repair_site.py` |
-| `cpu_mvs_masked08_v3/`, `cpu_mvs_masked12_v3/` | 288 M, 298 M | masked historical experiments |
+| `cpu_mvs_masked08_v3/` | 288 M | masked historical experiment |
 | `cpu_mvs_target_fixed08_v2/`, `cpu_mvs_target_fixed_v2/` | 147 M, 119 M | fixed-focal historical experiments |
 | `cpu_mvs_archive_target_v2/` | 130 M | Cornell-archive historical experiment (research-use rights only) |
 | `archive_target_v2/`, `target_sfm_v2/`, `masked_target_v3/` | 93 M, 40 M, 7 M | historical Boardman SfM inputs and models |
@@ -58,7 +57,7 @@ glog files that used to sit in the repository root).
 Deleted 2026-10-25 with the owner's approval (nothing in code, `dist/` or docs
 referenced them): `cpu_mvs_joint_historical/`, `cpu_mvs_target_v2/`,
 `work_v11/`, `work_v12/`, `work_focal_prior/`, `experiment_v11/`,
-`experiment_v12/`, `experiment_focal_prior/` (about 0.36 GB).
+`experiment_v12/`, `experiment_focal_prior/` (about 0.36 GB). Also deleted on 2026-10-25, under the same approval, to make room for dense reconstruction: `cpu_mvs_modern_v2/` and `cpu_mvs_masked12_v3/` (about 0.6 GB; built copies remain in `dist/assets/repair/` for the Surface Lab page; rebuilding them needs `run_repair.sh`).
 
 Still present and worth a later decision: the two error runs under `runs/`
 (0.4 GB, kept as evidence of a report/model mismatch), `demo-packages/`
