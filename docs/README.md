@@ -34,6 +34,7 @@ Module-level map: [../pipeline/README.md](../pipeline/README.md).
 | [artsquad-provider-checkpoint.md](checkpoints/artsquad-provider-checkpoint.md) | Quad6K / DISCO provider recovery probes. |
 | [artsquad-tonight-draft.md](checkpoints/artsquad-tonight-draft.md) | Draft for the 228-record snapshot; its first run stopped during matching (resumed 2026-10-25). |
 | [2026-10-25-colmap-extensions.md](checkpoints/2026-10-25-colmap-extensions.md) | **Latest**: EXIF-anchored calibration, lidar anchoring, cross-era resection certificates, the mirror-pose finding. |
+| [2026-10-25-time-machine.md](checkpoints/2026-10-25-time-machine.md) | **Latest**: the time machine's first complete pass; measured facts, findings (single-facade scale ambiguity, Gates close-ups, duplicate screen), what is not done. |
 
 ## research/ — literature and direction
 
