@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cornell Time Machine slides</title>
+<style>
+  :root { --bg: #f6f4ef; --ink: #1d221e; --muted: #5d655d; --accent: #b5532c; --ok: #2f7d4f; --bad: #b4372f; --line: #d8d4c9; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #111; }
+  body { font: 22px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink); }
+  .slide { display: none; position: absolute; inset: 0; margin: auto; width: min(100vw, 177.8vh); height: min(56.25vw, 100vh); background: var(--bg); padding: 4.2% 5.5%; overflow: hidden; }
+  .slide.on { display: flex; flex-direction: column; }
+  h1 { font-size: 2.3em; margin: 0 0 .2em; line-height: 1.1; }
+  h2 { font-size: 1.55em; margin: 0 0 .5em; }
+  .kicker { color: var(--accent); font-weight: 650; letter-spacing: .04em; text-transform: uppercase; font-size: .7em; margin-bottom: .4em; }
+  p { margin: .35em 0; }
+  .muted { color: var(--muted); }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 4%; flex: 1; min-height: 0; align-items: start; }
+  .cols img { width: 100%; max-height: min(66vh, 37vw); object-fit: contain; border-radius: 8px; border: 1px solid var(--line); }
+  .big { font-size: 2.1em; font-weight: 700; line-height: 1.1; }
+  .ok { color: var(--ok); } .bad { color: var(--bad); }
+  table { border-collapse: collapse; font-size: .78em; width: 100%; }
+  th, td { border-bottom: 1px solid var(--line); padding: .3em .45em; text-align: left; }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+  ul { margin: .3em 0; padding-left: 1.1em; } li { margin: .25em 0; }
+  .finding { border-left: 6px solid var(--accent); padding: .3em .8em; background: #ece8de; border-radius: 6px; margin: .5em 0; }
+  .foot { position: absolute; bottom: 2.5%; right: 4%; font-size: .55em; color: var(--muted); }
+  .strip { display: grid; grid-template-columns: repeat(6, 1fr); gap: .4em; margin: .4em 0; }
+  .strip figure { margin: 0; } .strip img { width: 100%; border-radius: 6px; border: 1px solid var(--line); display: block; }
+  .strip figcaption { font-size: .6em; text-align: center; color: var(--muted); }
+  .shot { width: 100%; max-height: 58vh; object-fit: contain; border-radius: 8px; border: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<section class="slide" data-n="1">
+  <div class="kicker">CS 6672 · hacker presentation</div>
+  <h1>Cornell Time Machine</h1>
+  <p class="big" style="font-size:1.3em;font-weight:600">Twenty years of the campus in one COLMAP model: what changed, when, and which source says so.</p>
+  <p class="muted">Licensed online photographs (Wikimedia Commons, Flickr via Openverse), public New York State aerial flights 2002–2023, USGS lidar 2020, OpenStreetMap footprints, documented dates. No annotation, no geotags, no manual correspondences.</p>
+  <p class="muted">Gates Hall rises from a parking lot · Klarman Hall fills a courtyard · McGraw Tower stays, and anchors the timeline.</p>
+</section>
+
+<section class="slide" data-n="2">
+  <div class="kicker">The idea</div>
+  <h2>One metric frame, every dated source inside it</h2>
+  <div class="cols">
+    <div>
+      <ul>
+        <li><b>Frame:</b> public-domain USGS lidar in UTM metres; building footprints from OpenStreetMap.</li>
+        <li><b>Photographs:</b> COLMAP (pycolmap + SuperPoint + LightGlue) fragments, anchored to the lidar without geotags.</li>
+        <li><b>Time on every point:</b> each reconstructed point carries the first and last year a photograph observed it (Scene Chronology, rebuilt on pycolmap).</li>
+        <li><b>Time from above:</b> six aerial flights draped on the lidar terrain; the ground is the 2020 surface, flattened where a building did not yet stand.</li>
+        <li><b>Documented dates</b> drive the building volumes; the automatic aerial score is shown as a diagnostic, not as the decision.</li>
+      </ul>
+    </div>
+    <img src="assets/timemachine/shots/above-2012.png" alt="The campus from above in 2012: aerial image draped on lidar terrain">
+  </div>
+  <div class="foot">Live demo: timemachine.html · the slider is the time axis.</div>
+</section>
+
+<section class="slide" data-n="3">
+  <div class="kicker">Chapter 1 · from above</div>
+  <h2>Six flights, three sites that did not exist in 2002</h2>
+  <p class="muted">Each flight is warped onto the lidar grid; the crops below are the same footprint in every year.</p>
+  <p><b>Gates Hall site</b> — parking lot, then a building from the 2015 flight.</p>
+  <div class="strip">
+    <figure><img src="assets/timemachine/crops/Bill_and_Melinda_Gates_Hall-2002.jpg" alt=""><figcaption>2002</figcaption></figure>
+    <figure><img src="assets/timemachine/crops/Bill_and_Melinda_Gates_Hall-2007.jpg" alt=""><figcaption>2007</figcaption></figure>
+    <figure><img src="assets/timemachine/crops/Bill_and_Melinda_Gates_Hall-2012.jpg" alt=""><figcaption>2012</figcaption></figure>
+    <figure><img src="assets/timemachine/crops/Bill_and_Melinda_Gates_Hall-2015.jpg" alt=""><figcaption>2015</figcaption></figure>
+    <figure><img src="assets/timemachine/crops/Bill_and_Melinda_Gates_Hall-2018.jpg" alt=""><figcaption>2018</figcaption></figure>
+    <figure><img src="assets/timemachine/crops/Bill_and_Melinda_Gates_Hall-2023.jpg" alt=""><figcaption>2023</figcaption></figure>
+  </div>
+  <p><b>Klarman Hall site</b> — the courtyard behind Goldwin Smith Hall, excavation in 2015, a roof from 2018.</p>
+  <div class="strip">
+    <figure><img src="assets/timemachine/crops/Klarman_Hall-2002.jpg" alt=""><figcaption>2002</figcaption></figure>
+    <figure><img src="assets/timemachine/crops/Klarman_Hall-2007.jpg" alt=""><figcaption>2007</figcaption></figure>
+    <figure><img src="assets/timemachine/crops/Klarman_Hall-2012.jpg" alt=""><figcaption>2012</figcaption></figure>
+    <figure><img src="assets/timemachine/crops/Klarman_Hall-2015.jpg" alt=""><figcaption>2015</figcaption></figure>
+    <figure><img src="assets/timemachine/crops/Klarman_Hall-2018.jpg" alt=""><figcaption>2018</figcaption></figure>
+    <figure><img src="assets/timemachine/crops/Klarman_Hall-2023.jpg" alt=""><figcaption>2023</figcaption></figure>
+  </div>
+  <div class="foot">New York State orthoimagery, NYS GIS Program Office (public).</div>
+</section>
+
+<section class="slide" data-n="4">
+  <div class="kicker">Chapter 2 · Gates Hall</div>
+  <h2>A parking lot until 2012, a building from 2014</h2>
+  <div class="cols">
+    <div>
+      <ul>
+        <li><b>Documented:</b> construction began March 2012, occupied early 2014, dedicated October 2014.</li>
+        <li><b>From the air:</b> absent in the 2012 flight, present from 2015; the own-outline edge score rises from 2.4 to 4.0–5.7.</li>
+        <li><b>From the ground:</b> <span data-fill="gates-ground">its photographs are being reconstructed and anchored through the building's footprint.</span></li>
+        <li>In the demo the slider flattens the site before 2012, shows the works, then the lidar volume, and the photographers of each year.</li>
+      </ul>
+    </div>
+    <img src="assets/timemachine/shots/gates-2016.png" alt="Gates Hall in the time machine, 2016">
+  </div>
+</section>
+
+<section class="slide" data-n="5">
+  <div class="kicker">Chapter 3 · Klarman Hall</div>
+  <h2>The courtyard fills, and a limit shows itself</h2>
+  <div class="cols">
+    <div>
+      <ul>
+        <li><b>Documented:</b> completed 2016, built between the back of Goldwin Smith Hall and East Avenue.</li>
+        <li><b>From the air:</b> courtyard through 2012, excavation in 2015, roof from 2018 (score 2.0–2.4, then 3.7–4.1).</li>
+        <li><b>From the ground:</b> the fifteen licensed photographs around Goldwin Smith Hall see its portico and the A. D. White statue from the lawn. Without the tower in view, <b>one facade cannot fix its own scale</b>: the portico shrunk onto a nine-metre wing wall fits the walls as well as the portico at its own fifteen-metre wall. Reported as not anchored.</li>
+      </ul>
+      <div class="finding">A negative with a reason is a result: the chapter rests on the flights and the documented dates, and says so.</div>
+    </div>
+    <img src="assets/timemachine/shots/klarman-2018.png" alt="Klarman Hall in the time machine, 2018">
+  </div>
+</section>
+
+<section class="slide" data-n="6">
+  <div class="kicker">Chapter 4 · McGraw Tower</div>
+  <h2>The thing that does not change, measured</h2>
+  <div class="cols">
+    <div>
+      <ul>
+        <li><b><span data-fill="tower-photos">63</span> photographs</b> of the tower and Uris Library in one model, <span data-fill="tower-dated">25</span> with capture dates from <span data-fill="tower-years">2003 to 2025</span>.</li>
+        <li>Anchored to the lidar through the tower: gravity from facade normals, the tower as the tallest cluster on its footprint, scale from photographers at eye height against the measured tower top, one yaw from the walls. Two independent scales agree within 2 %.</li>
+        <li>Every point carries the years it was seen; the slider replays them, "colour by first year" shows when each surface entered the record.</li>
+        <li>Click a photographer to see the photograph and its licence.</li>
+      </ul>
+    </div>
+    <img src="assets/timemachine/shots/tower-2025.png" alt="McGraw Tower fragment with photographers by year">
+  </div>
+</section>
+
+<section class="slide" data-n="7">
+  <div class="kicker">Under the hood · COLMAP extended</div>
+  <h2>Four things stock COLMAP does not do</h2>
+  <table>
+    <tr><th>Extension</th><th>What it adds</th><th>Checked by</th></tr>
+    <tr><td>EXIF-anchored calibration</td><td>cameras with an EXIF focal length held constant; the rest refined in a tight window</td><td>focal outliers gone; fragments did not merge, so content, not calibration, split the scene</td></tr>
+    <tr><td>Landmark anchoring</td><td>a fragment placed in UTM metres through the tower's footprint, lidar top and standing photographers</td><td>a second, horizontal scale from the library walls: 2 % apart</td></tr>
+    <tr><td>Footprint anchoring</td><td>fragments without the tower placed through one building's walls (precision and recall of wall coverage) and lidar roof edges</td><td>a synthetic hall with a known similarity: scale within 3 %, yaw within 0.1°, photographers within 2 m; the walls-only scale, the other yaw quadrants and photographer heights reported</td></tr>
+    <tr><td>Existence intervals</td><td>first and last observing year per point; per-building first-photographed year</td><td>dated photographs only; undated ones observe but do not date</td></tr>
+  </table>
+  <p class="muted" style="font-size:.8em">All on CPU: pycolmap 3.13, hloc with SuperPoint and LightGlue, NetVLAD retrieval, batched matching inside 7.6 GB of RAM.</p>
+</section>
+
+<section class="slide" data-n="8">
+  <div class="kicker">Honesty</div>
+  <h2>Measured, documented, or diagnostic: the page says which</h2>
+  <ul>
+    <li><b>Measured:</b> lidar heights, anchored points and photographer positions, existence intervals, the aerial images themselves.</li>
+    <li><b>Documented:</b> the construction dates (cited), which decide when a volume appears.</li>
+    <li><b>Diagnostic:</b> the own-outline aerial score. It rises at every site when the building appears, but stable buildings vary between flights by as much, so it is shown next to the crops and never decides.</li>
+    <li><b>Reported, not hidden:</b> the anchor's failed checks, the fragment that would not anchor, the mirror-image Boardman poses from the earlier work.</li>
+  </ul>
+</section>
+
+<section class="slide" data-n="9">
+  <div class="kicker">Limits and next</div>
+  <h2>What the record cannot show</h2>
+  <ul>
+    <li>No licensed ground-level photograph of any site before construction exists online: the "before" is aerial only.</li>
+    <li>A single facade cannot fix its scale without a landmark, a second facade, or a photographer standing somewhere known.</li>
+    <li>Commons throttles originals to roughly one every ten minutes; the collections are still growing.</li>
+    <li>Next: dense textured surfaces per site from post-construction photographs; tower-top photographs placed on the belfry; the negative evidence of absence (a registered camera that should have seen a building and did not).</li>
+  </ul>
+</section>
+
+<section class="slide" data-n="10">
+  <div class="kicker">Reproducible</div>
+  <h2>Public data in, every number traceable out</h2>
+  <ul>
+    <li>Stages under <code>pipeline/ghostmap/</code>: acquire → prepare → sfm → anchor → chronology → web → qa; each writes a JSON report the page reads.</li>
+    <li>Inputs: Commons and Openverse (licence recorded per photo), NYS orthoimagery WMS, USGS 3DEP lidar, OpenStreetMap (ODbL), Wikipedia for the dates.</li>
+    <li>Checks in the repository: 344 unit tests, Playwright checks of every chapter and year.</li>
+  </ul>
+  <p class="big" style="font-size:1.2em">github.com/BobbyZbp/CS-6672</p>
+</section>
+
+<script type="module">
+const slides = [...document.querySelectorAll('.slide')];
+let i = Math.max(0, Math.min(slides.length - 1, (parseInt(location.hash.slice(1)) || 1) - 1));
+function go(n) { i = Math.max(0, Math.min(slides.length - 1, n)); slides.forEach((s, k) => s.classList.toggle('on', k === i)); location.hash = String(i + 1); }
+addEventListener('keydown', e => { if (['ArrowRight', 'PageDown', ' '].includes(e.key)) go(i + 1); if (['ArrowLeft', 'PageUp'].includes(e.key)) go(i - 1); });
+addEventListener('click', e => { if (e.target.closest('a')) return; go(e.clientX > innerWidth / 2 ? i + 1 : i - 1); });
+go(i);
+// Numbers from the scene the demo reads, so the slides cannot drift from the data.
+try {
+  const scene = await (await fetch('assets/timemachine/scene.json')).json();
+  const tower = scene.reconstructions.find(r => r.anchored_through === 'McGraw Tower') || scene.reconstructions[0];
+  const own = scene.photographers.filter(p => p.reconstruction === tower.tag), dated = own.filter(p => p.year);
+  const set = (k, v) => document.querySelectorAll(`[data-fill="${k}"]`).forEach(e => e.textContent = v);
+  set('tower-photos', own.length); set('tower-dated', dated.length);
+  if (dated.length) set('tower-years', `${Math.min(...dated.map(p => p.year))} to ${Math.max(...dated.map(p => p.year))}`);
+  const gates = scene.buildings.find(b => b.name === 'Bill and Melinda Gates Hall');
+  if (gates && gates.ground_photographs) set('gates-ground', `${gates.ground_photographs.points} reconstructed points on the building, first photographed ${gates.ground_photographs.earliest_photograph}, last ${gates.ground_photographs.latest_photograph}; anchored through its footprint.`);
+} catch (e) { console.warn('scene numbers unavailable', e); }
+document.documentElement.dataset.ready = 'true';
+</script>
+</body>
+</html>

@@ -230,11 +230,12 @@ const chapters = [
   { id: 'gates', title: '2 · Gates Hall', render() { buildingChapter('Bill and Melinda Gates Hall', 'A parking lot until 2012; a Thom Mayne building from 2014. Slide from 2007 to 2015 and watch the air photographs change; the volume is the lidar shape of the finished building.'); } },
   { id: 'klarman', title: '3 · Klarman Hall', render() { buildingChapter('Klarman Hall', 'The courtyard behind Goldwin Smith Hall until the 2012 flight, excavation in the 2015 flight, a glass atrium from 2016.'); } },
   { id: 'tower', title: '4 · McGraw Tower', render() {
-      const r = scene.reconstructions.find(x => x.anchored_through === 'McGraw Tower') || scene.reconstructions[0]; const dated = scene.photographers.filter(p => p.year);
+      const r = scene.reconstructions.find(x => x.anchored_through === 'McGraw Tower') || scene.reconstructions[0];
+      const own = scene.photographers.filter(p => p.reconstruction === r.tag); const dated = own.filter(p => p.year);
       const counts = {}; for (const p of dated) counts[p.year] = (counts[p.year] || 0) + 1;
       const maxc = Math.max(1, ...Object.values(counts));
       body.innerHTML = `<h2>McGraw Tower: the thing that does not change</h2>
-        <p>${fmt(scene.photographers.length)} photographs of the tower and Uris Library are registered in one COLMAP model and anchored to the lidar (${r.scale_status}). ${fmt(r.dated_photographs)} carry capture dates from ${Math.min(...dated.map(p => p.year))} to ${Math.max(...dated.map(p => p.year))}.</p>
+        <p>${fmt(own.length)} photographs of the tower and Uris Library are registered in one COLMAP model and anchored to the lidar (${r.scale_status}). ${fmt(r.dated_photographs)} carry capture dates from ${Math.min(...dated.map(p => p.year))} to ${Math.max(...dated.map(p => p.year))}.</p>
         <p>Each reconstructed point carries the years in which photographs observed it. The slider shows the points seen by that year; "colour by first year" shows when each point first appeared in a photograph.</p>
         <div class="yearbar">${Array.from({ length: MAX_YEAR - MIN_YEAR + 1 }, (_, i) => MIN_YEAR + i).map(y => `<div data-year="${y}" style="height:${100 * (counts[y] || 0) / maxc}%" title="${y}: ${counts[y] || 0} dated photographs"></div>`).join('')}</div>
         <div class="yearlabels"><span>${MIN_YEAR}</span><span>dated photographs per year</span><span>${MAX_YEAR}</span></div>
@@ -249,7 +250,8 @@ const chapters = [
       body.innerHTML = `<h2>What the record cannot show</h2>
         <ul>
           <li><b>No licensed ground-level photograph of any site before construction exists online.</b> The "before" is aerial only; no 3D of the old parking lots or the courtyard is shown.</li>
-          <li><b>Building volumes are the 2020 lidar shape</b>, displayed only in years the documented dates say the building stood; the ground-level reconstructions of Gates Hall and Klarman Hall are still being built from their photographs.</li>
+          <li><b>Building volumes are the 2020 lidar shape</b>, displayed only in years the documented dates say the building stood; a ground-level reconstruction replaces the volume only where its photographs could be anchored to the lidar.</li>
+          <li><b>One facade cannot fix its own scale.</b> The fifteen photographs around Goldwin Smith Hall see its portico and the A. D. White statue from the lawn; without the tower in view, a single facade matches walls of different heights at different scales (the portico shrunk onto a nine-metre wing wall fits as well as the portico at its own fifteen-metre wall), so that fragment is reported as not anchored and Klarman Hall's chapter rests on the aerial flights and the documented dates.</li>
           <li><b>The automatic aerial test is a diagnostic.</b> Its outline score rises at every site when the building appears, but stable buildings vary between flights by as much, so the dates on this page are the documented ones.</li>
           <li><b>Boardman Hall (demolished 1959)</b> is beyond the time machine: its postcards can be matched to the surviving tower and library, but every recovered pose is a mirror image, because no licensed modern photograph looks at the tower from the Arts Quad side.</li>
         </ul>`;

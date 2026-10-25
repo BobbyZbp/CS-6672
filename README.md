@@ -31,7 +31,13 @@ surviving buildings.
   stands in the Arts Quad sector (0–110° from the tower) from which all the
   postcards were taken; no bound on Boardman Hall is claimed.
 
-Live demo: `http://127.0.0.1:8080/ghostmap.html` (serve `dist/`, below).
+- fragments without the tower in view are anchored through one building's
+  footprint (walls for yaw and position, lidar roof edges for the scale; the
+  synthetic check recovers a known similarity within 3 %); the Goldwin Smith
+  portico fragment shows the limit: one facade cannot fix its own scale.
+
+Live demo: `http://127.0.0.1:8080/timemachine.html` (the time machine; the
+earlier COLMAP-extension demo stays at `ghostmap.html`; serve `dist/`, below).
 
 ## Repository layout
 
@@ -39,6 +45,7 @@ Live demo: `http://127.0.0.1:8080/ghostmap.html` (serve `dist/`, below).
 pipeline/
   ghostmap/            current Arts Quad pipeline, one subpackage per stage
     acquire/ prepare/ sfm/ evaluate/ dense/ surface/ status/ web/ package/ qa/
+    anchor/ archival/ chronology/   lidar anchoring, archival resection, existence intervals
     cli.py             the `run_artsquad.py` stage runner
   legacy/              frozen v1 Boardman baseline and OpenMVS "repair" scripts
   <old_name>.py        compatibility entry points (e.g. run_artsquad.py) -> ghostmap.*

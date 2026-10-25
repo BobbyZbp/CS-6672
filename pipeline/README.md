@@ -59,6 +59,7 @@ as a subprocess through its entry-point name.
 | anchor | `anchor/lidar.py` | `-m ghostmap.anchor.lidar` | USGS 3DEP lidar around the Quad: only intersecting octree nodes, Web Mercator to UTM 18N, surface and ground rasters. |
 | | `anchor/footprints.py` | `-m ghostmap.anchor.footprints` | OSM building footprints (ODbL) in UTM 18N. |
 | | `anchor/align.py` | `-m ghostmap.anchor.align` | Similarity from a COLMAP fragment to lidar: facade gravity, tower landmark, photographer scale, one yaw; independent scale check. |
+| | `anchor/footprint.py` | `-m ghostmap.anchor.footprint` | Anchor a fragment without the tower through one building's footprint: walls for yaw and position, lidar roof edges for the scale; walls-only scale, yaw quadrants and photographer heights as checks. |
 | | `anchor/orthoimagery.py` | `-m ghostmap.anchor.orthoimagery` | Dated New York State orthoimagery (2002–2023) warped onto the lidar grid in UTM 18N, per site. |
 | chronology | `chronology/intervals.py` | `-m ghostmap.chronology.intervals` | Existence intervals per reconstructed point from the capture years of the photographs that observed it; per-building summaries. |
 | | `chronology/aerial.py` | `-m ghostmap.chronology.aerial` | Own-outline edge score of each changed building in each aerial year (a diagnostic; documented dates drive the timeline). |
