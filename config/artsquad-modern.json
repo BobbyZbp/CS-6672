@@ -7,20 +7,90 @@
   "minimum_free_disk_gib": 5,
   "maximum_download_gib": 3,
   "targets": [
-    {"id":"morrill","name":"Morrill Hall","role":"quad-core","category":"Morrill Hall (Cornell University)"},
-    {"id":"mcgraw-hall","name":"McGraw Hall","role":"quad-core","category":"McGraw Hall (Cornell University)"},
-    {"id":"white","name":"White Hall","role":"quad-core","category":"White Hall (Cornell University)"},
-    {"id":"sibley","name":"Sibley Hall","role":"quad-core","category":"Sibley Hall (Cornell University)"},
-    {"id":"tjaden","name":"Tjaden Hall","role":"quad-core","category":"Olive Tjaden Hall (Cornell University)"},
-    {"id":"goldwin-smith","name":"Goldwin Smith Hall","role":"quad-core","category":"Goldwin Smith Hall (Cornell University)"},
-    {"id":"lincoln","name":"Lincoln Hall","role":"quad-core","category":"Lincoln Hall (Cornell University)"},
-    {"id":"uris","name":"Uris Library","role":"south-anchor","category":"Uris Library (Cornell University)"},
-    {"id":"mcgraw-tower","name":"McGraw Tower","role":"south-anchor","category":"McGraw Tower (Cornell University)"},
-    {"id":"stimson","name":"Stimson Hall","role":"context","category":"Stimson Hall (Cornell University)"},
-    {"id":"rand","name":"Rand Hall","role":"context","category":"Rand Hall (Cornell University)"},
-    {"id":"milstein","name":"Milstein Hall","role":"context","category":"Milstein Hall"},
-    {"id":"klarman","name":"Klarman Hall","role":"context","category":"Klarman Hall"},
-    {"id":"olin","name":"Olin Library","role":"context","category":"Olin Library (Cornell University)"}
+    {
+      "id": "morrill",
+      "name": "Morrill Hall",
+      "role": "quad-core",
+      "category": "Morrill Hall (Cornell University)"
+    },
+    {
+      "id": "mcgraw-hall",
+      "name": "McGraw Hall",
+      "role": "quad-core",
+      "category": "McGraw Hall (Cornell University)"
+    },
+    {
+      "id": "white",
+      "name": "White Hall",
+      "role": "quad-core",
+      "category": "White Hall (Cornell University)"
+    },
+    {
+      "id": "sibley",
+      "name": "Sibley Hall",
+      "role": "quad-core",
+      "category": "Sibley Hall (Cornell University)"
+    },
+    {
+      "id": "tjaden",
+      "name": "Tjaden Hall",
+      "role": "quad-core",
+      "category": "Olive Tjaden Hall (Cornell University)"
+    },
+    {
+      "id": "goldwin-smith",
+      "name": "Goldwin Smith Hall",
+      "role": "quad-core",
+      "category": "Goldwin Smith Hall (Cornell University)"
+    },
+    {
+      "id": "lincoln",
+      "name": "Lincoln Hall",
+      "role": "quad-core",
+      "category": "Lincoln Hall (Cornell University)"
+    },
+    {
+      "id": "uris",
+      "name": "Uris Library",
+      "role": "south-anchor",
+      "category": "Uris Library (Cornell University)"
+    },
+    {
+      "id": "mcgraw-tower",
+      "name": "McGraw Tower",
+      "role": "south-anchor",
+      "category": "McGraw Tower (Cornell University)"
+    },
+    {
+      "id": "stimson",
+      "name": "Stimson Hall",
+      "role": "context",
+      "category": "Stimson Hall (Cornell University)"
+    },
+    {
+      "id": "rand",
+      "name": "Rand Hall",
+      "role": "context",
+      "category": "Rand Hall (Cornell University)"
+    },
+    {
+      "id": "milstein",
+      "name": "Milstein Hall",
+      "role": "context",
+      "category": "Milstein Hall"
+    },
+    {
+      "id": "klarman",
+      "name": "Klarman Hall",
+      "role": "context",
+      "category": "Klarman Hall"
+    },
+    {
+      "id": "olin",
+      "name": "Olin Library",
+      "role": "context",
+      "category": "Olin Library (Cornell University)"
+    }
   ],
   "context_searches": [
     "Cornell \"Arts Quad\"",
@@ -28,13 +98,27 @@
     "Cornell \"Arts Quadrangle\" aerial",
     "Cornell \"Arts Quad\" panorama"
   ],
+  "geo_searches": [
+    {
+      "label": "south end: Uris Library, McGraw Tower, Olin Library, Stimson Hall",
+      "lat": 42.4477,
+      "lon": -76.4846,
+      "radius_m": 200
+    },
+    {
+      "label": "Arts Quad lawn and surrounding halls",
+      "lat": 42.449,
+      "lon": -76.4838,
+      "radius_m": 250
+    }
+  ],
   "policies": {
-    "source":"Public Wikimedia Commons API; more providers can be added without changing input schema",
-    "date":"Requires asserted photographic capture date >= 2000, not upload date or building construction year",
-    "licenses":"CC BY, CC BY-SA, CC0 or public domain; retain attribution and license URL",
-    "originals":"Download source originals, not 1024px thumbnails; retain original bytes and SHA256",
-    "environment":"Retain observed grounds, paths, neighboring structures and vegetation; dynamic/nonrigid regions need separate reliability labels",
-    "no_geometry_substitutes":"No map extrusion, authored buildings, generative completion or invented component alignment",
-    "limits":"No fixed per-building image count cap. Explicit disk safeguards are not quality rejections."
+    "source": "Public Wikimedia Commons API; more providers can be added without changing input schema",
+    "date": "Requires asserted photographic capture date >= 2000, not upload date or building construction year",
+    "licenses": "CC BY, CC BY-SA, CC0 or public domain; retain attribution and license URL",
+    "originals": "Download source originals, not 1024px thumbnails; retain original bytes and SHA256",
+    "environment": "Retain observed grounds, paths, neighboring structures and vegetation; dynamic/nonrigid regions need separate reliability labels",
+    "no_geometry_substitutes": "No map extrusion, authored buildings, generative completion or invented component alignment",
+    "limits": "No fixed per-building image count cap. Explicit disk safeguards are not quality rejections."
   }
 }

@@ -81,6 +81,12 @@ def search(query):
         cont=d['continue']
 
 
+def geosearch(lat,lon,radius_m):
+    """Commons files whose recorded camera or object location lies within radius_m."""
+    d=api({'action':'query','list':'geosearch','gscoord':f'{lat}|{lon}','gsradius':int(radius_m),'gsnamespace':6,'gslimit':500})
+    return d.get('query',{}).get('geosearch',[])
+
+
 def license_allowed(text):
     return bool(re.search(r'\bcc[ -]by(?:[ -]sa)?\b|\bcc0\b|public domain',text,re.I))
 
@@ -108,7 +114,11 @@ def assess(page,config):
         compact=re.sub('[^a-z0-9]','',subject)
         named=any(re.sub('[^a-z0-9]','',t['name'].lower()) in compact for t in config['targets'])
         context='artsquad' in compact or 'artsquadrangle' in compact
-        if not(any(s.startswith('Category:') for s in sources) or named or context):return False,'full-text search hit without target category or explicit scene title'
+        # A recorded location inside the Quad is spatial evidence, but bench
+        # plaques and inscriptions near it are not scene views.
+        located=any(s.startswith('geosearch:') for s in sources)
+        if located and re.search(r'openbenches|inscription|plaque',subject):return False,'geolocated close-up of an inscription, not a scene view'
+        if not(any(s.startswith('Category:') for s in sources) or named or context or located):return False,'full-text search hit without target category or explicit scene title'
     return True,'metadata eligible; scene identity and independent view still need geometric audit'
 
 
@@ -141,12 +151,23 @@ def discover(config,root):
         try:
             for row in search(query):add(row,'search:'+query,None)
         except Exception as exc:errors.append({'query':query,'error':str(exc)})
+    for area in config.get('geo_searches',[]):
+        try:
+            rows=geosearch(area['lat'],area['lon'],area['radius_m'])
+            for row in rows:add(row,'geosearch:'+area['label'],None)
+            print('geosearch',area['label'],len(rows),'files',flush=True)
+        except Exception as exc:errors.append({'geosearch':area['label'],'error':str(exc)})
     pages=[];ids=sorted(found)
     for offset in range(0,len(ids),40):
         d=api({'action':'query','pageids':'|'.join(map(str,ids[offset:offset+40])),
                'prop':'imageinfo','iiprop':'url|size|mime|extmetadata'})
         for page in d.get('query',{}).get('pages',[]):
             page['discovery']=origins[int(page['pageid'])]
+            if not page['discovery']['targets'] and any(s.startswith('geosearch:') for s in page['discovery']['sources']):
+                # Located files carry no query target; take it from their own
+                # Commons categories when one names a target building.
+                categories=metadata_value(page.get('imageinfo',[{}])[0].get('extmetadata',{}),'Categories')
+                page['discovery']['targets']=[t['id'] for t in config['targets'] if t['category'] in categories]
             ok,reason=assess(page,config);page['admission']={'eligible':ok,'reason':reason};pages.append(page)
     result={'created_utc':datetime.now(timezone.utc).isoformat(),'status':'partial_provider_errors' if errors else 'complete',
             'config':config,'category_audit':category_log,'provider_errors':errors,'pages':pages}

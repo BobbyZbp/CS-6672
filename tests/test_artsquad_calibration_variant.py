@@ -1,3 +1,4 @@
+import copy
 import json
 import shutil
 import sqlite3
@@ -11,7 +12,7 @@ import numpy as np
 import pycolmap
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'pipeline'))
-from run_artsquad_calibration_variant import (assert_fixed_camera_constraints, inspect_initial_database,
+from run_artsquad_calibration_variant import (assert_fixed_camera_constraints, exif_camera_ids, inspect_initial_database,
                                              json_options, native_options, prepare_variant_database,
                                              run, validate_source)
 from run_artsquad_sfm import sha256, write_json
@@ -91,6 +92,27 @@ class CalibrationVariantTests(unittest.TestCase):
         self.assertFalse(options.get_mapper().abs_pose_refine_focal_length)
         self.assertFalse(options.ba_refine_principal_point)
         self.assertFalse(options.use_prior_position)
+
+    def test_exif_anchored_holds_only_exif_cameras_constant_with_tighter_window(self):
+        initial = [{'camera_id': 1, 'database_prior_focal_length': True},
+                   {'camera_id': 2, 'database_prior_focal_length': False},
+                   {'camera_id': 3, 'database_prior_focal_length': True}]
+        self.assertEqual(exif_camera_ids(initial), [1, 3])
+        options = native_options('exif-anchored', pycolmap, exif_camera_ids(initial))
+        self.assertEqual(options.constant_cameras, {1, 3})
+        self.assertTrue(options.ba_refine_focal_length)
+        self.assertFalse(options.ba_refine_extra_params)
+        self.assertEqual((options.min_focal_length_ratio, options.max_focal_length_ratio), (.5, 3.))
+        json.dumps(json_options(options.todict()), allow_nan=False)
+
+    def test_exif_anchored_output_check_rejects_a_moved_exif_camera(self):
+        initial = [{'image_name': 'a.jpg', 'variant_initial_parameters': [800., 500., 400., 0.], 'database_prior_focal_length': True},
+                   {'image_name': 'b.jpg', 'variant_initial_parameters': [900., 500., 400., 0.], 'database_prior_focal_length': False}]
+        refined_free = [{'cameras': [{'name': 'a.jpg', 'camera_model': 'SIMPLE_RADIAL', 'camera_parameters': [800., 500., 400., 0.]},
+                                     {'name': 'b.jpg', 'camera_model': 'SIMPLE_RADIAL', 'camera_parameters': [950., 500., 400., 0.]}]}]
+        self.assertEqual(assert_fixed_camera_constraints(refined_free, initial, 'exif-anchored')['checked_native_component_cameras'], 2)
+        moved = copy.deepcopy(refined_free); moved[0]['cameras'][0]['camera_parameters'][0] = 810.
+        with self.assertRaises(RuntimeError): assert_fixed_camera_constraints(moved, initial, 'exif-anchored')
 
     def test_effective_child_bounds_propagate_and_options_serialize(self):
         options = native_options('fixed-radial', pycolmap)

@@ -21,11 +21,15 @@ import numpy as np
 from ghostmap.sfm.learned import ROOT, saved_component_reports, select_training_images, sha256, stage_images, verified_graph, write_json
 
 VERSION = 1
-MODES = ('fixed-radial', 'fixed-intrinsics')
+MODES = ('fixed-radial', 'fixed-intrinsics', 'exif-anchored')
+# exif-anchored: cameras whose database focal came from EXIF (COLMAP's image
+# reader sets prior_focal_length from the 35 mm equivalent or its sensor-width
+# table) are held constant; the rest refine focal inside a tighter window.
+EXIF_ANCHORED_FOCAL_RATIO = (.5, 3.)
 PROTECTED_TABLES = ('images', 'keypoints', 'descriptors', 'matches', 'two_view_geometries')
 
 
-def native_options(mode, pycolmap):
+def native_options(mode, pycolmap, exif_camera_ids=()):
     if mode not in MODES: raise ValueError('Unknown calibration variant')
     options = pycolmap.IncrementalPipelineOptions()
     options.num_threads = 4
@@ -42,7 +46,15 @@ def native_options(mode, pycolmap):
     options.mapper.abs_pose_refine_extra_params = False
     options.mapper.abs_pose_refine_focal_length = mode != 'fixed-intrinsics'
     options.use_prior_position = False
+    if mode == 'exif-anchored':
+        options.min_focal_length_ratio, options.max_focal_length_ratio = EXIF_ANCHORED_FOCAL_RATIO
+        options.constant_cameras = set(int(i) for i in exif_camera_ids)
     return options
+
+
+def exif_camera_ids(initial):
+    """Database cameras whose initial focal length is an EXIF prior."""
+    return sorted(camera['camera_id'] for camera in initial if camera['database_prior_focal_length'])
 
 
 def json_options(value):
@@ -181,6 +193,8 @@ def assert_fixed_camera_constraints(components, initial, mode):
                 raise RuntimeError('Native output changed the fixed principal point')
             if mode == 'fixed-intrinsics' and not np.allclose(params, expected, atol=1e-9, rtol=1e-12):
                 raise RuntimeError('Native output violated fixed database-initial intrinsics')
+            if mode == 'exif-anchored' and lookup[camera['name']]['database_prior_focal_length'] and not np.allclose(params, expected, atol=1e-9, rtol=1e-12):
+                raise RuntimeError('Native output changed an EXIF-anchored camera')
             checked += 1
     return {'checked_native_component_cameras': checked, 'fixed_parameters_unchanged': True,
             'interpretation': 'Parameter freezing verified, not correct calibration or geometry.'}
@@ -192,7 +206,8 @@ def run(source, mode, workspace=ROOT / 'artifacts/artsquad_modern', label='defau
 
     source = Path(source).resolve()
     source_report, snapshot_path, snapshot, records = validate_source(source, snapshot_path)
-    options = native_options(mode, pycolmap)
+    initial, _, _ = inspect_initial_database(source / 'sfm/database.db', [r['filename'] for r in records])
+    options = native_options(mode, pycolmap, exif_camera_ids(initial))
     source_files = [source / 'report.json', source / 'configuration.json', source / 'sfm/database.db',
                     source / 'sfm/mapping-complete.json', Path(source_report['snapshot_path']).resolve(), snapshot_path]
     source_files += list((source / 'sfm/models').glob('*/*.bin'))
