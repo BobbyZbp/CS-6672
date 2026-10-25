@@ -197,8 +197,16 @@ function photographers() {
   const P = scene.photographers;
   for (const p of P) {
     const h = p.height_above_ground_m, good = h >= 0.5 && h <= 4;
-    const m = sphere(p.centre, good ? COLOURS.ok : COLOURS.bad, 2.6); m.userData = p; overlay.add(m);
+    const m = sphere(p.centre, good ? COLOURS.ok : COLOURS.bad, 2.6); m.userData = p;
+    m.material.depthTest = false; m.renderOrder = 2;  // visible even when COLMAP put the camera underground
+    overlay.add(m);
   }
+  // Stalks from each camera to the measured ground beneath it.
+  const stalks = [];
+  for (const p of P) { const [x, y, z] = p.centre; stalks.push(x, y, z, x, y, z - p.height_above_ground_m); }
+  const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.Float32BufferAttribute(stalks, 3));
+  const stalkLines = new THREE.LineSegments(sg, new THREE.LineBasicMaterial({ color: COLOURS.bad, depthTest: false }));
+  stalkLines.renderOrder = 1; overlay.add(stalkLines);
   const pc = s['postcard-like'];
   body.innerHTML = `<h2>Where did the modern photographers stand?</h2>
     <p>COLMAP's own bundle adjustment puts <b class="bad">${P.filter(p => p.height_above_ground_m < 0.5 || p.height_above_ground_m > 4).length} of ${P.length}</b> photographers more than a few metres off the measured ground — some 30–50 m in the air, some underground — with sub-2-pixel reprojection error.</p>
@@ -211,9 +219,9 @@ function photographers() {
   frame(tower, 520, 0.55);
   pickHandler = obj => {
     const p = obj.userData; if (!p?.ray) return;
-    while (overlay.children.length > P.length) overlay.remove(overlay.children[overlay.children.length - 1]);
+    while (overlay.children.length > P.length + 1) overlay.remove(overlay.children[overlay.children.length - 1]);
     const draw = cue => {
-      while (overlay.children.length > P.length) overlay.remove(overlay.children[overlay.children.length - 1]);
+      while (overlay.children.length > P.length + 1) overlay.remove(overlay.children[overlay.children.length - 1]);
       overlay.add(polyline(p.ray.centres, weightColours(p.ray.weights[cue])));
       overlay.add(photoFrustum(p.centre, p.rotation, p.focal_px, p.width, p.height, 60, p.photo));
       const iv = p.ray.intervals[cue];
