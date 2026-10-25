@@ -36,6 +36,8 @@ Module-level map: [../pipeline/README.md](../pipeline/README.md).
 
 | Document | Purpose |
 | --- | --- |
+| [claude-research-review.md](research/claude-research-review.md) | **2026-10-24 research direction review**: audited inventory, literature constraints, 11 directions with adversarial reviews, decision matrix, top-3 pitches, thesis, roadmap with go/no-go gates. |
+| [probes/](research/probes/) | Read-only reviewer scripts behind the review's HYPOTHESIS numbers. |
 | [snavely-lineage.md](research/snavely-lineage.md) | Photo Tourism → Scene Chronology → Neural Scene Chronology notes. |
 | [virtual-correspondence.md](research/virtual-correspondence.md) | Wei-Chiu Ma et al., extreme-view geometry notes. |
 | [colmap-engineering.md](research/colmap-engineering.md) | COLMAP / hloc / MVS engineering notes. |
