@@ -144,5 +144,11 @@
     "environment": "Retain observed grounds, paths, neighboring structures and vegetation; dynamic/nonrigid regions need separate reliability labels",
     "no_geometry_substitutes": "No map extrusion, authored buildings, generative completion or invented component alignment",
     "limits": "No fixed per-building image count cap. Explicit disk safeguards are not quality rejections."
-  }
+  },
+  "download_priority": [
+    "gates",
+    "klarman",
+    "milstein",
+    "goldwin-smith"
+  ]
 }

@@ -28,6 +28,10 @@ as a subprocess through its entry-point name.
 | | `acquire/review.py` | `review_artsquad_inputs.py` | Metadata-only role screen (interior, event, reference document, scene candidate, …). |
 | | `acquire/openverse.py` | `-m ghostmap.acquire.openverse` | Openverse (Flickr CC) photographs as a training-only geometry supplement: licence, place-name and historic-marker screens, dHash dedup against Commons. |
 | | `acquire/provider_probe.py` | `artsquad_provider_probe.py` | Bounded HTTP-range probes of Quad6K / DISCO / BigSfM / PhotoCity releases. |
+| | `acquire/timeline_probe.py` | `-m ghostmap.acquire.timeline_probe` | Per-building, per-year counts of licensed Commons photographs around the time-machine sites (how much dated ground evidence exists). |
+| | `acquire/mapillary_probe.py` | `-m ghostmap.acquire.mapillary_probe` | Mapillary coverage counts near the Quad from the public coverage tiles; token helpers (`.secrets/mapillary.env`). |
+| | `acquire/mapillary_login.py` | `-m ghostmap.acquire.mapillary_login` | Interactive Mapillary OAuth login; stores the user token under `.secrets/`. |
+| | `acquire/mapillary.py` | `-m ghostmap.acquire.mapillary` | Download Mapillary frames that face McGraw Tower from the Arts Quad sector (CC BY-SA). |
 | prepare | `prepare/snapshot.py` | `prepare_artsquad.py` | Freeze a content-addressed snapshot: hash checks, capture-date evidence, families, train/test split. |
 | | `prepare/supplement.py` | `-m ghostmap.prepare.supplement` | Extend a frozen snapshot with supplement photographs in the training split only. |
 | | `prepare/quad6k_research.py` | `prepare_quad6k_research.py` | Private research-only Quad6K snapshot (not redistributable). |
@@ -55,12 +59,17 @@ as a subprocess through its entry-point name.
 | anchor | `anchor/lidar.py` | `-m ghostmap.anchor.lidar` | USGS 3DEP lidar around the Quad: only intersecting octree nodes, Web Mercator to UTM 18N, surface and ground rasters. |
 | | `anchor/footprints.py` | `-m ghostmap.anchor.footprints` | OSM building footprints (ODbL) in UTM 18N. |
 | | `anchor/align.py` | `-m ghostmap.anchor.align` | Similarity from a COLMAP fragment to lidar: facade gravity, tower landmark, photographer scale, one yaw; independent scale check. |
+| | `anchor/orthoimagery.py` | `-m ghostmap.anchor.orthoimagery` | Dated New York State orthoimagery (2002–2023) warped onto the lidar grid in UTM 18N, per site. |
+| chronology | `chronology/intervals.py` | `-m ghostmap.chronology.intervals` | Existence intervals per reconstructed point from the capture years of the photographs that observed it; per-building summaries. |
+| | `chronology/aerial.py` | `-m ghostmap.chronology.aerial` | Own-outline edge score of each changed building in each aerial year (a diagnostic; documented dates drive the timeline). |
 | archival | `archival/resect.py` | — | Profile-likelihood resection over focal length; standpoint and pedestrian cues; certificates; line-of-sight test. |
 | | `archival/match.py` | — | 2D-3D anchors for archival queries via SuperPoint + LightGlue against the anchored model. |
 | | `archival/run.py` | `-m ghostmap.archival.run` | Certificates for the public-domain Boardman-era photographs and surviving-building stand-ins. |
 | | `archival/modern_control.py` | `-m ghostmap.archival.modern_control` | Positive control: re-resect every modern photographer from its own anchors. |
 | | `archival/people.py` | `-m ghostmap.archival.people` | Standing-pedestrian detection (foot and head pixels). |
-| | `web/ghostmap_scene.py` | `-m ghostmap.web.ghostmap_scene` | Data for the live demo `dist/ghostmap.html`. |
+| | `web/ghostmap_scene.py` | `-m ghostmap.web.ghostmap_scene` | Data for the earlier demo `dist/ghostmap.html` (lidar anchoring, postcards, certificates). |
+| | `web/timemachine_scene.py` | `-m ghostmap.web.timemachine_scene` | Data for the Cornell Time Machine `dist/timemachine.html`: terrain, dated aerial textures, changed-building volumes, dated point clouds. |
+| | `qa/timemachine_page.py` | `-m ghostmap.qa.timemachine_page` | Playwright checks of `dist/timemachine.html`: every chapter and year, no page errors. |
 | | `qa/reel.py` | `check_artsquad_reel.py` | Playwright checks of `dist/demo-reel.html`. |
 | | `qa/record_demo.py` | `record_artsquad_demo.py` | Scripted headless tour recording. |
 

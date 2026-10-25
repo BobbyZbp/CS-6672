@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "note": "Documented construction dates for the buildings whose change the time machine shows. Each entry cites the page the dates were read from on 2026-10-25; quotes are verbatim.",
+  "buildings": [
+    {
+      "name": "Bill & Melinda Gates Hall",
+      "footprint": "Bill and Melinda Gates Hall",
+      "site": "gates-site",
+      "before": "a parking lot serving Hoy Field and Grumman Squash Courts",
+      "construction_start": "2012-03",
+      "occupied": "2014 (early)",
+      "dedicated": "2014-10",
+      "documented": "construction began in March 2012; occupancy began in early 2014; dedicated October 2014",
+      "source": "https://en.wikipedia.org/wiki/Cornell_Central_Campus"
+    },
+    {
+      "name": "Klarman Hall",
+      "footprint": "Klarman Hall",
+      "site": "quad",
+      "before": "the space between the back of Goldwin Smith Hall and East Avenue",
+      "completed": "2016",
+      "documented": "completed in 2016; built in the space between the back of Goldwin Smith Hall and East Avenue; connected to, and surrounded on three sides by, Goldwin Smith Hall",
+      "source": "https://en.wikipedia.org/wiki/Cornell_Central_Campus"
+    },
+    {
+      "name": "Milstein Hall",
+      "footprint": "Milstein Hall",
+      "site": "quad",
+      "before": "a parking lot behind Sibley Hall",
+      "opened": "2011",
+      "documented": "opened in 2011",
+      "source": "https://en.wikipedia.org/wiki/Cornell_Central_Campus"
+    },
+    {
+      "name": "McGraw Tower",
+      "footprint": "McGraw Tower",
+      "site": "quad",
+      "stable": true,
+      "documented": "unchanged throughout the photographed years; the anchor of the timeline",
+      "source": null
+    },
+    {
+      "name": "Uris Library",
+      "footprint": "Uris Library",
+      "site": "quad",
+      "stable": true,
+      "documented": "unchanged throughout the photographed years",
+      "source": null
+    },
+    {
+      "name": "Goldwin Smith Hall",
+      "footprint": "Goldwin Smith Hall",
+      "site": "quad",
+      "stable": true,
+      "documented": "unchanged; its east side is where Klarman Hall was added",
+      "source": null
+    }
+  ],
+  "aerial_years": ["2002", "2007", "2012", "2015", "2018", "2023"],
+  "aerial_source": "New York State orthoimagery, NYS GIS Program Office (public)"
+}

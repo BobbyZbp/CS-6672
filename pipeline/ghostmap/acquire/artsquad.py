@@ -220,11 +220,16 @@ def download_original(url,path):
             time.sleep(min(15,2**attempt))
 
 
-def acquire(inventory,root,working):
+def acquire(inventory,root,working,priority=()):
     config=inventory['config'];originals=root/'originals';originals.mkdir(exist_ok=True);working.mkdir(parents=True,exist_ok=True)
     records=[];skipped=[];hashes={};budget=int(config['maximum_download_gib']*1024**3)
     used=sum(p.stat().st_size for p in originals.iterdir() if p.is_file() and not p.name.endswith('.part'))
-    for page in inventory['pages']:
+    # Commons throttles originals to about one per ten minutes, so the targets the
+    # current work needs come first (the live config's 'download_priority', since the
+    # config stored in the inventory predates it); order is otherwise kept.
+    priority=set(priority)
+    pages=sorted(inventory['pages'],key=lambda p:0 if priority&set(p.get('discovery',{}).get('targets',[])) else 1)
+    for page in pages:
         if not page['admission']['eligible']:continue
         info=page['imageinfo'][0];meta=info.get('extmetadata',{});name=safe_name(page,info['mime']);path=originals/name
         try:
@@ -294,7 +299,7 @@ def main():
              'metadata_eligible_unique_files':sum(x['admission']['eligible'] for x in pages),'by_target':counts,
              'interpretation':'Metadata and query membership are not camera registration or geometric building coverage.'}
     if args.download:
-        acquired=acquire(inventory,root,ROOT/'artifacts/artsquad_modern/images')
+        acquired=acquire(inventory,root,ROOT/'artifacts/artsquad_modern/images',priority=config.get('download_priority',[]))
         summary['acquired_images']=len(acquired['images']);summary['skipped']=len(acquired['skipped'])
         for row in counts:row['acquired']=sum(row['id'] in x['discovery']['targets'] for x in acquired['images'])
     (root/'coverage.json').write_text(json.dumps(summary,indent=2)+'\n');print(json.dumps(summary,indent=2))

@@ -44,10 +44,14 @@ AGENT = 'GhostMap-Research/0.3 (Cornell Arts Quad; public academic imagery)'
 OUT = ROOT / 'data/openverse'
 QUERIES = [('McGraw Tower', 'mcgraw-tower'), ('Cornell clock tower', 'mcgraw-tower'), ('Uris Library Cornell', 'uris'),
            ('Cornell library tower', 'uris'), ('Cornell Arts Quad', None), ('Arts Quadrangle Cornell', None),
-           ('Olin Library Cornell', 'olin')]
+           ('Olin Library Cornell', 'olin'),
+           # Time-machine sites (added 2026-10-25): buildings that changed in the photographed years.
+           ('Gates Hall Cornell', 'gates'), ('Bill Melinda Gates Hall Cornell', 'gates'),
+           ('Klarman Hall Cornell', 'klarman'), ('Goldwin Smith Hall Cornell', 'goldwin-smith'),
+           ('Milstein Hall Cornell', 'milstein')]
 LICENCES = {'by': 'CC BY', 'by-sa': 'CC BY-SA', 'cc0': 'CC0', 'pdm': 'Public domain'}
 HISTORIC = re.compile(r'LCCN|postcard|circa|\bc\.\s*1[89]\d\d|(?<!\d)1[89]\d\d(?!\d)|stereograph|lithograph|library of congress|archives?\b|historic|kheel center', re.I)
-PLACE = re.compile(r'cornell|ithaca|arts\s*quad|mcgraw\s*tower|uris\s*library|olin\s*library|libe\s*slope', re.I)
+PLACE = re.compile(r'cornell|ithaca|arts\s*quad|mcgraw\s*tower|uris\s*library|olin\s*library|libe\s*slope|gates\s*hall|klarman|goldwin\s*smith|milstein', re.I)
 MIN_SHORT_SIDE = 640
 NEAR_DUPLICATE_HAMMING = 6
 
@@ -82,6 +86,7 @@ def admission(row):
 def existing_hashes(directory):
     hashes = []
     for path in Path(directory).glob('*.jpg'):
+        if 'openverse' in path.name: continue  # this provider's own earlier copies are not duplicates of themselves
         try: hashes.append(int(difference_hash(path), 16))
         except OSError: pass
     return hashes

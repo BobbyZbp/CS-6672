@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cornell Time Machine</title>
+<link rel="stylesheet" href="ghostmap.css">
+<style>
+  #timebar { position: absolute; left: 10px; right: 10px; top: 10px; background: color-mix(in srgb, var(--panel) 90%, transparent); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px 6px; display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; }
+  #timebar input[type=range] { width: 100%; }
+  #year { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 86px; }
+  #ticks { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); padding: 0 2px; }
+  #ticks span { position: relative; }
+  #ticks span.flight::before { content: ''; display: block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin: 0 auto 2px; }
+  #basis { font-size: 12px; color: var(--muted); text-align: right; max-width: 260px; }
+  .strip { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin: 8px 0; }
+  .strip figure { margin: 0; } .strip img { width: 100%; border-radius: 4px; border: 1px solid var(--line); display: block; }
+  .strip figcaption { font-size: 11px; text-align: center; color: var(--muted); }
+  .strip figure.on img { outline: 3px solid var(--accent); }
+  .state { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .state.before { background: #e6e2d8; color: #5f675f; } .state.works { background: #f6e3b0; color: #7a5a00; } .state.present { background: #d7eedd; color: #1f5f36; } .state.stable { background: #dde6f5; color: #2a4a7f; }
+  .yearbar { display: flex; gap: 2px; align-items: flex-end; height: 42px; margin: 6px 0; }
+  .yearbar div { flex: 1; background: var(--accent); opacity: .35; min-height: 2px; } .yearbar div.on { opacity: 1; }
+  .yearlabels { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); }
+</style>
+<script type="importmap">{"imports": {"three": "./vendor/three.module.js"}}</script>
+</head>
+<body>
+<header>
+  <h1>Cornell Time Machine</h1>
+  <p class="thesis">Twenty years of the campus from licensed online photographs, public aerial imagery and lidar, in one COLMAP model: what changed, when, and which source says so.</p>
+</header>
+<main>
+  <section id="viewport" aria-label="3D view">
+    <canvas id="scene"></canvas>
+    <div id="timebar">
+      <div id="year">2002</div>
+      <div><input type="range" id="slider" min="2002" max="2026" step="1" value="2002" aria-label="Year"><div id="ticks"></div></div>
+      <div id="basis"></div>
+    </div>
+    <div id="legend"></div>
+    <div id="status" role="status">Loading measured data…</div>
+  </section>
+  <aside id="panel">
+    <nav id="chapters" aria-label="Chapters"></nav>
+    <article id="chapter-body"></article>
+  </aside>
+</main>
+<footer id="attribution"></footer>
+<script type="module" src="timemachine.js"></script>
+</body>
+</html>
