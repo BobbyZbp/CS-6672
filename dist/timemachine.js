@@ -206,7 +206,24 @@ function evidence(b) {
   return `<p><span class="state" data-state-of="${b.name}"></span></p>
     <p><b>Documented.</b> ${d.documented}${d.source ? ` <a href="${d.source}" target="_blank" rel="noopener">source</a>` : ''}.</p>
     <p><b>From the air</b> (NYS orthoimagery; number = own-outline edge score, a diagnostic):</p>${strip(b)}
-    <p><b>From the ground.</b> ${g ? `${fmt(g.points)} reconstructed points on this building; first photographed ${g.earliest_photograph}, last ${g.latest_photograph}.` : 'no reconstructed points yet (its photographs are still downloading or not yet reconstructed).'}</p>`;
+    <p><b>From the ground.</b> ${g ? `${fmt(g.points)} reconstructed points on this building; first photographed ${g.earliest_photograph}, last ${g.latest_photograph}.` : groundRecord(b)}</p>${recordStrip(b)}`;
+}
+function groundRecord(b) {
+  const r = b.ground_record;
+  if (!r) return 'no licensed photographs of this building are in the collection yet.';
+  const who = `${fmt(r.photographs)} licensed photograph${r.photographs === 1 ? '' : 's'} by ${r.photographers} photographer${r.photographers === 1 ? '' : 's'}`;
+  const when = r.dated ? `, ${r.dated} with capture dates (first ${r.earliest}, last ${r.latest})` : ', none with a capture date';
+  const rc = r.reconstruction;
+  if (!rc) return `${who}${when}; not yet reconstructed.`;
+  const biggest = rc.largest_fragment ? ` (the largest holds ${rc.largest_fragment.cameras} cameras and ${fmt(rc.largest_fragment.points)} points)` : '';
+  const tried = rc.anchoring.filter(a => !a.usable);
+  const why = tried.length ? ` Anchoring the largest fragment to the lidar through the footprint of ${tried[0].building} was attempted and is not usable: only ${Math.round(100 * (tried[0].points_within_1m_of_walls || 0))} % of its points lie within a metre of any wall, because these photographs are close-ups of the entrance, not of the facades the lidar measures. No ground model is shown; the dates above are the ground record.` : '';
+  return `${who}${when}. ${rc.registered} of ${rc.photographs_mapped} register, in ${rc.fragments} fragment${rc.fragments === 1 ? '' : 's'}${biggest}.${why}`;
+}
+function recordStrip(b) {
+  const r = b.ground_record;
+  if (!r || !r.strip.length) return '';
+  return `<div class="strip">${r.strip.map(s => `<figure><a href="${s.source_url || '#'}" target="_blank" rel="noopener"><img src="${BASE + s.photo}" alt="${s.title || ''}" title="${(s.title || '') + ' — ' + (s.artist || '') + ', ' + (s.license || '')}"></a><figcaption>${s.date}</figcaption></figure>`).join('')}</div>`;
 }
 function buildingChapter(name, intro) {
   const b = building(name); const c = centroid(b.ring);

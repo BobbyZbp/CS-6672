@@ -90,7 +90,7 @@ def aerial_crops(site, ring_utm, name, out, years):
     return urls
 
 
-def build(output=OUT, anchored_runs=None):
+def build(output=OUT, anchored_runs=None, record_snapshot=None, ground_runs=None):
     from ghostmap.archival.reference import Reference
     output = Path(output); (output / 'photos').mkdir(parents=True, exist_ok=True); (output / 'crops').mkdir(exist_ok=True)
     timeline = json.loads(TIMELINE.read_text()); years = timeline['aerial_years']
@@ -156,6 +156,46 @@ def build(output=OUT, anchored_runs=None):
                                 'xyz_url': f'points-{tag}.f32', 'rgb_url': f'points-{tag}.u8', 'first_url': f'points-{tag}-first.i16', 'last_url': f'points-{tag}-last.i16',
                                 'scale_status': ref.report['scale_status'], 'anchored_through': ref.report.get('landmark_building')})
 
+    # The ground record per building: the licensed photographs of its acquisition target in the snapshot
+    # (deduplicated), their photographers and capture dates, whether or not they could be reconstructed.
+    ground_record = {}
+    if record_snapshot:
+        snap = json.loads(Path(record_snapshot).read_text())
+        by_target = {}
+        for rec in snap['images']:
+            if rec.get('split') == 'excluded': continue
+            for target in (rec.get('discovery') or {}).get('targets', []): by_target.setdefault(target, []).append(rec)
+        for b in timeline['buildings']:
+            recs = by_target.get(b.get('target'), [])
+            if not recs: continue
+            dated = sorted((r for r in recs if (r.get('capture_evidence') or {}).get('earliest')), key=lambda r: r['capture_evidence']['earliest'])
+            strip = []
+            for r in dated[:6]:
+                src = Path(r.get('working_path') or (ROOT / 'artifacts/artsquad_modern/images' / r['filename']))
+                if not src.exists(): continue
+                thumb = 'photos/' + r['filename']; thumbnail(src, output / thumb)
+                strip.append({'photo': thumb, 'date': r['capture_evidence']['earliest'][:10], 'title': r.get('title'), 'artist': r.get('artist'),
+                              'license': r.get('license'), 'source_url': r.get('source_url')})
+            ground_record[b['footprint']] = {'photographs': len(recs), 'photographers': len({r.get('artist') for r in recs}), 'dated': len(dated),
+                                             'earliest': dated[0]['capture_evidence']['earliest'][:10] if dated else None,
+                                             'latest': dated[-1]['capture_evidence']['earliest'][:10] if dated else None, 'strip': strip,
+                                             'snapshot': str(record_snapshot)}
+    # Reconstruction attempts per building: a run mapped on one target, its fragments, and the anchoring outcome.
+    for run in (ground_runs or []):
+        report = json.loads((Path(run) / 'report.json').read_text())
+        targets = report.get('configuration', {}).get('targets') or []
+        for b in timeline['buildings']:
+            if b.get('target') not in targets or b['footprint'] not in ground_record: continue
+            fragments = sorted(report.get('components', []), key=lambda c: -c['registered_cameras'])
+            anchors = [json.loads(p.read_text()) for p in sorted((Path(run) / 'anchor').glob('*/report.json'))]
+            ground_record[b['footprint']]['reconstruction'] = {
+                'run': str(run), 'photographs_mapped': len(report.get('input_images', [])),
+                'registered': sum(c['registered_cameras'] for c in fragments), 'fragments': len(fragments),
+                'largest_fragment': {'cameras': fragments[0]['registered_cameras'], 'points': fragments[0]['sparse_points']} if fragments else None,
+                'anchoring': [{'fragment_cameras': next((c['registered_cameras'] for c in fragments if str(c['id']) == a['component_id']), None),
+                               'building': a.get('landmark_building'), 'usable': bool(a.get('metric_frame_usable')), 'status': a.get('scale_status'),
+                               'points_within_1m_of_walls': a.get('metrics', {}).get('building', {}).get('points_within_1m_of_own_walls')} for a in anchors]}
+
     # Buildings: footprints near either site, with documented dates where known.
     documented = {b['footprint']: b for b in timeline['buildings']}
     buildings = []
@@ -174,6 +214,7 @@ def build(output=OUT, anchored_runs=None):
             entry['aerial_crops'] = aerial_crops(site, ring, b['name'], output, years)
             if b['name'] in roof: entry['aerial_outline_score'] = {y: v['outline_edge_ratio'] for y, v in roof[b['name']]['years'].items()}
             if b['name'] in ground_first_seen: entry['ground_photographs'] = ground_first_seen[b['name']]
+            if b['name'] in ground_record: entry['ground_record'] = ground_record[b['name']]
         buildings.append(entry)
 
     scene = {'schema_version': 1, 'title': 'Cornell Time Machine', 'generated_utc': datetime.now(timezone.utc).isoformat(),
@@ -190,8 +231,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, default=OUT)
     parser.add_argument('--run', type=Path, nargs='*', default=[ROOT / 'artifacts/artsquad_modern/runs/6406b8eaae260163b303'], help='anchored runs to include')
+    parser.add_argument('--snapshot', type=Path, help='deduplicated snapshot whose photographs give each building its ground record')
+    parser.add_argument('--ground-run', type=Path, nargs='*', default=[], help='runs mapped on one building target, reported as reconstruction attempts')
     args = parser.parse_args()
-    s = build(args.output, args.run)
+    s = build(args.output, args.run, args.snapshot, args.ground_run)
     print(len(s['sites']), 'sites,', len(s['buildings']), 'buildings,', sum(r['points'] for r in s['reconstructions']), 'points,', len(s['photographers']), 'photographers')
 
 

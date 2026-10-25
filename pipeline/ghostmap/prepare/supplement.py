@@ -32,8 +32,13 @@ def build(base_snapshot, supplement=SUPPLEMENT, workspace=ROOT / 'artifacts/arts
     manifest = json.loads(Path(supplement).read_text())
     originals = Path(supplement).parent / 'originals'
     added, rejected = [], []
+    # Near-duplicate screen against the base snapshot: the same Flickr photograph is often uploaded
+    # to Commons as well, and a photograph must not enter twice (dHash distance 6 or less).
+    base_hashes = [(int(r['dhash64'], 16), r['filename']) for r in base['images'] if r.get('dhash64')]
     for raw in manifest['images']:
         record = dict(raw); errors = []
+        twin = next((name for h, name in base_hashes if bin(int(raw['dhash64'], 16) ^ h).count('1') <= 6), None) if raw.get('dhash64') else None
+        if twin: errors.append(f'near-duplicate of the base snapshot photograph {twin}')
         source = originals / raw['original_filename']
         working = WORKING / raw['filename']
         try:
@@ -48,7 +53,7 @@ def build(base_snapshot, supplement=SUPPLEMENT, workspace=ROOT / 'artifacts/arts
                       scope_review_hint='geometry supplement', role=role if not errors else 'validation-rejected', role_note=note,
                       capture_evidence={'origin': 'none', 'assertion': 'provider supplies no capture date', 'precision': 'unknown',
                                         'earliest': None, 'latest': None},
-                      validation={'passed': not errors, 'checks': ['original-sha256', 'decode', 'metadata-admission', 'historic-marker-screen'],
+                      validation={'passed': not errors, 'checks': ['original-sha256', 'decode', 'metadata-admission', 'historic-marker-screen', 'near-duplicate-of-base'],
                                   'errors': errors},
                       target_identity_verified=False, geometric_support_verified=False, independent_capture_verified=False,
                       exposure_group_id='exposure-' + raw['sha256_original'][:24],
