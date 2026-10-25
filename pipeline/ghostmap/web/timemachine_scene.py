@@ -90,6 +90,41 @@ def aerial_crops(site, ring_utm, name, out, years):
     return urls
 
 
+def export_mesh(obj_path, sim, shift, out_dir, tag):
+    """Copy an OpenMVS textured mesh (native model units) into the scene's local metric frame:
+    vertices through the anchor similarity plus the frame shift, normals through its rotation;
+    the material file and its texture images are copied beside it. Returns the published paths."""
+    import shutil
+    s, R, t = sim
+    out_dir.mkdir(parents=True, exist_ok=True)
+    obj_path = Path(obj_path); lines = []
+    for line in obj_path.read_text().splitlines():
+        if line.startswith('v '):
+            v = np.array([float(x) for x in line.split()[1:4]])
+            w = s * (R @ v) + t + shift
+            lines.append('v %.4f %.4f %.4f' % tuple(w))
+        elif line.startswith('vn '):
+            n = R @ np.array([float(x) for x in line.split()[1:4]])
+            lines.append('vn %.5f %.5f %.5f' % tuple(n))
+        elif line.startswith('mtllib '):
+            lines.append(f'mtllib {tag}.mtl')
+        else: lines.append(line)
+    (out_dir / f'{tag}.obj').write_text('\n'.join(lines) + '\n')
+    mtl = obj_path.with_suffix('.mtl'); textures = []
+    if mtl.exists():
+        mtl_lines = []
+        for line in mtl.read_text().splitlines():
+            if line.split() and line.split()[0] in ('map_Kd', 'map_Ka'):
+                src = obj_path.parent / line.split()[-1]
+                if src.exists():
+                    dest = f'{tag}-{src.name}'; shutil.copy2(src, out_dir / dest); textures.append(dest)
+                    lines_ = line.split(); lines_[-1] = dest; line = ' '.join(lines_)
+            mtl_lines.append(line)
+        (out_dir / f'{tag}.mtl').write_text('\n'.join(mtl_lines) + '\n')
+    return {'obj_url': f'mesh/{tag}.obj', 'mtl_url': f'mesh/{tag}.mtl' if mtl.exists() else None, 'textures': textures,
+            'vertices': sum(1 for l in lines if l.startswith('v ')), 'faces': sum(1 for l in lines if l.startswith('f '))}
+
+
 def build(output=OUT, anchored_runs=None, record_snapshot=None, ground_runs=None):
     from ghostmap.archival.reference import Reference
     output = Path(output); (output / 'photos').mkdir(parents=True, exist_ok=True); (output / 'crops').mkdir(exist_ok=True)
@@ -151,7 +186,16 @@ def build(output=OUT, anchored_runs=None, record_snapshot=None, ground_runs=None
                                   'width': cam.width, 'height': cam.height, 'focal_px': float(cam.params[0]),
                                   'centre': C.round(2).tolist(), 'rotation': np.round(image.cam_from_world().rotation.matrix(), 6).tolist(),
                                   'reconstruction': tag})
-        reconstructions.append({'tag': tag, 'run': str(run), 'anchor_report': str(report), 'intervals_report': str(intervals_path) if intervals else None,
+        # A dense textured surface of this fragment, when the dense stage has produced one for its model.
+        mesh = None
+        for obj in sorted((Path(run) / 'dense').glob('*/textured.obj')):
+            dense_report = json.loads((obj.parent / 'report.json').read_text()) if (obj.parent / 'report.json').exists() else {}
+            if Path(dense_report.get('model', '')).resolve() != (Path(run) / ref.report['model_path']).resolve(): continue
+            sim = (ref.report['similarity']['scale_m_per_model_unit'], np.array(ref.report['similarity']['rotation']),
+                   np.array(ref.report['similarity']['translation_utm18n']) - ref.origin)
+            mesh = export_mesh(obj, sim, shift, output / 'mesh', tag); mesh['dense_report'] = str(obj.parent / 'report.json')
+            break
+        reconstructions.append({'tag': tag, 'run': str(run), 'anchor_report': str(report), 'intervals_report': str(intervals_path) if intervals else None, 'mesh': mesh,
                                 'points': len(ids), 'dated_photographs': intervals['dated_photographs'] if intervals else None,
                                 'xyz_url': f'points-{tag}.f32', 'rgb_url': f'points-{tag}.u8', 'first_url': f'points-{tag}-first.i16', 'last_url': f'points-{tag}-last.i16',
                                 'scale_status': ref.report['scale_status'], 'anchored_through': ref.report.get('landmark_building')})

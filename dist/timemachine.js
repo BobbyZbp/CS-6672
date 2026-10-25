@@ -2,6 +2,8 @@
 // (built by web/timemachine_scene.py from report files); nothing is typed in here.
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/OrbitControls.js';
+import { MTLLoader } from './vendor/MTLLoader.js';
+import { OBJLoader } from './vendor/OBJLoader.js';
 
 const BASE = 'assets/timemachine/';
 const fmt = (x, d = 0) => (x === null || x === undefined || Number.isNaN(x)) ? '—' : Number(x).toLocaleString('en-US', { maximumFractionDigits: d });
@@ -132,7 +134,18 @@ for (const r of scene.reconstructions) {
   const colour = new Float32Array(rgb.length); for (let i = 0; i < rgb.length; i++) colour[i] = rgb[i] / 255;
   g.setAttribute('color', new THREE.BufferAttribute(colour, 3));
   const pts = new THREE.Points(g, new THREE.PointsMaterial({ size: 1.3, vertexColors: true }));
-  world.add(pts); clouds.push({ pts, g, rgb: colour, first, last, meta: r });
+  world.add(pts); const cloud = { pts, g, rgb: colour, first, last, meta: r, surface: null }; clouds.push(cloud);
+  // A dense textured surface of the fragment, loaded in the background and shown on request.
+  if (r.mesh && r.mesh.mtl_url) {
+    new MTLLoader().setPath(BASE + 'mesh/').loadAsync(r.mesh.mtl_url.split('/').pop()).then(materials => {
+      materials.preload();
+      return new OBJLoader().setMaterials(materials).loadAsync(BASE + r.mesh.obj_url);
+    }).then(obj => {
+      obj.traverse(o => { if (o.isMesh) o.material.side = THREE.DoubleSide; });
+      obj.visible = false; world.add(obj); cloud.surface = obj;
+      const box = document.getElementById('surface'); if (box) box.disabled = false;
+    }).catch(e => console.warn('dense surface not loaded', e));
+  }
 }
 const photographerGroup = new THREE.Group(); world.add(photographerGroup);
 for (const p of scene.photographers) {
@@ -256,9 +269,10 @@ const chapters = [
         <p>Each reconstructed point carries the years in which photographs observed it. The slider shows the points seen by that year; "colour by first year" shows when each point first appeared in a photograph.</p>
         <div class="yearbar">${Array.from({ length: MAX_YEAR - MIN_YEAR + 1 }, (_, i) => MIN_YEAR + i).map(y => `<div data-year="${y}" style="height:${100 * (counts[y] || 0) / maxc}%" title="${y}: ${counts[y] || 0} dated photographs"></div>`).join('')}</div>
         <div class="yearlabels"><span>${MIN_YEAR}</span><span>dated photographs per year</span><span>${MAX_YEAR}</span></div>
-        <div class="cues"><label><input type="radio" name="col" value="photo" checked>photo colours</label><label><input type="radio" name="col" value="first">colour by first year seen</label></div>
+        <div class="cues"><label><input type="radio" name="col" value="photo" checked>photo colours</label><label><input type="radio" name="col" value="first">colour by first year seen</label>${r.mesh ? `<label><input type="checkbox" id="surface" ${clouds.some(c => c.surface) ? '' : 'disabled'}>dense textured surface (${fmt(r.mesh.faces)} faces)</label>` : ''}</div>
         <p>Click a photographer (sphere) to see the photograph; red = taken in the selected year.</p><div id="pick"></div>`;
       for (const x of document.querySelectorAll('input[name=col]')) x.onchange = () => { colourMode = x.value; setYear(year); };
+      const sf = document.getElementById('surface'); if (sf) sf.onchange = () => { for (const c of clouds) if (c.surface) { c.surface.visible = sf.checked; c.pts.visible = !sf.checked; } };
       legend([['#2a6fdb', 'photographers before the selected year'], ['#d0453a', 'photographers in the selected year'], ['#9aa5b1', 'later photographers']]);
       const t = scene.buildings.find(b => b.name === 'McGraw Tower'), c = centroid(t.ring);
       flyTo([c[0], c[1], t.ground + 20], 220, 0.35, -2.4); setYear(year);
