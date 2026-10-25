@@ -51,18 +51,14 @@ glog files that used to sit in the repository root).
 
 `dist/assets/repair/` (662 M) holds built copies of these outputs for `surface-lab.html`.
 
-## Candidates for cleanup (not done; needs the owner's decision)
+## Cleanup log
 
-None of these is referenced by current code, `dist/`, or docs (grep, 2026-10-24):
+Deleted 2026-10-25 with the owner's approval (nothing in code, `dist/` or docs
+referenced them): `cpu_mvs_joint_historical/`, `cpu_mvs_target_v2/`,
+`work_v11/`, `work_v12/`, `work_focal_prior/`, `experiment_v11/`,
+`experiment_v12/`, `experiment_focal_prior/` (about 0.36 GB).
 
-| Path | Size | Note |
-| --- | ---: | --- |
-| `cpu_mvs_joint_historical/` | 118 M | unreferenced repair-era run |
-| `cpu_mvs_target_v2/` | 107 M | unreferenced; superseded by the fixed-focal runs |
-| `work_v12/`, `work_v11/`, `work_focal_prior/` | 53 M, 15 M, 18 M | v1 parameter-sweep working dirs |
-| `experiment_v11/`, `experiment_v12/`, `experiment_focal_prior/` | 2.8 M total | their small reports (keep, or archive alongside) |
-
-Deleting all of them frees about 0.3 GB. Bigger savings need a decision about
-provenance: `runs/54149158…` and `runs/71279029…` (error runs, 0.4 GB),
-`demo-packages/` (rebuildable, 60 M), and the repair outputs above, which
-`dist/assets/repair/` duplicates (about 1.5 GB in total).
+Still present and worth a later decision: the two error runs under `runs/`
+(0.4 GB, kept as evidence of a report/model mismatch), `demo-packages/`
+(rebuildable, 60 M), and the repair outputs above, which `dist/assets/repair/`
+duplicates (about 1.5 GB in total).
