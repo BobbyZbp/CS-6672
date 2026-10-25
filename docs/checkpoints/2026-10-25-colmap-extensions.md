@@ -91,9 +91,13 @@ inliers). Width of the 95 % interval along the viewing ray:
 | 1900–1925 | seven views of the surviving library | 28–126 | 18–332 m | 7–39 m | — |
 | c. 1955 | McGraw Tower | 141 | 25 m | 10 m | — |
 
-On the 1914 postcard the detector keeps 16 standing people; at the most likely
-pose their implied heights have median **1.76 m** (prior 1.70 ± 0.08 m),
-a check the fit did not use.
+On the 1914 postcard the detector keeps 16 standing people. At the most
+likely pose without the people cue (anchors plus measured ground) they would
+be 0.6–3.7 cm tall: the surviving anchors alone cannot tell people from ants.
+With the cue their implied heights have median 1.76 m, close to the 1.70 m
+prior by construction, so that number is a consistency readout, not an
+independent check. The 7 m interval is precision, not correctness: it
+surrounds the mirror-image position described next.
 
 **Finding (identified by inspection, not by the pipeline):** every registered
 Boardman pose is a mirror image. All 22 modern photographers in the fragment

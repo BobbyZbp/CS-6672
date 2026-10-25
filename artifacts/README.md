@@ -17,7 +17,9 @@ the disk at 97% full (about 7 GB free).
 | `artsquad_modern/runs/8563d895…` | 508 M | First 46-image learned pilot (snapshot f27fe368). Used by the viewer. |
 | `artsquad_modern/runs/c12e90ba…` | 239 M | Learned run on f27fe368 (1 component). Used by the viewer. |
 | `artsquad_modern/runs/52096269…` | 132 M | SIFT baseline on f27fe368. |
-| `artsquad_modern/runs/1b72e8e6…` | 724 M | 228-record run on e7cef2d8, **stopped during matching**. Holds features and partial matches that a resumed run can reuse. |
+| `artsquad_modern/runs/1b72e8e6…` | 724 M | First attempt on the 228-photo snapshot, stopped twice by the out-of-memory killer during matching. **Superseded** by the finished run below; a candidate for cleanup. |
+| `artsquad_modern/runs/6a31738f…` | 749 M | **Finished** learned run on the 228-photo snapshot (82 of 139 registered; Uris/Tower 26 cameras, Goldwin Smith 14, Morrill/White 11). Its `anchor/0/` holds the lidar anchoring attempt (scales 10.5 % apart, not marked usable). |
+| `artsquad_modern/runs/18f93889…` | 394 M | EXIF-anchored re-mapping of the 145-photo snapshot. **The demo's reference frame**: `anchor/0/` (lidar anchoring) and `archival/` (positive control, postcard certificates). |
 | `artsquad_modern/runs/54149158…` | 239 M | Status `error`, yet `sfm/models/0` exists (13 images). Kept as evidence of that report/model mismatch. |
 | `artsquad_modern/runs/71279029…` | 155 M | Status `error` (snapshot d43f46c8). |
 | `artsquad_modern/runs/82c7cca3…` | 228 K | Interrupted, empty. |

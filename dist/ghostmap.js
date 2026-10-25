@@ -170,16 +170,16 @@ function stock() {
   body.innerHTML = `<h2>COLMAP on licensed Commons photographs</h2>
     <p>The match graph is nearly one piece (65 of 67 matched photographs connect), yet the mapper returns disconnected fragments with no scale, and some focal lengths blow up.</p>
     <table><tr><th>Mapping</th><th class="num">cameras per model</th><th class="num">registered</th><th class="num">focal ratio outside 0.5–3</th></tr>${rows}</table>
-    <p><b>Extension 1 — EXIF-anchored calibration.</b> Photographs whose EXIF gives the focal length keep it fixed; the others are bounded. Focal blow-ups fall from ${N.mapping[0].focal_outside_half_to_triple} to ${N.mapping[2].focal_outside_half_to_triple}, but the fragments do <b>not</b> merge.</p>
+    <p><b>EXIF-anchored calibration.</b> Photographs whose EXIF gives the focal length keep it fixed; the others are bounded. Focal blow-ups fall from ${N.mapping[0].focal_outside_half_to_triple} to ${N.mapping[2].focal_outside_half_to_triple}, but the fragments do <b>not</b> merge.</p>
     <div class="finding">Diagnosis: calibration is not what splits the scene; missing views are. Eight of fourteen target buildings have no registered camera at all.</div>
-    <p class="note">The 3D view shows the largest fragment (Uris Library and McGraw Tower, 22 photographers) after Extension 2 placed it in metres.</p>`;
+    <p class="note">The 3D view shows the largest fragment (Uris Library and McGraw Tower, 22 photographers) after it was snapped to lidar in metres.</p>`;
   legend([['#2a6fdb', 'reconstructed points (photo colours)'], ['#cdbda8', 'lidar buildings'], ['#7f9a6c', 'lidar ground']]);
   frame(tower, 380);
 }
 
 function anchor() {
   const a = N.anchoring, sc = a.scale_checks;
-  body.innerHTML = `<h2>Extension 2 — snap to the measured world</h2>
+  body.innerHTML = `<h2>Snap to the measured world</h2>
     <p>Public-domain USGS airborne lidar (${fmt(N.lidar.points_kept)} points around the Quad) and OpenStreetMap footprints. No geotags, no hand-picked points.</p>
     <div class="stat"><div>Scale from photographers at eye height vs the measured tower top</div><div>${fmt(sc.vertical_from_photographers_and_tower_top, 1)} m / unit</div>
     <div>Scale from the library's walls alone (independent)</div><div>${fmt(sc.horizontal_from_library_walls, 1)} m / unit</div>
@@ -239,7 +239,7 @@ function registeredPostcards() { return scene.postcards.filter(q => q.status ===
 function postcards() {
   const list = registeredPostcards();
   const initial = list.find(q => q.pageid === '150099180') ?? list[0];
-  body.innerHTML = `<h2>Extension 3 — the surviving world as a calibration target</h2>
+  body.innerHTML = `<h2>The surviving world as a calibration target</h2>
     <p>A public-domain postcard is placed only through surviving buildings. For every focal length COLMAP's pose solver places the camera; the cost over all anchors is a likelihood along the ambiguity ray.</p>
     <div class="controls"><select id="pc-select">${list.map(q => `<option value="${q.pageid}">${q.date} · ${q.title.replace(/^File:/, '').slice(0, 60)}</option>`).join('')}</select></div>
     <img class="photo" id="pc-photo" alt="">
@@ -274,7 +274,8 @@ function postcards() {
         <div>Focal length, 95 %</div><div>${fmt(c.focal_px_95[0])}–${fmt(c.focal_px_95[1])} px (×${fmt(c.focal_interval_ratio, 2)})</div>
         <div>Camera height above lidar ground, 95 %</div><div>${fmt(c.camera_height_above_ground_m_95[0], 1)} to ${fmt(c.camera_height_above_ground_m_95[1], 1)} m</div>
         <div>Anchors with clear line of sight (weak test)</div><div>${fmt(100 * c.anchors_visible_fraction)} %</div></div>
-        ${q.people && cue.includes('people') ? `<p>${q.people.length} standing people detected; at the most likely pose their implied heights have median ${fmt(median(q.people_implied_heights_m.filter(Boolean)), 2)} m (prior 1.70 m).</p>` : ''}
+        ${q.people ? `<p>${q.people.length} standing people detected. At this cue's most likely pose they would be <b>${fmt(median(q.people_implied_heights_m[cue].filter(Boolean)), 2)} m</b> tall (median)${cue.includes('people') ? ' — near the 1.70 m prior by construction, so a consistency readout' : ' — the anchors alone cannot tell people from ants'}.</p>` : ''}
+        ${q.mirror_pose ? `<p class="bad">Mirror pose (${q.mirror_pose}). A narrow interval here is precision, not correctness; see chapter 5.</p>` : ''}
         <p class="note">${q.inlier_anchors} anchor correspondences · <a href="${q.source_url}" target="_blank" rel="noopener">${q.license}</a>${q.duplicate_of ? ` · same exposure as ${q.duplicate_of}` : ''}</p>`;
     };
     const drawCamera = () => {

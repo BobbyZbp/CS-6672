@@ -19,7 +19,7 @@ CS 6672 hacker presentation ([plan](docs/plans/colmap-extension-plan.md),
 - archival photographs are placed through surviving buildings with an
   identifiability certificate; the measured ground narrows the uncertainty
   along the viewing ray several-fold, and on a 1914 postcard 16 standing people
-  narrow it to 7 m;
+  narrow it to 7 m (around the mirrored position described next);
 - every Boardman pose found so far is a mirror image, because the modern
   fragment only sees the tower's west and south faces; no bound on Boardman
   Hall is claimed.
@@ -108,7 +108,7 @@ python3 -m http.server 8080 --directory dist
 # http://127.0.0.1:8080/artsquad.html   Arts Quad Atlas (diagnostic workbench, not the multi-building demo)
 # http://127.0.0.1:8080/surface-lab.html  legacy OpenMVS Surface Lab
 # http://127.0.0.1:8080/baseline-v1.html  frozen v1 Boardman baseline
-.venv/bin/python -m unittest discover -s tests -p 'test_artsquad*.py'   # 340 tests
+.venv/bin/python -m unittest discover -s tests -p 'test_artsquad*.py'   # 341 tests
 ```
 
 ## Legacy work

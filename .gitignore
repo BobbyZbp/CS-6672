@@ -9,5 +9,6 @@ data/*
 !data/README.md
 artifacts/*
 !artifacts/README.md
-dist/assets/
+dist/assets/*
+!dist/assets/ghostmap/
 third_party/

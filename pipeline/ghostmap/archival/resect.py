@@ -205,5 +205,9 @@ def certificate(rows, anchor_centroid, ground_height, people=None, width=None, h
         c['distance_interval_shrink_vs_anchors_only'] = 1 - c['distance_interval_m'] / max(base['distance_interval_m'], 1e-9)
         c['focal_interval_shrink_vs_anchors_only'] = 1 - np.log(c['focal_interval_ratio']) / max(np.log(base['focal_interval_ratio']), 1e-9)
     if implied is not None:
-        out['people_implied_heights_at_map'] = implied[int(np.argmax(out['cues']['anchors + measured ground + people']['weights']))]
+        # Implied pedestrian heights at each cue's most probable pose. Under a cue
+        # that uses the people this is close to the prior by construction; under
+        # the cues that do not, it shows what the anchors alone would imply.
+        for name, c in out['cues'].items():
+            c['people_implied_heights_m'] = implied[int(np.argmax(c['weights']))]
     return out

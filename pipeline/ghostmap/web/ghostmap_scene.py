@@ -131,8 +131,12 @@ def build(output=OUT, anchored_run=EXIF_ANCHORED_RUN):
                                                        'anchors_visible_fraction', 'distance_interval_shrink_vs_anchors_only')}
                              | {'weights': np.round(c['weights'], 6).tolist()} for name, c in cert['cues'].items()}
             entry['anchor_points'] = np.round(q['anchor_points'], 2).tolist()
-            if q['pageid'] in people: entry['people'] = people[q['pageid']]
-            if 'people_implied_heights_at_map' in cert: entry['people_implied_heights_m'] = cert['people_implied_heights_at_map']
+            if q['pageid'] in people:
+                entry['people'] = people[q['pageid']]
+                entry['people_implied_heights_m'] = {name: c.get('people_implied_heights_m') for name, c in cert['cues'].items()}
+            if q['subject'].startswith('Boardman'):
+                entry['mirror_pose'] = ('found by inspection on 2026-10-25: the pose sees Boardman to the right of the tower, '
+                                        'the postcard shows it to the left; the modern model has only the tower\'s west and south faces')
         postcards.append(entry)
 
     numbers = {
