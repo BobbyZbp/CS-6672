@@ -1,6 +1,13 @@
+# Environments and caches
 .venv/
-data/raw/
-artifacts/work/
-*.pyc
+.cache/
 __pycache__/
+*.pyc
 
+# Large generated or downloaded content (indexed in artifacts/README.md, data/README.md)
+data/*
+!data/README.md
+artifacts/*
+!artifacts/README.md
+dist/assets/
+third_party/
