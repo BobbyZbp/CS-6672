@@ -145,9 +145,14 @@ short-lived processes.
 
 1. Modern photographs of McGraw Tower and Uris Library taken from the Arts
    Quad. The 228-photo snapshot has none among its registered photographs; the
-   104 located photographs still downloading are mostly campus context, so a
-   targeted search (for example Commons searches for the Arts Quad facing
-   south-west) is the next data step.
+   104 located photographs still downloading contain no tower photographs
+   ("Uris Hall" is a different building). A keyless Openverse probe on
+   2026-10-25 returned 118 CC BY / BY-SA / CC0 results for "McGraw Tower" and
+   127 for "Uris Library Cornell", about half of them Flickr photographs
+   (titles include "Plaza between Olin and Uris libraries", on the east side).
+   Adding Openverse needs a provider-prefixed record identity in acquisition and
+   snapshot preparation (rows are keyed by Commons page IDs today), then a new
+   snapshot and reconstruction; that is the next data step.
 2. An automatic handedness check for mirror poses, for example by requiring
    that the matched anchors' surface normals face the camera.
 
