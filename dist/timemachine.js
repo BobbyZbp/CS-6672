@@ -230,7 +230,7 @@ function groundRecord(b) {
   if (!rc) return `${who}${when}; not yet reconstructed.`;
   const biggest = rc.largest_fragment ? ` (the largest holds ${rc.largest_fragment.cameras} cameras and ${fmt(rc.largest_fragment.points)} points)` : '';
   const tried = rc.anchoring.filter(a => !a.usable);
-  const why = tried.length ? ` Anchoring the largest fragment to the lidar through the footprint of ${tried[0].building} was attempted and is not usable: only ${Math.round(100 * (tried[0].points_within_1m_of_walls || 0))} % of its points lie within a metre of any wall, because these photographs are close-ups of the entrance, not of the facades the lidar measures. No ground model is shown; the dates above are the ground record.` : '';
+  const why = tried.length ? ` Anchoring the largest fragment to the lidar through the footprint of ${tried[0].building} was attempted and is not usable (${tried[0].status}): the photographs are close-ups of the entrance, the stairs and the undercroft, not of the facades the lidar measures, and a fragment of a few cameras holds too little for the walls to fix a frame. No ground model is shown; the dates above are the ground record.` : '';
   return `${who}${when}. ${rc.registered} of ${rc.photographs_mapped} register, in ${rc.fragments} fragment${rc.fragments === 1 ? '' : 's'}${biggest}.${why}`;
 }
 function recordStrip(b) {
