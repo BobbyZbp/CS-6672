@@ -26,8 +26,10 @@ as a subprocess through its entry-point name.
 | acquire | `acquire/artsquad.py` | `acquire_artsquad.py` | Discover Commons candidates, apply license/metadata rules, download originals with provenance. |
 | | `acquire/commons.py` | `download_commons.py` | Commons metadata, filename and dHash helpers (also the v1 downloader `main()`). |
 | | `acquire/review.py` | `review_artsquad_inputs.py` | Metadata-only role screen (interior, event, reference document, scene candidate, …). |
+| | `acquire/openverse.py` | `-m ghostmap.acquire.openverse` | Openverse (Flickr CC) photographs as a training-only geometry supplement: licence, place-name and historic-marker screens, dHash dedup against Commons. |
 | | `acquire/provider_probe.py` | `artsquad_provider_probe.py` | Bounded HTTP-range probes of Quad6K / DISCO / BigSfM / PhotoCity releases. |
 | prepare | `prepare/snapshot.py` | `prepare_artsquad.py` | Freeze a content-addressed snapshot: hash checks, capture-date evidence, families, train/test split. |
+| | `prepare/supplement.py` | `-m ghostmap.prepare.supplement` | Extend a frozen snapshot with supplement photographs in the training split only. |
 | | `prepare/quad6k_research.py` | `prepare_quad6k_research.py` | Private research-only Quad6K snapshot (not redistributable). |
 | sfm | `sfm/learned.py` | `run_artsquad_sfm.py` | NetVLAD + SuperPoint + LightGlue + pycolmap mapping on the train split; shared `sha256`, `write_json`, `select_training_images`. |
 | | `sfm/sift.py` | `run_artsquad_sift.py` | Pinned CPU SIFT/COLMAP baseline on the same inputs. |

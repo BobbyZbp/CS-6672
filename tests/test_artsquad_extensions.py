@@ -153,3 +153,21 @@ class CarvingTests(unittest.TestCase):
         cap = np.minimum(*caps)
         self.assertEqual(carve.containment(cap, truth), 1.0)
         self.assertTrue(np.isfinite(cap[truth > 0]).any())
+
+
+class OpenverseAdmissionTests(unittest.TestCase):
+    def row(self, **kw):
+        base = {'source': 'flickr', 'license': 'by-sa', 'title': 'McGraw Tower, Cornell University', 'creator': 'someone',
+                'width': 1024, 'height': 683, 'tags': []}
+        return base | kw
+
+    def test_place_named_cc_flickr_photo_is_admitted(self):
+        from ghostmap.acquire.openverse import admission
+        self.assertTrue(admission(self.row())[0])
+
+    def test_noncommercial_duplicates_historic_scans_and_other_places_are_rejected(self):
+        from ghostmap.acquire.openverse import admission
+        for kw in ({'license': 'by-nc'}, {'source': 'wikimedia'}, {'title': 'Cornell from McGraw Tower, LCCN2007661095'},
+                   {'title': 'Boardman Hall circa 1910'}, {'title': 'McGraw Hill Building'}, {'height': 500},
+                   {'creator': 'Kheel Center, Cornell University'}):
+            self.assertFalse(admission(self.row(**kw))[0], kw)
