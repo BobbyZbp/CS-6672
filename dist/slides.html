@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GhostMap slides</title>
+<style>
+  :root { --bg: #f6f4ef; --ink: #1d221e; --muted: #5d655d; --accent: #b5532c; --ok: #2f7d4f; --bad: #b4372f; --line: #d8d4c9; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #111; }
+  body { font: 22px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink); }
+  .slide { display: none; position: absolute; inset: 0; margin: auto; width: min(100vw, 177.8vh); height: min(56.25vw, 100vh); background: var(--bg); padding: 4.2% 5.5%; overflow: hidden; }
+  .slide.on { display: flex; flex-direction: column; }
+  h1 { font-size: 2.3em; margin: 0 0 .2em; line-height: 1.1; }
+  h2 { font-size: 1.55em; margin: 0 0 .5em; }
+  .kicker { color: var(--accent); font-weight: 650; letter-spacing: .04em; text-transform: uppercase; font-size: .7em; margin-bottom: .4em; }
+  p { margin: .35em 0; }
+  .muted { color: var(--muted); }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 4%; flex: 1; min-height: 0; align-items: start; }
+  .cols img { width: 100%; max-height: min(66vh, 37vw); object-fit: contain; border-radius: 8px; border: 1px solid var(--line); }
+  .big { font-size: 2.1em; font-weight: 700; line-height: 1.1; }
+  .ok { color: var(--ok); } .bad { color: var(--bad); }
+  table { border-collapse: collapse; font-size: .78em; width: 100%; }
+  th, td { border-bottom: 1px solid var(--line); padding: .3em .45em; text-align: left; }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+  ul { margin: .3em 0; padding-left: 1.1em; } li { margin: .25em 0; }
+  .finding { border-left: 6px solid var(--accent); padding: .3em .8em; background: #ece8de; border-radius: 6px; margin: .5em 0; }
+  .foot { position: absolute; bottom: 2.5%; right: 4%; font-size: .55em; color: var(--muted); }
+  .src { font-size: .55em; color: var(--muted); }
+</style>
+</head>
+<body>
+<section class="slide" data-n="1">
+  <div class="kicker">CS 6672 · hacker presentation</div>
+  <h1>GhostMap</h1>
+  <p class="big" style="font-size:1.3em;font-weight:600">What can the surviving world prove about a building that no longer exists?</p>
+  <p class="muted">COLMAP, extended with things the world already knows: measured lidar ground, the camera's own EXIF focal length, and people.</p>
+  <p class="muted">Cornell Arts Quad · Boardman Hall (built 1892, demolished 1959; Olin Library stands on its site) · public-domain and Creative Commons photographs only, no annotation.</p>
+</section>
+
+<section class="slide" data-n="2">
+  <div class="kicker">The problem</div>
+  <h2>A vanished building, seen only in old postcards</h2>
+  <div class="cols">
+    <div>
+      <ul>
+        <li>About 24 public-domain photographs of Boardman Hall exist online (1898–1934), almost all postcards from the same side.</li>
+        <li>Unknown camera, unknown focal length, cropped, hand-coloured.</li>
+        <li>The building is gone, so the only geometry that can place these photographs is the buildings that <b>survived</b>: McGraw Tower and Uris Library.</li>
+        <li>Classic question: can we recover Boardman? Better question: <b>what does the surviving record determine, and what does it not?</b></li>
+      </ul>
+    </div>
+    <img src="assets/ghostmap/photos/114317667_Cornell_-_Boardman_Hall_and_the_library.jpg" alt="1934 postcard of Boardman Hall and the library">
+  </div>
+  <div class="foot">1934 postcard, Boardman Hall and the library. Public domain, Wikimedia Commons.</div>
+</section>
+
+<section class="slide" data-n="3">
+  <div class="kicker">Stock COLMAP · Extension 1</div>
+  <h2>Fragments, no scale, focal lengths that blow up</h2>
+  <table id="mapping"><tr><th>Mapping on the same 77 training photographs</th><th class="n">cameras per model</th><th class="n">registered</th><th class="n">focal ratio outside 0.5–3</th></tr></table>
+  <p><b>Extension 1, EXIF-anchored calibration:</b> photographs whose EXIF gives the focal length keep it fixed (<code>constant_cameras</code>); the rest are bounded.</p>
+  <div class="finding">Focal blow-ups mostly vanish, but the fragments do <b>not</b> merge. Missing views, not calibration, split the scene.</div>
+</section>
+
+<section class="slide" data-n="4">
+  <div class="kicker">Extension 2</div>
+  <h2>Snap COLMAP to the measured world</h2>
+  <div class="cols">
+    <div>
+      <p>Public-domain USGS airborne lidar (<span id="lidar-points"></span> points) and OpenStreetMap footprints. No geotags, no hand-picked points.</p>
+      <ul>
+        <li>Vertical from facade normals (camera "up" is biased 15° by people tilting up at the tower).</li>
+        <li>Scale from photographers standing on the ground vs the measured tower top: <b id="s-vert"></b> m/unit.</li>
+        <li>Independent scale from the library's walls: <b id="s-lib"></b> m/unit → <b id="s-diff"></b> apart.</li>
+        <li>Library points on library walls: median <b id="lib-miss"></b> m.</li>
+      </ul>
+    </div>
+    <img src="assets/ghostmap/shots/anchor.png" alt="Anchored fragment on lidar">
+  </div>
+</section>
+
+<section class="slide" data-n="5">
+  <div class="kicker">The hidden ambiguity</div>
+  <h2>COLMAP doesn't know where its own photographers stood</h2>
+  <div class="cols">
+    <div>
+      <p>Bundle adjustment places <b class="bad" id="off-ground"></b> modern photographers well off the measured ground, some 30–50 m in the air, with sub-2-pixel error.</p>
+      <p>Why: a distant camera can slide along its viewing ray while the focal length changes (the <b>dolly-zoom ambiguity</b>). Re-solving each one from just the tower and the library next to it:</p>
+      <p class="big"><span id="pc-a"></span> m → <span class="ok" id="pc-g"></span> m</p>
+      <p class="muted">Median 95 % interval along the viewing ray, anchors only → plus "the photographer stood on the measured ground".</p>
+    </div>
+    <img src="assets/ghostmap/shots/photographers.png" alt="Photographers coloured by height above lidar ground">
+  </div>
+</section>
+
+<section class="slide" data-n="6">
+  <div class="kicker">Extension 3</div>
+  <h2>The surviving world as a calibration target</h2>
+  <p>Each postcard: for every focal length, COLMAP's pose solver places the camera through surviving anchors. The cost over all anchors is a likelihood along the ambiguity ray; extra cues reweight it.</p>
+  <table id="certs"><tr><th>Photograph</th><th class="n">anchors only</th><th class="n">+ measured ground</th><th class="n">+ people</th></tr></table>
+  <p class="muted">Width of the 95 % interval of the photographer's position along the viewing ray.</p>
+</section>
+
+<section class="slide" data-n="7">
+  <div class="kicker">People as cross-century anchors</div>
+  <h2>1914: sixteen people pin the camera to 7 m</h2>
+  <div class="cols">
+    <div>
+      <p>Pedestrians stand on today's measured ground and are about 1.70 m tall, at many depths — exactly the depth spread that breaks the dolly-zoom ambiguity.</p>
+      <p class="big"><span id="q-a"></span> m → <span id="q-g"></span> m → <span class="ok" id="q-p"></span> m</p>
+      <p class="muted">anchors only → + measured ground → + people</p>
+      <p>Check the fit never used: at the best pose the people's implied heights have median <b id="q-h"></b> m.</p>
+      <p class="muted">In the spirit of Virtual Correspondence (humans as geometry where surfaces don't overlap), but linking one photo to a measured ground across a century.</p>
+    </div>
+    <img src="assets/ghostmap/shots/people-1914.jpg" alt="Detected standing people on the 1914 postcard">
+  </div>
+</section>
+
+<section class="slide" data-n="8">
+  <div class="kicker">What fooled it</div>
+  <h2>Every Boardman pose is a mirror image</h2>
+  <div class="cols">
+    <div>
+      <ul>
+        <li>All 22 modern photographers in the fragment stand west or south-west of the tower, so the model only has its west and south faces.</li>
+        <li>The postcards were taken from the Arts Quad, north-east of the site.</li>
+        <li>McGraw Tower looks alike from every side: east-face features matched west-face points. The pose fits every anchor and even faces the Boardman site — from the wrong side.</li>
+      </ul>
+      <div class="finding">Found by checking left–right order against the map, not by the pipeline. So no bound on Boardman is shown. The fix is data: modern photos from the Quad side.</div>
+    </div>
+    <img src="assets/ghostmap/shots/mirror.png" alt="Modern photographers vs mirrored postcard cameras">
+  </div>
+</section>
+
+<section class="slide" data-n="9">
+  <div class="kicker">Closest work</div>
+  <h2>What is and isn't new</h2>
+  <table>
+    <tr><th>Work</th><th>Does</th><th>Difference here</th></tr>
+    <tr><td>Photo Tourism; Scene Chronology (Snavely et al.)</td><td>browse and date internet photos in one 3D model</td><td>the subject no longer exists; uncertainty is the output</td></tr>
+    <tr><td>Virtual Correspondence (Ma et al., CVPR 2022)</td><td>humans as geometry between non-overlapping views</td><td>humans link one archival view to measured ground</td></tr>
+    <tr><td>Mikolka-Flöry et al. 2022–2026</td><td>unknown-focal historical photos vs terrain, with uncertainty</td><td>near-field urban anchors, standpoint and people cues</td></tr>
+    <tr><td>Maiwald &amp; Sardemann 2022</td><td>shows historical resection failing when little survives</td><td>we work in that regime and measure it</td></tr>
+    <tr><td>Doppelgangers (Cai et al., ICCV 2023)</td><td>disambiguate look-alike structures</td><td>our mirror poses are this failure, across a century</td></tr>
+  </table>
+</section>
+
+<section class="slide" data-n="10">
+  <div class="kicker">Honest limits · next</div>
+  <h2>What we can and cannot claim</h2>
+  <ul>
+    <li><b>Can:</b> COLMAP extended with EXIF focal priors, a lidar anchor and a measured-ground prior; certificates that say how far along its ray each photograph is undetermined; people as a cue.</li>
+    <li><b>Cannot (yet):</b> any geometry of Boardman Hall. Every registered pose is mirrored; the frame's two scales differ by 5.4 %; principal point and lens distortion are not modelled.</li>
+    <li><b>Next:</b> photographs from the Arts Quad side (a 228-photo reconstruction is running); an automatic handedness check; carving a 2.5-D bound once poses are right; calibrating certificates on simulated demolition.</li>
+  </ul>
+  <p class="muted">Live demo: ghostmap.html · code and reports: github.com/BobbyZbp/CS-6672</p>
+</section>
+<div class="foot" id="pager" style="color:#999;z-index:2"></div>
+<script type="module">
+const scene = await (await fetch('assets/ghostmap/scene.json')).json();
+const N = scene.numbers, $ = id => document.getElementById(id);
+const f = (x, d = 0) => Number(x).toLocaleString('en-US', { maximumFractionDigits: d, minimumFractionDigits: d });
+for (const r of N.mapping) $('mapping').insertAdjacentHTML('beforeend', `<tr><td>${r.label}</td><td class="n">${r.models.join(' · ')}</td><td class="n">${r.registered_photographs}/${r.training_photographs}</td><td class="n">${r.focal_outside_half_to_triple}</td></tr>`);
+const sc = N.anchoring.scale_checks;
+$('lidar-points').textContent = f(N.lidar.points_kept); $('s-vert').textContent = f(sc.vertical_from_photographers_and_tower_top, 1);
+$('s-lib').textContent = f(sc.horizontal_from_library_walls, 1); $('s-diff').textContent = f(100 * Math.abs(sc.library_vs_vertical_ratio - 1), 1) + ' %';
+$('lib-miss').textContent = f(N.anchoring.library_wall_distance_m.median, 2);
+const P = scene.photographers; $('off-ground').textContent = `${P.filter(p => p.height_above_ground_m < 0.5 || p.height_above_ground_m > 4).length} of ${P.length}`;
+const pc = N.positive_control['postcard-like']; $('pc-a').textContent = f(pc['surviving anchors only'].median_distance_interval_m, 1); $('pc-g').textContent = f(pc['anchors + measured ground'].median_distance_interval_m, 1);
+for (const q of scene.postcards.filter(q => q.status === 'registered' && !q.duplicate_of && q.subject.startsWith('Boardman'))) {
+  const c = q.cues, p = c['anchors + measured ground + people'];
+  $('certs').insertAdjacentHTML('beforeend', `<tr><td>${q.date.slice(0, 11)} · ${q.title.replace(/^File:/, '').replace(/\.jpg$/, '').slice(0, 52)}</td><td class="n">${f(c['surviving anchors only'].distance_interval_m)} m</td><td class="n">${f(c['anchors + measured ground'].distance_interval_m)} m</td><td class="n">${p ? f(p.distance_interval_m) + ' m' : '—'}</td></tr>`);
+}
+const q = scene.postcards.find(x => x.pageid === '150099180');
+$('q-a').textContent = f(q.cues['surviving anchors only'].distance_interval_m); $('q-g').textContent = f(q.cues['anchors + measured ground'].distance_interval_m);
+$('q-p').textContent = f(q.cues['anchors + measured ground + people'].distance_interval_m);
+const h = q.people_implied_heights_m.filter(Boolean).sort((a, b) => a - b), m = h.length >> 1; $('q-h').textContent = f(h.length % 2 ? h[m] : (h[m - 1] + h[m]) / 2, 2);
+const slides = [...document.querySelectorAll('.slide')];
+let i = Math.max(0, Math.min(slides.length - 1, (+location.hash.slice(1) || 1) - 1));
+const go = k => { i = Math.max(0, Math.min(slides.length - 1, k)); slides.forEach((s, j) => s.classList.toggle('on', j === i)); $('pager').textContent = `${i + 1} / ${slides.length}`; history.replaceState(null, '', '#' + (i + 1)); };
+addEventListener('keydown', e => { if (['ArrowRight', 'PageDown', ' '].includes(e.key)) go(i + 1); if (['ArrowLeft', 'PageUp'].includes(e.key)) go(i - 1); });
+addEventListener('click', e => go(e.clientX > innerWidth / 2 ? i + 1 : i - 1));
+go(i); document.documentElement.dataset.ready = 'true';
+</script>
+</body>
+</html>

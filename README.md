@@ -8,11 +8,23 @@ question: localizing archival photographs and recovering demolished structures
 such as Boardman Hall (now the Olin Library site). Historical work is deferred
 until the modern scene is validated.
 
-**Status (2026-10-24).** No Quad-wide model exists yet. The best results are
-disconnected fragments: a 21-camera Uris Library / McGraw Tower sparse component
-and a 5-camera Goldwin Smith-labelled dense patch. No delivery milestone has
-passed. See the [latest checkpoint](docs/checkpoints/artsquad-local-checkpoint-145.md)
-and the [docs index](docs/README.md) for measured details.
+**Status (2026-10-25).** The project is now a set of COLMAP extensions for the
+CS 6672 hacker presentation ([plan](docs/plans/colmap-extension-plan.md),
+[latest results](docs/checkpoints/2026-10-25-colmap-extensions.md)):
+
+- EXIF-anchored calibration removes most focal blow-ups but does not merge the
+  fragments (missing views, not calibration, split the scene);
+- the 22-photographer Uris Library and McGraw Tower fragment is placed in
+  metres on public-domain USGS lidar (two independent scales agree within 5.4 %);
+- archival photographs are placed through surviving buildings with an
+  identifiability certificate; the measured ground narrows the uncertainty
+  along the viewing ray several-fold, and on a 1914 postcard 16 standing people
+  narrow it to 7 m;
+- every Boardman pose found so far is a mirror image, because the modern
+  fragment only sees the tower's west and south faces; no bound on Boardman
+  Hall is claimed.
+
+Live demo: `http://127.0.0.1:8080/ghostmap.html` (serve `dist/`, below).
 
 ## Repository layout
 
@@ -40,6 +52,7 @@ third_party/           pinned hloc checkout, NeuSC, OpenMVS CPU binaries
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements-artsquad.txt   # chains repair -> hloc -> base
 .venv/bin/python pipeline/setup_openmvs.py                     # private OpenMVS CPU runtime in third_party/openmvs-bin
+.venv/bin/python -m pip install -r requirements-geo.txt         # lidar and footprints (laspy, pyproj, shapely)
 ```
 
 Requirements chain with `-r`: `requirements.txt` (pycolmap, Pillow) ←
@@ -74,14 +87,28 @@ passes, and a working webpage is not a reconstruction. The acceptance contract
 stage outputs and recovery are in
 [docs/reference/artsquad-implementation.md](docs/reference/artsquad-implementation.md).
 
+## Run the COLMAP extensions
+
+```bash
+.venv/bin/python pipeline/run_artsquad_calibration_variant.py --source-run RUN --variant exif-anchored
+PYTHONPATH=pipeline .venv/bin/python -m ghostmap.anchor.lidar          # 3DEP lidar crop, UTM 18N
+PYTHONPATH=pipeline .venv/bin/python -m ghostmap.anchor.footprints     # OSM footprints
+PYTHONPATH=pipeline .venv/bin/python -m ghostmap.anchor.align --run RUN --component 0
+PYTHONPATH=pipeline .venv/bin/python -m ghostmap.archival.modern_control --anchor-report RUN/anchor/0/report.json
+PYTHONPATH=pipeline .venv/bin/python -m ghostmap.archival.run --anchor-report RUN/anchor/0/report.json --people artifacts/archival-people/people.json
+PYTHONPATH=pipeline .venv/bin/python -m ghostmap.web.ghostmap_scene    # data for dist/ghostmap.html
+```
+
 ## View and test
 
 ```bash
 python3 -m http.server 8080 --directory dist
+# http://127.0.0.1:8080/ghostmap.html   live demo of the COLMAP extensions
+# http://127.0.0.1:8080/slides.html     presentation slides
 # http://127.0.0.1:8080/artsquad.html   Arts Quad Atlas (diagnostic workbench, not the D1 demo)
 # http://127.0.0.1:8080/surface-lab.html  legacy OpenMVS Surface Lab
 # http://127.0.0.1:8080/baseline-v1.html  frozen v1 Boardman baseline
-.venv/bin/python -m unittest discover -s tests -p 'test_artsquad*.py'   # 326 tests
+.venv/bin/python -m unittest discover -s tests -p 'test_artsquad*.py'   # 340 tests
 ```
 
 ## Legacy work

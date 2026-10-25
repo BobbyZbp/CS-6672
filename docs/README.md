@@ -10,7 +10,7 @@ dated measurements; re-check the files they cite before quoting them as current.
 | --- | --- |
 | [demo-delivery-contract.md](plans/demo-delivery-contract.md) | Frozen D0/D1/D2/R1/D3/R2 acceptance contract (evaluated by `ghostmap/status/contracts.py`). |
 | [modern-artsquad-pipeline.md](plans/modern-artsquad-pipeline.md) | Modern-Arts-Quad-first scope and staged outputs M1.1–M1.7. |
-| [colmap-extension-plan.md](plans/colmap-extension-plan.md) | **2026-10-25 plan**: GhostMap as a COLMAP extension for the hacker presentation — insights, modules with before/after measurements, kill tests, timeline. |
+| [colmap-extension-plan.md](plans/colmap-extension-plan.md) | **2026-10-25 plan**: GhostMap as a COLMAP extension for the hacker presentation — insights, modules, kill tests, timeline, and the decisions log from executing it. |
 
 ## reference/ — how the current pipeline works
 
@@ -32,6 +32,7 @@ Module-level map: [../pipeline/README.md](../pipeline/README.md).
 | [artsquad-bridge-analysis.md](checkpoints/artsquad-bridge-analysis.md) | Why components did not merge; calibration-control run `bd12`. |
 | [artsquad-provider-checkpoint.md](checkpoints/artsquad-provider-checkpoint.md) | Quad6K / DISCO provider recovery probes. |
 | [artsquad-tonight-draft.md](checkpoints/artsquad-tonight-draft.md) | Draft for the 228-record snapshot `e7cef2d8`; its run `1b72e8e6` stopped during matching and never completed. |
+| [2026-10-25-colmap-extensions.md](checkpoints/2026-10-25-colmap-extensions.md) | **Latest**: EXIF-anchored calibration, lidar anchoring, cross-era resection certificates, the mirror-pose finding. |
 
 ## research/ — literature and direction
 

@@ -282,7 +282,7 @@ function postcards() {
   }
   legend([['#ff8c1a', 'surviving anchors matched in the postcard'], ['#2f9e5b', 'possible photographer positions (size = likelihood)'], ['#e0a21a', 'Boardman Hall site']]);
 }
-const median = a => { const s = [...a].sort((x, y) => x - y); return s.length ? s[Math.floor(s.length / 2)] : NaN; };
+const median = a => { const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return !s.length ? NaN : s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
 
 function mirror() {
   for (const p of scene.photographers) overlay.add(sphere(p.centre, 0x2a6fdb, 2.4));

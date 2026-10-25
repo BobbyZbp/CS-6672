@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -116,6 +117,7 @@ def build(output=OUT):
         entry = {k: q.get(k) for k in ('pageid', 'filename', 'title', 'date', 'license', 'source_url', 'subject',
                                        'duplicate_of', 'status', 'reason', 'anchor_correspondences', 'inlier_anchors')}
         entry.update(photo=thumb, size=q['size'], thumb_scale=small[0] / full[0])
+        entry['date'] = re.sub(r'date\s*QS.*$', '', entry['date'] or '').strip()  # Commons template residue
         if q['status'] == 'registered':
             cert = q['certificate']
             entry['grid'] = [{'centre': np.round(g['centre'], 2).tolist(), 'rotation': np.round(g['rotation'], 6).tolist(),

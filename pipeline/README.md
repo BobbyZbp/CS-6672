@@ -2,7 +2,8 @@
 
 All reconstruction code. Run scripts from the repository root with
 `.venv/bin/python pipeline/<entry>.py`; `pipeline/` is the import root, so modules
-import each other as `ghostmap.<group>.<module>`.
+import each other as `ghostmap.<group>.<module>`. Newer stages have no
+compatibility entry point and run as `PYTHONPATH=pipeline .venv/bin/python -m ghostmap.<group>.<module>`.
 
 ## Layout
 
@@ -31,7 +32,7 @@ as a subprocess through its entry-point name.
 | sfm | `sfm/learned.py` | `run_artsquad_sfm.py` | NetVLAD + SuperPoint + LightGlue + pycolmap mapping on the train split; shared `sha256`, `write_json`, `select_training_images`. |
 | | `sfm/sift.py` | `run_artsquad_sift.py` | Pinned CPU SIFT/COLMAP baseline on the same inputs. |
 | | `sfm/cache_reuse.py` | `reuse_artsquad_cache.py` | Reuse verified feature/match HDF5 groups from a completed run. |
-| | `sfm/calibration_variant.py` | `run_artsquad_calibration_variant.py` | Same-snapshot remap with fixed radial or fixed intrinsics (calibration control). |
+| | `sfm/calibration_variant.py` | `run_artsquad_calibration_variant.py` | Same-snapshot remap: fixed radial, fixed intrinsics, or EXIF-anchored (cameras with an EXIF focal prior held constant). |
 | | `sfm/inspect_run.py` | `inspect_artsquad_run.py` | Recompute component reports from saved native models. |
 | evaluate | `evaluate/holdouts.py` | `validate_artsquad_holdouts.py` | Localize held-out test images against a frozen component. |
 | | `evaluate/bridges.py` | `analyze_artsquad_bridges.py` | Inter-component edges, triangulation angles, calibration-strain warnings. |
@@ -49,6 +50,15 @@ as a subprocess through its entry-point name.
 | package | `package/source_zip.py` | `package_artsquad_code.py` | Deterministic source-only ZIP from an explicit allowlist. |
 | | `package/demo_bundle.py` | `package_artsquad_demo.py` | Portable offline demo bundle with hash manifest. |
 | qa | `qa/browser.py` | `check_artsquad_browser.py` | Playwright functional checks of `dist/artsquad.html`. |
+| anchor | `anchor/lidar.py` | `-m ghostmap.anchor.lidar` | USGS 3DEP lidar around the Quad: only intersecting octree nodes, Web Mercator to UTM 18N, surface and ground rasters. |
+| | `anchor/footprints.py` | `-m ghostmap.anchor.footprints` | OSM building footprints (ODbL) in UTM 18N. |
+| | `anchor/align.py` | `-m ghostmap.anchor.align` | Similarity from a COLMAP fragment to lidar: facade gravity, tower landmark, photographer scale, one yaw; independent scale check. |
+| archival | `archival/resect.py` | — | Profile-likelihood resection over focal length; standpoint and pedestrian cues; certificates; line-of-sight test. |
+| | `archival/match.py` | — | 2D-3D anchors for archival queries via SuperPoint + LightGlue against the anchored model. |
+| | `archival/run.py` | `-m ghostmap.archival.run` | Certificates for the public-domain Boardman-era photographs and surviving-building stand-ins. |
+| | `archival/modern_control.py` | `-m ghostmap.archival.modern_control` | Positive control: re-resect every modern photographer from its own anchors. |
+| | `archival/people.py` | `-m ghostmap.archival.people` | Standing-pedestrian detection (foot and head pixels). |
+| | `web/ghostmap_scene.py` | `-m ghostmap.web.ghostmap_scene` | Data for the live demo `dist/ghostmap.html`. |
 | | `qa/reel.py` | `check_artsquad_reel.py` | Playwright checks of `dist/demo-reel.html`. |
 | | `qa/record_demo.py` | `record_artsquad_demo.py` | Scripted headless tour recording. |
 
