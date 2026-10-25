@@ -10,6 +10,7 @@ dated measurements; re-check the files they cite before quoting them as current.
 | --- | --- |
 | [demo-delivery-contract.md](plans/demo-delivery-contract.md) | Frozen D0/D1/D2/R1/D3/R2 acceptance contract (evaluated by `ghostmap/status/contracts.py`). |
 | [modern-artsquad-pipeline.md](plans/modern-artsquad-pipeline.md) | Modern-Arts-Quad-first scope and staged outputs M1.1–M1.7. |
+| [colmap-extension-plan.md](plans/colmap-extension-plan.md) | **2026-10-25 plan**: GhostMap as a COLMAP extension for the hacker presentation — insights, modules with before/after measurements, kill tests, timeline. |
 
 ## reference/ — how the current pipeline works
 
