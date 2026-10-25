@@ -4,31 +4,38 @@
 The landmark method in `anchor/align.py` needs McGraw Tower in the fragment.
 Fragments that see only Goldwin Smith Hall, Uris Library or Gates Hall are
 anchored here through the building's OpenStreetMap footprint and the lidar
-around it, again without geotags or hand-picked correspondences. Like the
-landmark method it alternates two cues:
+around it, again without geotags or hand-picked correspondences:
 
 1. Gravity from wall-like facade normals (shared with the landmark method).
-2. Yaw and horizontal position, given the scale: the fragment's points lie on
-   the named building's walls, every photographer stands outside all
-   buildings, and the photographers' heights above the lidar ground are as
-   alike as possible (they stand at eye height). For each yaw the position
-   descends along the wall distance field, so the search is over yaw alone.
-3. Scale, given yaw and position: wall by wall, the lidar roof edge just
-   inside that wall minus the photographers' eye height, divided by the
-   model's facade top along that wall minus the photographers' height. The
-   median over walls with enough points is the scale. A straight facade fits
-   a straight wall at any scale, which is why the walls alone cannot fix it.
-4. The vertical position is the photographers' median eye height.
+2. A wide grid of scales around a rough prior (the fragment's core spans the
+   facade from foot to top; the lidar roof edges give that height). At each
+   scale, yaw every 3 degrees; for each yaw the horizontal position starts at
+   the best cell of a grid over the footprint and descends along the wall
+   distance field. The objective is the geometric mean of precision (points
+   near the named building's walls) and recall (wall length the points cover),
+   so a fragment cannot shrink onto one wall line; plus a roof-edge term (the
+   model's facade top along each wall, taken where the point density ends,
+   against the lidar surface just inside that wall, with the photographers at
+   eye height); minus photographers inside any footprint and the spread of
+   their heights above the lidar ground. The best few scales are refined
+   jointly over yaw, log scale and position (Nelder-Mead from an explicit
+   simplex, since UTM coordinates are hundreds of kilometres).
+3. The vertical position is the photographers' median eye height.
 
-Independent checks, never used by the fit: the scale the walls alone prefer
-(the profile of the wall score over scale, which is flat for a single facade
-and then reported as undetermined, or peaked and then required to agree with
-the fitted scale within 10 %); the neighbouring buildings' walls; the three
-other yaw quadrants, which a rectangular hall nearly satisfies and which must
-score clearly worse; the spread of the per-wall scale estimates; and the
-photographers' heights. The report has the same shape as the landmark
-method's, so the chronology and viewer stages read either. The native model is
-never modified; a transformed copy is written next to the report.
+Reported checks: the scale the walls alone prefer (biased towards stretching a
+facade along its wall, so it only vetoes the fit when 25 % off); the other
+three yaw quadrants, which a rectangular hall nearly satisfies and which must
+score clearly worse; the per-wall roof-edge scale estimates and their spread
+(the frame is usable only when at least two walls agree within 15 %); the
+neighbouring buildings' walls; the photographers' heights. The report has the
+same shape as the landmark method's, so the chronology and viewer stages read
+either. The native model is never modified; a transformed copy is written next
+to the report.
+
+A single facade of unknown scale fits walls of different heights at different
+scales; the Goldwin Smith portico fragment shows this and is reported as not
+usable. The synthetic check in `tests/test_artsquad_footprint_anchor.py`
+recovers a known similarity on a two-facade hall.
 
 Usage: PYTHONPATH=pipeline python -m ghostmap.anchor.footprint --run <run> --component <id> --building "Goldwin Smith Hall"
 """

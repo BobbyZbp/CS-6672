@@ -23,6 +23,9 @@ report files named below; nothing here is typed from memory.
 5. **Limits.** No licensed ground-level "before" photograph of any site; volumes are the 2020 lidar
    shape; the single-facade scale ambiguity; the Boardman mirror-pose finding from the earlier work.
 
+Build command for the current page (the builder's defaults omit the ground records):
+`PYTHONPATH=pipeline .venv/bin/python -m ghostmap.web.timemachine_scene --run artifacts/artsquad_modern/runs/6406b8eaae260163b303 --snapshot artifacts/artsquad_modern/snapshots/90d1dc5d21b4f9c5c08e15ab/snapshot.json --ground-run <the run mapped on the Gates photographs of that snapshot>`.
+
 Slides: `dist/timemachine-slides.html` (ten slides; the tower and Gates numbers are filled from
 `scene.json`). Check: `ghostmap/qa/timemachine_page.py` walks every chapter, year and slide
 (`artifacts/browser-qa/timemachine/report.json`, passed).

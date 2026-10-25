@@ -231,7 +231,7 @@ function groundRecord(b) {
   const biggest = rc.largest_fragment ? ` (the largest holds ${rc.largest_fragment.cameras} cameras and ${fmt(rc.largest_fragment.points)} points)` : '';
   const tried = rc.anchoring.filter(a => !a.usable);
   const why = tried.length ? ` Anchoring the largest fragment to the lidar through the footprint of ${tried[0].building} was attempted and is not usable (${tried[0].status}): the photographs are close-ups of the entrance, the stairs and the undercroft, not of the facades the lidar measures, and a fragment of a few cameras holds too little for the walls to fix a frame. No ground model is shown; the dates above are the ground record.` : '';
-  return `${who}${when}. ${rc.registered} of ${rc.photographs_mapped} register, in ${rc.fragments} fragment${rc.fragments === 1 ? '' : 's'}${biggest}.${why}`;
+  return `${who}${when}. Of the ${rc.photographs_mapped} in the training split after the duplicate screen, ${rc.registered} register, in ${rc.fragments} fragment${rc.fragments === 1 ? '' : 's'}${biggest}.${why}`;
 }
 function recordStrip(b) {
   const r = b.ground_record;
@@ -258,7 +258,7 @@ const chapters = [
       flyTo([c[0] + 60, c[1] + 40, t.ground], 900, 0.95, -1.9); setYear(year);
     } },
   { id: 'gates', title: '2 · Gates Hall', render() { buildingChapter('Bill and Melinda Gates Hall', 'A parking lot until 2012; a Thom Mayne building from 2014. Slide from 2007 to 2015 and watch the air photographs change; the volume is the lidar shape of the finished building.'); } },
-  { id: 'klarman', title: '3 · Klarman Hall', render() { buildingChapter('Klarman Hall', 'The courtyard behind Goldwin Smith Hall until the 2012 flight, excavation in the 2015 flight, a glass atrium from 2016.'); } },
+  { id: 'klarman', title: '3 · Klarman Hall', render() { buildingChapter('Klarman Hall', 'The courtyard behind Goldwin Smith Hall until the 2012 flight, under construction in the 2015 flight, a glass atrium from 2016.'); } },
   { id: 'tower', title: '4 · McGraw Tower', render() {
       const r = scene.reconstructions.find(x => x.anchored_through === 'McGraw Tower') || scene.reconstructions[0];
       const own = scene.photographers.filter(p => p.reconstruction === r.tag); const dated = own.filter(p => p.year);
