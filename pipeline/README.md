@@ -43,7 +43,7 @@ as a subprocess through its entry-point name.
 | surface | `surface/dense_support.py` | `audit_artsquad_dense_support.py` | Per-point view/source-family provenance of the fused cloud. |
 | | `surface/supported.py` | `build_artsquad_supported.py` | Family-supported surface fragments. |
 | | `surface/faces.py` | `index_artsquad_faces.py` | Face -> source-photo index for the viewer's click-through evidence. |
-| status | `status/contracts.py` | `artsquad_contracts.py` | Pure, fail-closed D0–R2 milestone evaluator (see `docs/plans/demo-delivery-contract.md`). |
+| status | `status/contracts.py` | `artsquad_contracts.py` | Pure, fail-closed evaluator of the six delivery milestones (see `docs/plans/demo-delivery-contract.md`). |
 | | `status/project_status.py` | `artsquad_status.py` | Build `artifacts/artsquad_modern/project-status.json`. |
 | web | `web/site.py` | `build_artsquad_site.py` | Validate a run and write the viewer data under `dist/assets/artsquad/`. |
 | | `web/local_preview.py` | `build_local_research_preview.py` | Private research preview under `artifacts/local_previews/`. |

@@ -8,7 +8,7 @@ dated measurements; re-check the files they cite before quoting them as current.
 
 | Document | Purpose |
 | --- | --- |
-| [demo-delivery-contract.md](plans/demo-delivery-contract.md) | Frozen D0/D1/D2/R1/D3/R2 acceptance contract (evaluated by `ghostmap/status/contracts.py`). |
+| [demo-delivery-contract.md](plans/demo-delivery-contract.md) | Frozen acceptance contract for the six delivery milestones (the document itself uses short milestone codes) (evaluated by `ghostmap/status/contracts.py`). |
 | [modern-artsquad-pipeline.md](plans/modern-artsquad-pipeline.md) | Modern-Arts-Quad-first scope and staged outputs M1.1–M1.7. |
 | [colmap-extension-plan.md](plans/colmap-extension-plan.md) | **2026-10-25 plan**: GhostMap as a COLMAP extension for the hacker presentation — insights, modules, kill tests, timeline, and the decisions log from executing it. |
 
@@ -27,11 +27,11 @@ Module-level map: [../pipeline/README.md](../pipeline/README.md).
 | Document | What it records |
 | --- | --- |
 | [artsquad-data-checkpoint.md](checkpoints/artsquad-data-checkpoint.md) | First frozen data snapshot (superseded). |
-| [artsquad-first-pilot.md](checkpoints/artsquad-first-pilot.md) | 46-image pilot run `8563d895`. |
-| [artsquad-local-checkpoint-145.md](checkpoints/artsquad-local-checkpoint-145.md) | **Latest completed run**: 145-record snapshot `b43ad69e`, run `2b7e3fa9` (6 disjoint components, 5-camera Goldwin-labelled surface). |
-| [artsquad-bridge-analysis.md](checkpoints/artsquad-bridge-analysis.md) | Why components did not merge; calibration-control run `bd12`. |
+| [artsquad-first-pilot.md](checkpoints/artsquad-first-pilot.md) | First 46-image learned pilot run. |
+| [artsquad-local-checkpoint-145.md](checkpoints/artsquad-local-checkpoint-145.md) | 145-record snapshot and its best learned run (6 disjoint fragments, 5-camera Goldwin-labelled surface). |
+| [artsquad-bridge-analysis.md](checkpoints/artsquad-bridge-analysis.md) | Why fragments did not merge; the fixed-radial calibration control run. |
 | [artsquad-provider-checkpoint.md](checkpoints/artsquad-provider-checkpoint.md) | Quad6K / DISCO provider recovery probes. |
-| [artsquad-tonight-draft.md](checkpoints/artsquad-tonight-draft.md) | Draft for the 228-record snapshot `e7cef2d8`; its run `1b72e8e6` stopped during matching and never completed. |
+| [artsquad-tonight-draft.md](checkpoints/artsquad-tonight-draft.md) | Draft for the 228-record snapshot; its first run stopped during matching (resumed 2026-10-25). |
 | [2026-10-25-colmap-extensions.md](checkpoints/2026-10-25-colmap-extensions.md) | **Latest**: EXIF-anchored calibration, lidar anchoring, cross-era resection certificates, the mirror-pose finding. |
 
 ## research/ — literature and direction

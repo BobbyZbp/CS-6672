@@ -82,7 +82,7 @@ CUDA wheel deliberately when installing.
 Components are reconstructed and shown separately; nothing aligns them without
 measured evidence. Status evaluation is fail-closed: unknown evidence never
 passes, and a working webpage is not a reconstruction. The acceptance contract
-(D0/D1/D2/R1/D3/R2; D1 window 2026-11-21 – 2026-12-05) is
+(six delivery milestones; the multi-building demo window is 2026-11-21 – 2026-12-05) is
 [docs/plans/demo-delivery-contract.md](docs/plans/demo-delivery-contract.md);
 stage outputs and recovery are in
 [docs/reference/artsquad-implementation.md](docs/reference/artsquad-implementation.md).
@@ -105,7 +105,7 @@ PYTHONPATH=pipeline .venv/bin/python -m ghostmap.web.ghostmap_scene    # data fo
 python3 -m http.server 8080 --directory dist
 # http://127.0.0.1:8080/ghostmap.html   live demo of the COLMAP extensions
 # http://127.0.0.1:8080/slides.html     presentation slides
-# http://127.0.0.1:8080/artsquad.html   Arts Quad Atlas (diagnostic workbench, not the D1 demo)
+# http://127.0.0.1:8080/artsquad.html   Arts Quad Atlas (diagnostic workbench, not the multi-building demo)
 # http://127.0.0.1:8080/surface-lab.html  legacy OpenMVS Surface Lab
 # http://127.0.0.1:8080/baseline-v1.html  frozen v1 Boardman baseline
 .venv/bin/python -m unittest discover -s tests -p 'test_artsquad*.py'   # 340 tests
