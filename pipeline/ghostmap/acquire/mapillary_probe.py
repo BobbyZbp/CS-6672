@@ -29,6 +29,12 @@ ARTS_QUAD_SECTOR = (0.0, 110.0)
 FACING_TOLERANCE_DEG = 40.0
 
 
+def user_token():
+    """User access token saved by mapillary_login (needed for image metadata and downloads)."""
+    path = ROOT / '.secrets/mapillary-user.json'
+    return json.loads(path.read_text())['access_token'] if path.exists() else None
+
+
 def token():
     if os.environ.get('MAPILLARY_TOKEN'): return os.environ['MAPILLARY_TOKEN'].strip()
     path = ROOT / '.secrets/mapillary.env'
