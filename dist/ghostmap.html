@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GhostMap — the surviving world as a calibration target</title>
+<link rel="stylesheet" href="ghostmap.css">
+<script type="importmap">{"imports": {"three": "./vendor/three.module.js"}}</script>
+</head>
+<body>
+<header>
+  <h1>GhostMap</h1>
+  <p class="thesis">COLMAP, extended with what the world already knows — measured lidar ground, EXIF focal lengths and people — to ask what the surviving Arts Quad can prove about Boardman Hall, demolished in 1959.</p>
+</header>
+<main>
+  <section id="viewport" aria-label="3D view">
+    <canvas id="scene"></canvas>
+    <div id="legend"></div>
+    <div id="status" role="status">Loading measured data…</div>
+  </section>
+  <aside id="panel">
+    <nav id="chapters" aria-label="Chapters"></nav>
+    <article id="chapter-body"></article>
+  </aside>
+</main>
+<footer id="attribution"></footer>
+<script type="module" src="ghostmap.js"></script>
+</body>
+</html>
