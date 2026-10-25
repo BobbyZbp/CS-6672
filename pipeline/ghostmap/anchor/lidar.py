@@ -127,7 +127,7 @@ def fill_nearest(grid, max_passes=64):
     return out
 
 
-def build(output=ROOT / 'data/lidar/NY_FingerLakes_1_2020', cell=0.5):
+def build(output=ROOT / 'data/lidar/NY_FingerLakes_1_2020', cell=0.5, centre_latlon=QUAD_CENTRE_LATLON, half=HALF_SIZE_M):
     import laspy
     from pyproj import Transformer
 
@@ -135,7 +135,7 @@ def build(output=ROOT / 'data/lidar/NY_FingerLakes_1_2020', cell=0.5):
     ept_size, ept_sha = fetch(EPT + '/ept.json', output / 'ept.json')
     ept = json.loads((output / 'ept.json').read_text())
     if ept['srs'].get('horizontal') != '3857': raise ValueError('Unexpected EPT horizontal reference system')
-    box_utm = utm_box(); box_merc = mercator_box(box_utm)
+    box_utm = utm_box(centre_latlon, half); box_merc = mercator_box(box_utm)
     hierarchy_files = {}
 
     def load_hierarchy(key):
@@ -174,7 +174,7 @@ def build(output=ROOT / 'data/lidar/NY_FingerLakes_1_2020', cell=0.5):
               'source': EPT, 'license': 'USGS 3DEP lidar: public domain (U.S. Government work)',
               'ept_json': {'bytes': ept_size, 'sha256': ept_sha}, 'hierarchy_files': hierarchy_files, 'nodes': records,
               'source_crs': 'EPSG:3857', 'output_crs': UTM, 'vertical': 'as delivered by 3DEP (metres)',
-              'box_utm': list(box_utm), 'box_web_mercator': list(box_merc), 'centre_latlon': list(QUAD_CENTRE_LATLON),
+              'box_utm': list(box_utm), 'box_web_mercator': list(box_merc), 'centre_latlon': list(centre_latlon), 'half_size_m': half,
               'raster_cell_m': cell, 'raster_shape': list(surface.shape), 'points_kept': int(len(points)),
               'class_counts': classes, 'ground_cells_measured_fraction': float(np.isfinite(rasterize(e[ground_mask], n[ground_mask], z[ground_mask], box_utm, cell, 'min')).mean()),
               'note': 'Surface = highest non-noise return per cell; ground = lowest ground-class return, gaps filled from neighbours.'}
@@ -186,8 +186,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, default=ROOT / 'data/lidar/NY_FingerLakes_1_2020')
     parser.add_argument('--cell', type=float, default=0.5)
+    parser.add_argument('--centre', type=float, nargs=2, default=list(QUAD_CENTRE_LATLON), metavar=('LAT', 'LON'))
+    parser.add_argument('--half', type=float, default=HALF_SIZE_M, help='half size of the box in metres')
     args = parser.parse_args()
-    report = build(args.output, args.cell)
+    report = build(args.output, args.cell, tuple(args.centre), args.half)
     print(json.dumps({k: report[k] for k in ('points_kept', 'class_counts', 'raster_shape')}, indent=2))
 
 

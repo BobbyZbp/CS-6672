@@ -51,6 +51,8 @@ def api(params):
             time.sleep(max(0,1.5-(time.monotonic()-LAST_API_REQUEST)))
             LAST_API_REQUEST=time.monotonic()
             with urllib.request.urlopen(req,timeout=40) as r:payload=json.load(r)
+            if payload.get('error',{}).get('code') in {'cirrussearch-too-busy-error','maxlag'} and attempt<6:
+                time.sleep(15*(attempt+1));continue  # transient search overload: wait and retry
             if 'error' in payload:raise RuntimeError(str(payload['error']))
             cached.write_text(json.dumps(payload,ensure_ascii=False)+'\n')
             return payload

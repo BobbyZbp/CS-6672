@@ -8,9 +8,15 @@ question: localizing archival photographs and recovering demolished structures
 such as Boardman Hall (now the Olin Library site). Historical work is deferred
 until the modern scene is validated.
 
-**Status (2026-10-25).** The project is now a set of COLMAP extensions for the
-CS 6672 hacker presentation ([plan](docs/plans/colmap-extension-plan.md),
-[latest results](docs/checkpoints/2026-10-25-colmap-extensions.md)):
+**Direction (2026-10-25 evening).** The project is now a **twenty-year Cornell
+time machine** for the CS 6672 hacker presentation: one COLMAP model across
+2002-2026 with per-point existence intervals, plus dated public aerial imagery
+and lidar; Gates Hall and Klarman Hall rise, McGraw Tower anchors the timeline
+([plan](docs/plans/cornell-time-machine-plan.md)). Boardman Hall is kept only
+as the limits chapter: its postcards cannot be placed correctly through the
+surviving buildings.
+
+**COLMAP extensions built so far** ([results](docs/checkpoints/2026-10-25-colmap-extensions.md)):
 
 - EXIF-anchored calibration removes most focal blow-ups but does not merge the
   fragments (missing views, not calibration, split the scene);

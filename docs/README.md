@@ -10,7 +10,8 @@ dated measurements; re-check the files they cite before quoting them as current.
 | --- | --- |
 | [demo-delivery-contract.md](plans/demo-delivery-contract.md) | Frozen acceptance contract for the six delivery milestones (the document itself uses short milestone codes) (evaluated by `ghostmap/status/contracts.py`). |
 | [modern-artsquad-pipeline.md](plans/modern-artsquad-pipeline.md) | Modern-Arts-Quad-first scope and staged outputs M1.1–M1.7. |
-| [colmap-extension-plan.md](plans/colmap-extension-plan.md) | **2026-10-25 plan**: GhostMap as a COLMAP extension for the hacker presentation — insights, modules, kill tests, timeline, and the decisions log from executing it. |
+| [cornell-time-machine-plan.md](plans/cornell-time-machine-plan.md) | **Current plan (2026-10-25 evening)**: a twenty-year Cornell time machine on one COLMAP model with dated aerial and lidar layers; data check, chapters, pipeline, gates, timeline, decisions log. |
+| [colmap-extension-plan.md](plans/colmap-extension-plan.md) | 2026-10-25 plan for the COLMAP extensions (EXIF calibration, lidar anchoring, cross-era certificates); superseded as the main line, its modules are reused. |
 
 ## reference/ — how the current pipeline works
 

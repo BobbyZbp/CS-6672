@@ -59,7 +59,12 @@ referenced them): `cpu_mvs_joint_historical/`, `cpu_mvs_target_v2/`,
 `work_v11/`, `work_v12/`, `work_focal_prior/`, `experiment_v11/`,
 `experiment_v12/`, `experiment_focal_prior/` (about 0.36 GB). Also deleted on 2026-10-25, under the same approval, to make room for dense reconstruction: `cpu_mvs_modern_v2/` and `cpu_mvs_masked12_v3/` (about 0.6 GB; built copies remain in `dist/assets/repair/` for the Surface Lab page; rebuilding them needs `run_repair.sh`).
 
-Still present and worth a later decision: the two error runs under `runs/`
-(0.4 GB, kept as evidence of a report/model mismatch), `demo-packages/`
-(rebuildable, 60 M), and the repair outputs above, which `dist/assets/repair/`
-duplicates (about 1.5 GB in total).
+Deleted 2026-10-25 evening to make room for the time-machine acquisition
+(the acquirer refuses to download below 5 GB free): the staged image copies,
+feature caches, holdout and query folders of every finished run except the
+current demo run (reports, configurations and native models are kept, so the
+numbers remain reproducible from `report.json`; features are regenerable);
+the legacy OpenMVS outputs `cpu_mvs_modern_full_v2/`, `cpu_mvs_masked08_v3/`,
+`cpu_mvs_target_fixed08_v2/`, `cpu_mvs_target_fixed_v2/` and
+`cpu_mvs_archive_target_v2/` (their built copies remain under
+`dist/assets/repair/` for the Surface Lab page); and the pip cache.

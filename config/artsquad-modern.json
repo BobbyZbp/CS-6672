@@ -90,6 +90,12 @@
       "name": "Olin Library",
       "role": "context",
       "category": "Olin Library (Cornell University)"
+    },
+    {
+      "id": "gates",
+      "name": "Gates Hall",
+      "role": "context",
+      "category": "Bill & Melinda Gates Hall"
     }
   ],
   "context_searches": [
@@ -110,6 +116,24 @@
       "lat": 42.449,
       "lon": -76.4838,
       "radius_m": 250
+    },
+    {
+      "label": "Gates Hall site (built 2012-2014)",
+      "lat": 42.4449,
+      "lon": -76.4812,
+      "radius_m": 150
+    },
+    {
+      "label": "Klarman Hall site (built 2014-2016), behind Goldwin Smith Hall",
+      "lat": 42.4491,
+      "lon": -76.4832,
+      "radius_m": 120
+    },
+    {
+      "label": "Milstein Hall site (built 2009-2011)",
+      "lat": 42.451,
+      "lon": -76.4836,
+      "radius_m": 120
     }
   ],
   "policies": {
