@@ -130,3 +130,6 @@ Two consequences shape the design:
    finished runs were deleted (reports and native models kept), together with
    five legacy OpenMVS output directories whose built copies remain under
    `dist/assets/repair/`, and the pip cache. Recorded in `artifacts/README.md`.
+4. **Aerial roof-presence test is a diagnostic, not the decision.** The own-outline edge score shows the change at every site (Klarman 2.0-2.4 before 2015, 3.7-4.1 from 2015; Gates 2.4-3.1 before 2015, 4.0-5.7 from 2015; Milstein 2.3-3.0 before 2015, 3.3-4.8 after), but stable buildings vary between flight years by as much, so no global or per-building threshold separates the two groups cleanly at this resolution. The timeline therefore rests on three sources shown side by side: documented dates (Wikipedia: Gates Hall construction March 2012, dedicated October 2014; Klarman Hall completed 2016; Milstein Hall opened 2011), the per-year aerial crops for the reader to see, and the first year a registered ground photograph observes the building. The automatic score is reported with the crops.
+5. **Footprints now cover 900 m around the campus centre** (1,078 buildings, including Gates Hall) because the first fetch box stopped 60 m short of the Gates site; raster helpers skip footprints outside their box.
+

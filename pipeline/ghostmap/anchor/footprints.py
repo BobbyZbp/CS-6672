@@ -19,6 +19,7 @@ from ghostmap.anchor.lidar import AGENT, UTM, QUAD_CENTRE_LATLON, HALF_SIZE_M
 from ghostmap.paths import ROOT
 
 OVERPASS = 'https://overpass-api.de/api/interpreter'
+MIRRORS = ['https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter']
 
 
 def bbox_latlon(centre=QUAD_CENTRE_LATLON, half=HALF_SIZE_M):
@@ -57,14 +58,20 @@ def to_utm_polygons(payload):
     return buildings
 
 
-def build(output=ROOT / 'data/footprints'):
+def build(output=ROOT / 'data/footprints', centre=QUAD_CENTRE_LATLON, half=HALF_SIZE_M):
     output = Path(output); output.mkdir(parents=True, exist_ok=True)
-    s, w, n, e = bbox_latlon()
+    s, w, n, e = bbox_latlon(centre, half)
     query = f'[out:json][timeout:60];(way["building"]({s},{w},{n},{e});way["building:part"]({s},{w},{n},{e});relation["building"]({s},{w},{n},{e}););(._;>;);out body;'
     raw = output / 'overpass-response.json'
     if not raw.exists():
-        request = urllib.request.Request(OVERPASS, data=urllib.parse.urlencode({'data': query}).encode(), headers={'User-Agent': AGENT})
-        with urllib.request.urlopen(request, timeout=120) as response: raw.write_bytes(response.read())
+        last = None
+        for endpoint in [OVERPASS] + MIRRORS:  # public mirrors of the same OSM data
+            try:
+                request = urllib.request.Request(endpoint, data=urllib.parse.urlencode({'data': query}).encode(), headers={'User-Agent': AGENT})
+                with urllib.request.urlopen(request, timeout=180) as response: raw.write_bytes(response.read())
+                break
+            except Exception as error: last = error
+        else: raise RuntimeError(f'Overpass unavailable on every endpoint: {last}')
     payload = json.loads(raw.read_text())
     buildings = to_utm_polygons(payload)
     result = {'schema_version': 1, 'created_utc': datetime.now(timezone.utc).isoformat(), 'crs': UTM,
@@ -85,7 +92,10 @@ def named(buildings, *names):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, default=ROOT / 'data/footprints')
-    result = build(parser.parse_args().output)
+    parser.add_argument('--centre', type=float, nargs=2, default=list(QUAD_CENTRE_LATLON), metavar=('LAT', 'LON'))
+    parser.add_argument('--half', type=float, default=HALF_SIZE_M)
+    args = parser.parse_args()
+    result = build(args.output, tuple(args.centre), args.half)
     print(len(result['buildings']), 'footprints:', sorted({b['name'] for b in result['buildings'] if b['name']}))
 
 

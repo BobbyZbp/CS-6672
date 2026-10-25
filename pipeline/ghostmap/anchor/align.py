@@ -116,12 +116,19 @@ def robust_mean_direction(vectors, iterations=5, cutoff_deg=20.):
     return mean, spread
 
 
+def _touches(ring, box):
+    """Does the ring's bounding box meet the raster box? (1,000 campus footprints; most are far away.)"""
+    r = np.asarray(ring)
+    return r[:, 0].max() >= box[0] and r[:, 0].min() <= box[2] and r[:, 1].max() >= box[1] and r[:, 1].min() <= box[3]
+
+
 class WallField:
     """Truncated distance (metres) to footprint wall lines on a raster."""
 
     def __init__(self, rings, box, cell=WALL_CELL):
         from scipy.ndimage import distance_transform_edt
         self.box, self.cell = box, cell
+        rings = [r for r in rings if _touches(r, box)]
         cols = int(np.ceil((box[2] - box[0]) / cell)); rows = int(np.ceil((box[3] - box[1]) / cell))
         walls = np.zeros((rows, cols), bool)
         for ring in rings:
@@ -175,7 +182,8 @@ class InsideMask:
         e = box[0] + (np.arange(cols) + .5) * cell; n = box[3] - (np.arange(rows) + .5) * cell
         grid = np.column_stack([np.repeat(e[None], rows, 0).ravel(), np.repeat(n[:, None], cols, 1).ravel()])
         mask = np.zeros(rows * cols, bool)
-        for ring in rings: mask |= MPath(np.asarray(ring)).contains_points(grid)
+        for ring in rings:
+            if _touches(ring, box): mask |= MPath(np.asarray(ring)).contains_points(grid)
         self.mask = mask.reshape(rows, cols)
 
     def __call__(self, en):
