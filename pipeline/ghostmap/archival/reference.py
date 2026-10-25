@@ -24,7 +24,9 @@ class Reference:
         if not self.report.get('metric_frame_usable'): raise ValueError('Anchored frame is not usable for metric work')
         self.model = pycolmap.Reconstruction(self.report['anchored_model'])
         self.origin = np.asarray(self.report['local_frame']['origin_utm18n'])
-        rasters = np.load(LIDAR / 'quad-rasters-utm18n.npz')
+        # The lidar crop the anchor used (the Quad crop unless the report names another, e.g. the Gates site).
+        crop = Path(self.report['lidar_report']).parent if self.report.get('lidar_report') else LIDAR
+        rasters = np.load(crop / 'quad-rasters-utm18n.npz')
         self.box, self.cell = tuple(rasters['box']), float(rasters['cell'])
         self.ground_raster = rasters['ground']; self.surface_raster = fill_nearest(rasters['surface'])
         self._lookup = raster_lookup

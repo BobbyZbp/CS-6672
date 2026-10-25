@@ -115,8 +115,10 @@ def build(output=OUT, anchored_runs=None):
     # Reconstructions with intervals.
     reconstructions, photographers = [], []
     ground_first_seen = {}
-    for run in (anchored_runs or []):
-        report = next(iter(sorted((Path(run) / 'anchor').glob('*/report.json'))))
+    # Every fragment of every run whose anchored frame is usable (a fragment with 'anchoring attempted;
+    # frame not usable' stays out of the scene).
+    for run, report in [(r, p) for r in (anchored_runs or []) for p in sorted((Path(r) / 'anchor').glob('*/report.json'))]:
+        if not json.loads(report.read_text()).get('metric_frame_usable'): continue
         ref = Reference(report)
         comp = report.parent.name
         intervals_path = Path(run) / 'chronology' / f'{comp}-intervals.json'
@@ -132,7 +134,7 @@ def build(output=OUT, anchored_runs=None):
                 r = by_id.get(int(i), {})
                 first[k] = r.get('first_seen') or 0; last[k] = r.get('last_seen') or 0
             for name, b in intervals['buildings'].items(): ground_first_seen[name] = b
-        tag = Path(run).name[:8]
+        tag = f'{Path(run).name[:8]}-{comp}'
         xyz.tofile(output / f'points-{tag}.f32'); rgb.tofile(output / f'points-{tag}.u8')
         first.tofile(output / f'points-{tag}-first.i16'); last.tofile(output / f'points-{tag}-last.i16')
         snapshot = json.loads(Path(json.loads((Path(run) / 'report.json').read_text())['snapshot_path']).read_text())
@@ -152,7 +154,7 @@ def build(output=OUT, anchored_runs=None):
         reconstructions.append({'tag': tag, 'run': str(run), 'anchor_report': str(report), 'intervals_report': str(intervals_path) if intervals else None,
                                 'points': len(ids), 'dated_photographs': intervals['dated_photographs'] if intervals else None,
                                 'xyz_url': f'points-{tag}.f32', 'rgb_url': f'points-{tag}.u8', 'first_url': f'points-{tag}-first.i16', 'last_url': f'points-{tag}-last.i16',
-                                'scale_status': ref.report['scale_status']})
+                                'scale_status': ref.report['scale_status'], 'anchored_through': ref.report.get('landmark_building')})
 
     # Buildings: footprints near either site, with documented dates where known.
     documented = {b['footprint']: b for b in timeline['buildings']}

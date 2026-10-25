@@ -227,8 +227,10 @@ def acquire(inventory,root,working,priority=()):
     # Commons throttles originals to about one per ten minutes, so the targets the
     # current work needs come first (the live config's 'download_priority', since the
     # config stored in the inventory predates it); order is otherwise kept.
-    priority=set(priority)
-    pages=sorted(inventory['pages'],key=lambda p:0 if priority&set(p.get('discovery',{}).get('targets',[])) else 1)
+    priority=list(priority)
+    def rank(page):  # position of the page's first-listed target in the priority list; unlisted pages last
+        return min([priority.index(t) for t in page.get('discovery',{}).get('targets',[]) if t in priority]+[len(priority)])
+    pages=sorted(inventory['pages'],key=rank)
     for page in pages:
         if not page['admission']['eligible']:continue
         info=page['imageinfo'][0];meta=info.get('extmetadata',{});name=safe_name(page,info['mime']);path=originals/name

@@ -230,7 +230,7 @@ const chapters = [
   { id: 'gates', title: '2 · Gates Hall', render() { buildingChapter('Bill and Melinda Gates Hall', 'A parking lot until 2012; a Thom Mayne building from 2014. Slide from 2007 to 2015 and watch the air photographs change; the volume is the lidar shape of the finished building.'); } },
   { id: 'klarman', title: '3 · Klarman Hall', render() { buildingChapter('Klarman Hall', 'The courtyard behind Goldwin Smith Hall until the 2012 flight, excavation in the 2015 flight, a glass atrium from 2016.'); } },
   { id: 'tower', title: '4 · McGraw Tower', render() {
-      const r = scene.reconstructions[0]; const dated = scene.photographers.filter(p => p.year);
+      const r = scene.reconstructions.find(x => x.anchored_through === 'McGraw Tower') || scene.reconstructions[0]; const dated = scene.photographers.filter(p => p.year);
       const counts = {}; for (const p of dated) counts[p.year] = (counts[p.year] || 0) + 1;
       const maxc = Math.max(1, ...Object.values(counts));
       body.innerHTML = `<h2>McGraw Tower: the thing that does not change</h2>
