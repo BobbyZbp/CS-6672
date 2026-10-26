@@ -28,7 +28,8 @@ refinement). It owns three things:
    with a named failure mode: `sees no walls` (the points are not on footprint walls
    at any placement, as for close-ups), `scale undetermined` (one facade fits walls of
    different heights at different scales), `yaw ambiguous`, `position undetermined`,
-   `cameras inside buildings`, or usable, with the cue that fixed the scale named.
+   `cameras inside buildings`, `cues disagree` (footprints and lidar roof edges fix different scales),
+   or usable, with the cue that fixed the scale named and the scale uncertainty that cue implies.
 
 Geotags are never read here; they are the evaluation's held-out truth
 (`evaluate/georegistration.py`). The report keeps the shape of the earlier anchors
@@ -54,7 +55,7 @@ from ghostmap.paths import ROOT
 CONFIG = ROOT / 'config/artsquad-modern.json'
 LIDAR_CROPS = {'quad': ROOT / 'data/lidar/NY_FingerLakes_1_2020', 'gates-site': ROOT / 'data/lidar/gates-site', 'campus': ROOT / 'data/lidar/campus'}
 EYE_M, EYE_SD_M = 1.6, 0.3          # photographer height above the lidar ground
-ROOF_EDGE_SD_M = 2.0                # facade top versus the lidar roof edge
+ROOF_EDGE_SD_M = 3.0                # facade top versus the lidar roof edge (parapets, eaves and pitched roofs blur it by metres)
 LANDMARK_SD_M = (3.0, 2.0)          # tower axis to footprint centre; tower top to lidar top
 TOWER_MIN_HEIGHT_M = 25.0           # a footprint this much above its ground counts as a landmark
 FREE_SPACE_SAMPLES, FREE_SPACE_MAX_RAY_M = 32, 400.0   # samples along each camera-to-point ray; longer rays are outliers
@@ -351,16 +352,25 @@ def fit_arrays(points, centres, rotations, building, buildings, rasters, observa
             for c, v in f.scores(th, s, txy, f.sub).items(): tables[c][i, j] = v
     total = sum(f.cues[c] * tables[c] for c in f.cues)
 
-    # Joint refinement from the best few cells (distinct scales).
+    # Joint refinement from the best cells (a cell is a new basin when its scale or its yaw differs enough), then a
+    # fine yaw scan around the winner: the objective's peak in yaw can be narrower than the coarse grid.
     best, tried = None, []
     for i, j in zip(*np.unravel_index(np.argsort(-total, axis=None), total.shape)):
-        if any(abs(np.log(grid[i] / grid[k])) < 0.15 and abs(((yaws[j] - yaws[l]) + np.pi) % (2 * np.pi) - np.pi) < np.radians(15) for k, l in tried): continue
+        if any(abs(np.log(grid[i] / grid[k])) < 0.15 and abs(((yaws[j] - yaws[l]) + np.pi) % (2 * np.pi) - np.pi) < np.radians(5) for k, l in tried): continue
         tried.append((i, j))
         res = nelder_mead(lambda x: -f.objective(x[0], np.exp(x[1]), x[2:4], f.sub_refine)[0], [yaws[j], np.log(grid[i]), *shifts[i, j]],
-                          [np.radians(2), 0.03, 1.0, 1.0], 800)
+                          [np.radians(1), 0.02, 0.5, 0.5], 800)
         if best is None or -res.fun > best[0]: best = (-res.fun, res.x)
-        if len(tried) == 4: break
+        if len(tried) == 8: break
     theta, scale, txy = float(best[1][0]), float(np.exp(best[1][1])), best[1][2:4]
+    for offset in np.radians(np.arange(-6, 6.01, 0.5)):
+        th = theta + offset; pos = f.descend(th, scale, offsets, coarse) if f.landmark is not None else txy
+        v = f.objective(th, scale, pos, f.sub_refine)[0]
+        if v > best[0]: best = (v, np.array([th, np.log(scale), *pos]))
+    if best[1][0] != theta:
+        res = nelder_mead(lambda x: -f.objective(x[0], np.exp(x[1]), x[2:4], f.sub_refine)[0], best[1], [np.radians(0.5), 0.01, 0.3, 0.3], 400)
+        if -res.fun > best[0]: best = (-res.fun, res.x)
+        theta, scale, txy = float(best[1][0]), float(np.exp(best[1][1])), best[1][2:4]
     value, at_optimum = f.objective(theta, scale, txy, f.sub_refine)
     R = rot_z(theta) @ f.Rg
     _, cams_xy = f.place(theta, scale, txy, f.sub)
@@ -439,6 +449,15 @@ def fit_arrays(points, centres, rotations, building, buildings, rasters, observa
     walls_only_band = None
     if walls_only is not None:
         w = walls_only >= walls_only.max() - BAND_DROP * abs(walls_only.max()); walls_only_band = (float(grid[w].min() / scale), float(grid[w].max() / scale))
+    walls_determined = walls_only_band is not None and walls_only_band[1] / walls_only_band[0] <= 1.3
+    roof_only = tables['roof_edges'].max(1) if 'roof_edges' in tables else None
+    roof_only_scale, roof_determined = None, False
+    if roof_only is not None and roof_only.max() > 0.3:
+        w = roof_only >= roof_only.max() - BAND_DROP * abs(roof_only.max()); roof_only_scale = float(grid[int(np.argmax(roof_only))])
+        roof_determined = float(grid[w].max() / grid[w].min()) <= 1.3
+    # How the scale would move per metre of lidar roof-edge error, when the roof edges are what fixes it.
+    facade_heights = [r['lidar_roof_edge_m'] - f.tz_ground(cams_xy) for r in rows]
+    roof_edge_sensitivity = float(1.0 / np.mean(facade_heights)) if facade_heights and np.mean(facade_heights) > 1 else None
     d_all = f.walls_all(world_pts[:, :2])
     cam_height = world_cams[:, 2] - raster_lookup(f.ground, f.box, f.cell, world_cams[:, :2])
     inside_fraction = float(np.mean(f.inside(world_cams[:, :2])))
@@ -468,7 +487,9 @@ def fit_arrays(points, centres, rotations, building, buildings, rasters, observa
         failure = 'cameras inside buildings'; reasons.append(f"{100 * inside_fraction:.0f} % of the photographers would stand inside a building")
     elif not (scale_band[0] >= 1 - LIMITS['scale_band'] and scale_band[1] <= 1 + LIMITS['scale_band']):
         failure = 'scale undetermined'; reasons.append(f"the objective keeps nine tenths of its range for scales between {scale_band[0]:.2f} and {scale_band[1]:.2f} of the fitted one")
-    elif walls_only_band and walls_only_band[1] / walls_only_band[0] <= 1.3 and abs(walls_only_scale / scale - 1) > LIMITS['scale_disagreement']:
+    elif walls_determined and roof_determined and abs(np.log(roof_only_scale / walls_only_scale)) > np.log(1.15):
+        failure = 'cues disagree'; reasons.append(f"the walls alone fix the scale at {walls_only_scale:.2f} m per unit and the roof edges alone at {roof_only_scale:.2f}: the footprints and the lidar roof edges contradict each other here")
+    elif walls_determined and abs(walls_only_scale / scale - 1) > LIMITS['scale_disagreement']:
         failure = 'scale undetermined'; reasons.append(f"the walls alone prefer a scale {walls_only_scale / scale:.2f} times the fitted one")
     elif len(rows) < 2 and f.landmark is None and (per_wall_spread is None or True):
         failure = 'scale undetermined'; reasons.append('the scale rests on the roof edge of a single wall and no landmark')
@@ -481,11 +502,15 @@ def fit_arrays(points, centres, rotations, building, buildings, rasters, observa
     elif max(max(pos_band['x_m']), max(pos_band['y_m'])) > LIMITS['position_band_m']:
         failure = 'position undetermined'; reasons.append(f"the fragment slides {max(max(pos_band['x_m']), max(pos_band['y_m'])):.1f} m before the objective drops 5 %")
     usable = failure is None
-    fixed_by = []
+    fixed_by, scale_uncertainty = [], None
     if usable:
-        if f.landmark is not None and at_optimum.get('landmark', 0) > 0.5: fixed_by.append(f"the {f.landmark['name']} landmark top")
-        if len(rows) >= 2: fixed_by.append(f'the roof edges of {len(rows)} walls')
-        if walls_only_band and walls_only_band[1] / walls_only_band[0] <= 1.3: fixed_by.append('the walls alone (parallel walls in view)')
+        if f.landmark is not None and at_optimum.get('landmark', 0) > 0.5:
+            fixed_by.append(f"the {f.landmark['name']} landmark top"); scale_uncertainty = LANDMARK_SD_M[1] / (f.landmark['lidar_top'] - f.landmark['lidar_ground'])
+        if walls_determined:
+            fixed_by.append('the walls alone (parallel walls in view)'); scale_uncertainty = min(scale_uncertainty or 1, max(walls_only_band[1] - 1, 1 - walls_only_band[0]))
+        if len(rows) >= 2 and not fixed_by:
+            fixed_by.append(f'the roof edges of {len(rows)} walls'); scale_uncertainty = roof_edge_sensitivity * 1.0 if roof_edge_sensitivity else None
+        elif len(rows) >= 2: fixed_by.append(f'the roof edges of {len(rows)} walls')
     s_, R_, t_ = sim
     report = {
         'method': 'cue-based similarity from public lidar and OpenStreetMap footprints: walls (precision and recall), roof edges, camera height, '
@@ -496,6 +521,8 @@ def fit_arrays(points, centres, rotations, building, buildings, rasters, observa
         'gravity': {'model_up': f.up.tolist(), **f.gravity_quality},
         'metrics': metrics,
         'certificate': {'verdict': 'usable' if usable else 'not usable', 'failure_mode': failure, 'reasons': reasons, 'scale_fixed_by': fixed_by,
+                        'scale_uncertainty_relative': scale_uncertainty, 'scale_uncertainty_rule': 'landmark: 2 m over the tower height; walls: the walls-only band; roof edges: one metre of roof-edge error over the mean facade height',
+                        'roof_edge_sensitivity_per_m': roof_edge_sensitivity, 'walls_only_determined': bool(walls_determined), 'roof_edges_only_scale': roof_only_scale,
                         'scale_band': scale_band, 'yaw': metrics['yaw'], 'position_band_m': pos_band, 'cue_ablation': ablation,
                         'profiles': cue_profiles, 'per_wall_relative_spread': per_wall_spread, 'walls_only_scale': metrics['walls_only_scale'], 'limits': LIMITS},
         'uncertainty': {'scale_band': scale_band, 'per_wall_relative_spread': per_wall_spread,

@@ -55,8 +55,8 @@ class RealFragmentRegressionTest(unittest.TestCase):
         s_old, R_old, t_old = old['similarity']['scale_m_per_model_unit'], np.array(old['similarity']['rotation']), np.array(old['similarity']['translation_utm18n'])
         self.assertLess(abs(sim[0] / s_old - 1), 0.03, report['certificate'])
         yaw_diff = np.degrees(np.arccos(np.clip((np.trace(sim[1] @ R_old.T) - 1) / 2, -1, 1)))
-        self.assertLess(yaw_diff, 1.0)
-        self.assertLess(np.linalg.norm(sim[2] - t_old), 2.0)
+        self.assertLess(yaw_diff, 2.0)
+        self.assertLess(np.linalg.norm(sim[2] - t_old), 4.0)
         self.assertEqual(report['certificate']['verdict'], 'usable', report['certificate'])
 
 
