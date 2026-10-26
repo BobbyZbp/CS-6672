@@ -34,8 +34,10 @@ const controls = new OrbitControls(camera, canvas); controls.enableDamping = tru
 world.add(new THREE.HemisphereLight(0xe8f0f8, 0x6f7d5c, 0.95));
 const sun = new THREE.DirectionalLight(0xfff1dc, 1.7); sun.position.set(-260, -340, 520);
 sun.castShadow = !SOFTWARE; sun.shadow.mapSize.set(4096, 4096); sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.6;
-Object.assign(sun.shadow.camera, { left: -520, right: 520, top: 520, bottom: -520, near: 10, far: 2000 });
+Object.assign(sun.shadow.camera, { left: -560, right: 560, top: 560, bottom: -560, near: 10, far: 2400 });
 world.add(sun); world.add(sun.target);
+// The shadow box follows the light's axis: centre it between the Quad and the Gates Hall site so both cast shadows.
+const sceneCentre = new THREE.Vector3(260, 120, 245); sun.target.position.copy(sceneCentre); sun.position.add(sceneCentre);
 
 let flight = null;
 function flyTo(target, distance, elevation = 0.7, azimuth = -2.0, seconds = 1.4) {
@@ -523,7 +525,7 @@ const chapters = [
          `${refused.length} of ${frs.length} campus fragments refused, each with a stated reason`, go('refuse', 'chapter 3')],
         ['Disconnected fragments, each in its own frame.',
          'One shared world frame.',
-         agree.length ? `the tower in separate fragments coincides within ${fmt(Math.min(...agree), 1)}–${fmt(Math.max(...agree), 1)} m` : '', go('refuse', 'chapter 3')],
+         agree.length ? `wherever the tower pins another fragment, its tower points coincide within ${fmt(Math.min(...agree), 1)}–${fmt(Math.max(...agree), 1)} m` : '', go('refuse', 'chapter 3')],
         ['Splats trained on its output float paint in mid-air, unchecked.',
          'The lidar as referee and as teacher.',
          plain && taught ? `on lidar surfaces ${pct(plain.free_space.on_surfaces)} → ${pct(taught.free_space.on_surfaces)}; under the ground ${pct(plain.free_space.buried)} → ${pct(taught.free_space.buried)}` : '', go('referee', 'chapters 4–5')],

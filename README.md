@@ -10,6 +10,18 @@ hand-picked correspondences. Built for the CS 6672 hacker presentation; the rese
 is planned towards a CVPR 2027 workshop paper
 ([plan](docs/plans/georegistration-paper-plan.md)).
 
+**Why this is a COLMAP project.** Everything starts from COLMAP's cameras and points (pycolmap with
+SuperPoint and LightGlue). On internet photographs of a real place five of its limits show, and each part
+of GhostMap is built past one of them:
+
+| COLMAP on internet photographs | GhostMap adds |
+| --- | --- |
+| a model in its own frame (no scale, north or up); a map needs GPS or hand-picked control points | placement without GPS inside public lidar and OpenStreetMap footprints |
+| never says when a placement cannot be trusted | a certificate: which cue fixed what, or a refusal with the reason |
+| disconnected fragments, each in its own frame | one shared world frame |
+| splats trained on its output float paint in mid-air, unchecked | the lidar as referee and as teacher |
+| one static scene: twenty years blended into one moment | years per point; dated buildings and aerial flights |
+
 **Where** — placement with a certificate ([measurements](docs/checkpoints/2026-10-26-georegistration.md)):
 
 - of 393 campus photographs only 129 carry GPS, and the tower-and-library fragment's 63
@@ -42,7 +54,7 @@ archival-postcard certificates (every Boardman Hall pose is a mirror image, so n
 Boardman is claimed) ([results](docs/checkpoints/2026-10-25-colmap-extensions.md)).
 
 Live demo: `http://127.0.0.1:8080/timemachine.html` (serve `dist/`, below; ← → step through
-the ten chapters, F full screen). Slides: `http://127.0.0.1:8080/presentation.html` (arrows,
+the chapters, from 0 "Where COLMAP stops" to 10, F full screen). Slides: `http://127.0.0.1:8080/presentation.html` (arrows,
 F full screen, N speaker notes); talk track: `docs/presentation/talk-track.md`.
 
 ## Repository layout

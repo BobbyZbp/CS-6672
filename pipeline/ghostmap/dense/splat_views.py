@@ -113,13 +113,20 @@ def landmark_centre(anchor_report):
     return np.asarray(b['ring'])[:-1].mean(0) - np.asarray(anchor_report['local_frame']['origin_utm18n'][:2])
 
 
-def fly_path(model, centre_xy, holdout, frames, count=7):
-    """Training photographers facing the landmark, sorted by heading around it, interpolated into `frames` views."""
+EYE_BAND_M = 3.0   # the path joins photographers placed within this of eye height (1.6 m) over the lidar ground
+
+
+def fly_path(model, centre_xy, holdout, frames, count=7, height=None):
+    """Training photographers facing the landmark, sorted by heading around it, interpolated into `frames` views.
+    `height(C)` gives a camera centre's height over the lidar ground; photographers placed more than EYE_BAND_M from
+    eye height are left out (a photographer's distance along the line of sight is the least certain part of a
+    placement, and a path through them would run under the ground)."""
     from scipy.spatial.transform import Rotation, Slerp
     rows = []
     for im in model.images.values():
         if im.name in holdout: continue
         C = np.asarray(im.projection_center()); d = C[:2] - centre_xy
+        if height is not None and abs(height(C) - 1.6) > EYE_BAND_M: continue
         fwd = im.cam_from_world().rotation.matrix()[2]   # the camera's viewing direction in the world
         facing = float(-(d / np.linalg.norm(d)) @ (fwd[:2] / max(np.linalg.norm(fwd[:2]), 1e-9)))
         n = sum(1 for p in im.points2D if p.has_point3D())
@@ -170,14 +177,19 @@ def run(run_path, anchor='0', names=SPLATS, fly_frames=90, walk_frames=240, devi
     image_dir = run_path / 'splats' / f'undistorted-{anchor}' / 'images'
     holdout = set(sorted(im.name for im in model.images.values())[::12])   # the trainer holds out every twelfth by name
     centre_xy = landmark_centre(anchor_report)
-    path, fly_keys, key_frames = fly_path(model, centre_xy, holdout, fly_frames)
+    from ghostmap.anchor.align import raster_lookup
+    from ghostmap.anchor.lidar import fill_nearest
+    rasters = np.load(Path(anchor_report['lidar_report']).parent / 'quad-rasters-utm18n.npz'); dtm = fill_nearest(rasters['ground'])
+    origin = np.asarray(anchor_report['local_frame']['origin_utm18n'])
+    height = lambda C: float(C[2] - raster_lookup(dtm, tuple(rasters['box']), float(rasters['cell']), (C[:2] + origin[:2])[None])[0])
+    path, fly_keys, key_frames = fly_path(model, centre_xy, holdout, fly_frames, height=height)
     fly_h = int(round(WIDTH * 0.75 / 2)) * 2
     # Where the camera is on every frame, and how far from the nearest photographer the splat was trained on.
     trained = np.array([im.projection_center() for im in model.images.values() if im.name not in holdout])
     cameras = []
     for V, f in path:
         C = -V[:3, :3].T @ V[:3, 3]; fwd = V[2, :3]
-        cameras.append({'centre': [round(float(v), 2) for v in C], 'heading_deg': round(float(np.degrees(np.arctan2(fwd[1], fwd[0]))), 1),
+        cameras.append({'centre': [round(float(v), 2) for v in C], 'heading_deg': round(float(np.degrees(np.arctan2(fwd[1], fwd[0]))), 1), 'height_over_ground_m': round(height(C), 1),
                         'fov_deg': round(float(2 * np.degrees(np.arctan(WIDTH / 2 / f))), 1), 'nearest_photographer_m': round(float(np.linalg.norm(trained - C, axis=1).min()), 1)})
     keys = [{'frame': round(k, 2), 'photo': title(n), 'image': n, 'centre': [round(float(v), 2) for v in next(im for im in model.images.values() if im.name == n).projection_center()]}
             for k, n in zip(key_frames, fly_keys)]
@@ -211,7 +223,7 @@ def run(run_path, anchor='0', names=SPLATS, fly_frames=90, walk_frames=240, devi
         index['fly'] = {'frames': len(path), 'pattern': 'fly-%03d.jpg', 'verdict_pattern': 'fly-verdict-%03d.jpg', 'size': [WIDTH, fly_h], 'poses_used': [title(n) for n in fly_keys],
                         'frame': 'the anchor\'s local metres (UTM 18N minus the lidar crop origin)', 'cameras': cameras, 'keys': keys, 'verdict_counts': counts,
                         'verdict_rule': 'red: more than 2 m above the highest lidar surface within 2.5 m; purple: more than 1 m under the lowest bare ground within 2.5 m; otherwise the Gaussian\'s own base colour',
-                        'rule': 'training photographers facing the landmark (heading within 25 degrees, 30-160 m away), the 7 with most registered points, sorted by heading; centres, rotations (slerp) and focal lengths interpolated; raw colours on a sky background'}
+                        'rule': f'training photographers facing the landmark (heading within 25 degrees, 30-160 m away) and placed within {EYE_BAND_M:.0f} m of eye height over the lidar ground, the 7 with most registered points, sorted by heading; centres, rotations (slerp) and focal lengths interpolated; raw colours on a sky background'}
         (views / 'index.json').write_text(json.dumps(index, indent=1) + '\n')
         summary[name] = {'poses': [(p['stem'], round(p['psnr_fitted'], 2), p['is_training']) for p in index['poses']], 'fly_frames': len(path)}
         del splat; torch.cuda.empty_cache()

@@ -360,7 +360,7 @@ def build(output=OUT, anchored_runs=None, record_snapshot=None, ground_runs=None
                                 'points': len(ids), 'dated_photographs': intervals['dated_photographs'] if intervals else None,
                                 'xyz_url': f'points-{tag}.f32', 'rgb_url': f'points-{tag}.u8', 'first_url': f'points-{tag}-first.i16', 'last_url': f'points-{tag}-last.i16',
                                 'scale_status': ref.report['scale_status'], 'anchored_through': ref.report.get('landmark_building'),
-                                'covers': [b for b in (ref.report.get('landmark_building'), ref.report.get('neighbour_building')) if b]})
+                                'covers': list(dict.fromkeys(b for b in (ref.report.get('landmark_building'), ref.report.get('neighbour_building'), ref.report.get('building')) if b))})
 
     # The ground record per building: the licensed photographs of its acquisition target in the snapshot
     # (deduplicated), their photographers and capture dates, whether or not they could be reconstructed.
@@ -439,9 +439,10 @@ def build(output=OUT, anchored_runs=None, record_snapshot=None, ground_runs=None
         g = json.loads((geo / 'report.json').read_text())
         study['fragments'] = [{k: f.get(k) for k in ('fragment', 'building', 'cameras', 'geotags', 'verdict', 'failure_mode', 'scale_fixed_by', 'ours_vs_geotags_m', 'geotag_baseline')}
                               | {'run': Path(f['run']).name[:8]} for f in g['fragments']]
-        study['agreement_with_validated_frame'] = [a for a in g['cross_fragment_agreement'] if any(x.startswith('6406b8ea') for x in a['fragments'])]
+        validated = Path((anchored_runs or [''])[0]).name   # the page's own fragment is the validated frame
+        study['agreement_with_validated_frame'] = [a for a in g['cross_fragment_agreement'] if any(x.startswith(validated + '/') for x in a['fragments'])]
         study['summary'] = g['summary']
-        campus = [Path(r) for r in g['runs'] if not Path(r).name.startswith('6406b8ea')]
+        campus = [Path(r) for r in g['runs'] if Path(r).name != validated]
         if campus and (campus[0] / 'report.json').exists():
             cr = json.loads((campus[0] / 'report.json').read_text())
             study['campus_run'] = {'run': campus[0].name[:8], 'photographs': len(cr.get('input_images', [])),
@@ -467,7 +468,7 @@ def build(output=OUT, anchored_runs=None, record_snapshot=None, ground_runs=None
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, default=OUT)
-    parser.add_argument('--run', type=Path, nargs='*', default=[ROOT / 'artifacts/artsquad_modern/runs/6406b8eaae260163b303'], help='anchored runs to include')
+    parser.add_argument('--run', type=Path, nargs='*', default=[ROOT / 'artifacts/artsquad_modern/runs/ce2e2544cf854945f0c7'], help='anchored runs to include; the first is the page\'s own fragment')
     parser.add_argument('--snapshot', type=Path, help='deduplicated snapshot whose photographs give each building its ground record')
     parser.add_argument('--ground-run', type=Path, nargs='*', default=[], help='runs mapped on one building target, reported as reconstruction attempts')
     parser.add_argument('--without-splats', action='store_true', help='leave the Gaussian splats out (while they are still training)')

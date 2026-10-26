@@ -21,7 +21,12 @@ refinement). It owns three things:
    distance field, then joint refinement of the best cells. Every cue's score is
    stored per cell, so the profile of any subset of cues over scale or yaw is read off
    afterwards without a second search.
-3. **A certificate**: which degrees of freedom the fit determines (bands of scale, yaw
+3. **Levelling**: the vertical is fixed from facade normals before the search, so the search cannot correct a
+   tilt; afterwards a robust plane through the well-observed photographers' heights over the lidar ground
+   proposes the tilt that is left, and fits with the vertical turned by fractions of it compete with the facade
+   vertical on the joint objective (`fit_levelled`): camera height can correct tilt, but only as far as the
+   other cues agree, since a photographer's distance along the line of sight also shows up as height on a slope.
+4. **A certificate**: which degrees of freedom the fit determines (bands of scale, yaw
    and position inside which the objective stays within 5 % of its best; the other
    yaw quadrants and the runner-up), how far the optimum moves when each cue is
    removed (a local refinement per cue), the cues' own scale profiles, and a verdict
@@ -90,7 +95,7 @@ def nelder_mead(fun, x0, steps, maxiter):
 class Fragment:
     """A fragment in its gravity frame with the public data around its named building, and the cue scores."""
 
-    def __init__(self, points, centres, rotations, building, buildings, rasters, observations=None, landmark=None, cues=None, seed=0, evidence=None):
+    def __init__(self, points, centres, rotations, building, buildings, rasters, observations=None, landmark=None, cues=None, seed=0, evidence=None, up=None):
         self.evidence = evidence or {}   # footprint name -> number of the fragment's photographs that name it (metadata, no annotation)
         from ghostmap.anchor.lidar import fill_nearest
         from shapely.geometry import Polygon
@@ -110,7 +115,10 @@ class Fragment:
         # facade normals at all, so those fall back to the photographers' camera-up direction (projected to be
         # orthogonal to the one facade, where there is one).
         hint, up_spread = robust_mean_direction(camera_up(rotations))
-        self.up, self.gravity_quality = gravity(points, hint)
+        if up is None: self.up, self.gravity_quality = gravity(points, hint)
+        else:   # a vertical given from outside: the levelling below, or a test
+            self.up = np.asarray(up, float) / np.linalg.norm(up)
+            self.gravity_quality = {'from': "levelled: the facade-normal vertical corrected by the photographers' heights over the lidar ground"}
         self.gravity_quality.update({'camera_up_hint_angle_deg': float(np.degrees(np.arccos(np.clip(self.up @ hint, -1, 1)))),
                                      'camera_up_spread_deg_median': float(np.median(up_spread))})
         self.Rg = rotation_to_z(self.up)
@@ -333,10 +341,11 @@ def _touches(ring, box, margin=10.0):
 
 
 def fit_arrays(points, centres, rotations, building, buildings, rasters, observations=None, landmark=None, cues=None, seed=0,
-               yaw_step_deg=3.0, scale_steps=21, evidence=None):
+               yaw_step_deg=3.0, scale_steps=21, evidence=None, up=None):
     """Fit from arrays (model units): points, camera centres, cam-from-world rotations, optional (camera, point) observation
-    pairs; the named building; all footprints; the lidar rasters. Returns (report, (scale, R, t))."""
-    f = Fragment(points, centres, rotations, building, buildings, rasters, observations, landmark, cues, seed, evidence)
+    pairs; the named building; all footprints; the lidar rasters; optionally the model's vertical (default: from the
+    facades). Returns (report, (scale, R, t))."""
+    f = Fragment(points, centres, rotations, building, buildings, rasters, observations, landmark, cues, seed, evidence, up)
     yaws = np.radians(np.arange(0, 360, yaw_step_deg))
     offsets = f.position_grid(); coarse = f.sub[:400]
 
@@ -546,6 +555,77 @@ def fit_arrays(points, centres, rotations, building, buildings, rasters, observa
     return report, sim
 
 
+# Levelling: the vertical comes from facade normals before the search, so no cue in the search can correct a
+# tilt. Photographers stand on the ground, so their heights over the lidar ground should show no trend across the
+# fragment; a plane through those heights measures the tilt that is left. But a photographer's distance along the
+# line of sight is the weakest part of a placement, and on a slope that error also looks like a tilt, so the plane
+# only proposes: fits with the vertical turned by a third, two thirds and all of its tilt compete with the facade
+# vertical on the joint objective of every cue.
+LEVEL = {'min_cameras': 12, 'min_points_per_camera': 200, 'min_spread_m': 8.0, 'min_tilt_deg': 0.5, 'max_tilt_deg': 10.0, 'fractions': (1 / 3, 2 / 3, 1.0)}
+
+
+def camera_plane(cams, ground, box, cell, use):
+    """A robust plane (Huber-weighted least squares) through the heights over the lidar ground of the photographers in
+    `use`, levelled only along horizontal directions in which they are spread at least LEVEL['min_spread_m'] (one
+    standard deviation). Returns the plane, or None and the reason."""
+    if use.sum() < LEVEL['min_cameras']:
+        return None, f"{int(use.sum())} well-observed photographers outside buildings, fewer than {LEVEL['min_cameras']}"
+    h = cams[:, 2] - raster_lookup(ground, box, cell, cams[:, :2])
+    xy = cams[use, :2] - cams[use, :2].mean(0); y = h[use]
+    A = np.column_stack([xy, np.ones(len(xy))]); w = np.ones(len(y))
+    for _ in range(30):
+        W = np.sqrt(w); coef = np.linalg.lstsq(A * W[:, None], y * W, rcond=None)[0]; res = y - A @ coef
+        sd = 1.4826 * float(np.median(np.abs(res))) + 1e-6; w = np.clip(1.5 * sd / np.maximum(np.abs(res), 1e-9), 0, 1)
+    spread, axes = np.linalg.eigh(np.cov(xy.T)); grad = coef[:2].copy()
+    for lam, v in zip(spread, axes.T):
+        if np.sqrt(lam) < LEVEL['min_spread_m']: grad -= (grad @ v) * v
+    return {'gradient': grad, 'tilt_deg': float(np.degrees(np.arctan(np.linalg.norm(grad)))),
+            'higher_towards_deg': float(np.degrees(np.arctan2(grad[1], grad[0]))), 'residual_sd_m': sd, 'cameras': int(use.sum()),
+            'spread_m': np.sqrt(spread).tolist(), 'heights_m': {'median': float(np.median(y)), 'p10': float(np.percentile(y, 10)), 'p90': float(np.percentile(y, 90))}}, None
+
+
+def fit_levelled(points, centres, rotations, building, buildings, rasters, observations=None, landmark=None, cues=None, seed=0, up=None, **options):
+    """`fit_arrays`, then levelling: when the well-observed photographers' heights over the lidar ground lie on a plane
+    tilted by more than half a degree, refit with the vertical turned by fractions of that tilt and keep whichever fit
+    scores best on the joint objective of every cue (the facade vertical included). The report's `levelling` lists
+    every candidate."""
+    from scipy.spatial.transform import Rotation
+    from ghostmap.anchor.lidar import fill_nearest
+    report, sim = fit_arrays(points, centres, rotations, building, buildings, rasters, observations, landmark, cues, seed, up=up, **options)
+    ground, box, cell = fill_nearest(rasters['ground']), tuple(rasters['box']), float(rasters['cell'])
+    inside = InsideMask([np.asarray(b['ring'], float) for b in buildings if _touches(b['ring'], box)], box)
+    counts = (np.bincount(np.asarray(observations)[:, 0], minlength=len(centres)) if observations is not None and len(observations)
+              else np.full(len(centres), LEVEL['min_points_per_camera']))
+    summary = lambda r, frac: {'fraction_of_tilt': frac, 'objective': r['metrics']['objective'], 'cue_scores': r['metrics']['cue_scores_at_optimum'],
+                               'points_within_1m_of_walls': r['metrics']['points_within_1m_of_walls'], 'cameras_in_height_band': r['metrics']['cameras_in_height_band'],
+                               'verdict': r['certificate']['verdict'], 'failure_mode': r['certificate']['failure_mode']}
+    R = np.asarray(sim[1]); cams = apply(sim, centres)
+    plane, why = camera_plane(cams, ground, box, cell, (counts >= LEVEL['min_points_per_camera']) & ~inside(cams[:, :2]))
+    levelling = {'rule': 'a robust plane through the heights over the lidar ground of photographers with at least %d observed points, outside footprints, proposes a tilt; '
+                         'fits with the vertical turned by %s of it compete with the facade vertical on the joint objective' % (LEVEL['min_points_per_camera'], ', '.join(f'{f:.2f}' for f in LEVEL['fractions'])),
+                 'limits': LEVEL, 'candidates': [summary(report, 0.0)], 'correction_deg': 0.0}
+    if plane is None: levelling['decision'] = 'not levelled: ' + why
+    elif plane['tilt_deg'] < LEVEL['min_tilt_deg']: levelling['decision'] = 'level: the photographers show no tilt'
+    elif plane['tilt_deg'] > LEVEL['max_tilt_deg']: levelling['decision'] = f"not levelled: a tilt beyond {LEVEL['max_tilt_deg']:.0f} degrees is not a small correction"
+    if plane is not None: levelling['plane'] = {k: v for k, v in plane.items() if k != 'gradient'}
+    if 'decision' not in levelling:
+        n = np.array([-plane['gradient'][0], -plane['gradient'][1], 1.0]); n /= np.linalg.norm(n)   # the photographers' up, in the placed frame
+        turn = Rotation.align_vectors([n], [[0, 0, 1.0]])[0].as_rotvec()
+        best = (report['metrics']['objective'], 0.0, report, sim)
+        for frac in LEVEL['fractions']:
+            up_world = Rotation.from_rotvec(frac * turn).apply([0, 0, 1.0])
+            r, s = fit_arrays(points, centres, rotations, building, buildings, rasters, observations, landmark, cues, seed, up=R.T @ up_world, **options)
+            levelling['candidates'].append(summary(r, frac))
+            if r['metrics']['objective'] > best[0]: best = (r['metrics']['objective'], frac, r, s)
+        _, frac, report, sim = best
+        levelling['decision'] = (f'levelled by {frac:.2f} of the photographers\' tilt ({frac * plane["tilt_deg"]:.1f} degrees)' if frac
+                                 else 'kept the facade vertical: no turned vertical scores better on the cues')
+        levelling['correction_deg'] = float(frac * plane['tilt_deg'])
+    report['levelling'] = levelling
+    report['certificate']['levelling_correction_deg'] = levelling['correction_deg']
+    return report, sim
+
+
 def footprint_votes(model, run_path):
     """Footprint name -> number of the fragment's photographs whose acquisition target names it (metadata, no annotation)."""
     from collections import Counter
@@ -578,7 +658,7 @@ def fit(model, building, landmark=None, cues=None, footprints=FOOTPRINTS, seed=0
     rotations = [im.cam_from_world().rotation.matrix() for im in images]
     centres = np.array([im.projection_center() for im in images])
     points = np.array([p.xyz for p in model.points3D.values()])
-    report, sim = fit_arrays(points, centres, rotations, building, buildings, rasters, observations_of(model), landmark, cues, seed, evidence=evidence)
+    report, sim = fit_levelled(points, centres, rotations, building, buildings, rasters, observations_of(model), landmark, cues, seed, evidence=evidence)
     report['camera_heights_m'] = {im.name: report['camera_heights_m'][str(i)] for i, im in enumerate(images)}
     report['lidar_crop'] = crop_name
     return report, sim, crop

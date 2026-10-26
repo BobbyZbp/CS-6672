@@ -90,17 +90,23 @@ def facade_up(points, camera_up_hint, k=20, planarity=0.15, wall_band_deg=30., i
                 'wall_normal_tilt_from_horizontal_deg_median': float(np.median(tilt))}
 
 
-def tallest_cluster(points_g, quantile=0.9, margin=0.25):
+def tallest_cluster(points_g, quantile=0.9, margin=0.25, peak_share=0.03):
     """Points of the tallest compact vertical structure, from the model alone.
 
-    The highest decile of points defines a horizontal core; every point whose
-    horizontal position lies within that core (dilated by `margin` of its
-    size) belongs to the structure.
+    The highest decile of points defines a horizontal core: around the spot where those high points are densest
+    (counted within `peak_share` of the model's robust extent), the high points within three such radii; every
+    point whose horizontal position lies within that core (dilated by `margin` of its size) belongs to the
+    structure. Starting from the densest spot keeps stray points far from the scene (a larger collection has
+    more of them) from stretching the core.
     """
     from scipy.spatial import cKDTree
     high = points_g[points_g[:, 2] >= np.quantile(points_g[:, 2], quantile)]
-    centre = np.median(high[:, :2], 0)
-    radius = np.percentile(np.linalg.norm(high[:, :2] - centre, axis=1), 80)
+    lo, hi = np.percentile(points_g[:, :2], [5, 95], axis=0); r0 = peak_share * float(max(hi - lo))
+    counts = np.array([len(x) for x in cKDTree(high[:, :2]).query_ball_point(high[:, :2], r0)])
+    peak = high[int(np.argmax(counts)), :2]
+    core = high[np.linalg.norm(high[:, :2] - peak, axis=1) <= 3 * r0]
+    centre = np.median(core[:, :2], 0)
+    radius = np.percentile(np.linalg.norm(core[:, :2] - centre, axis=1), 80)
     dist = np.linalg.norm(points_g[:, :2] - centre, axis=1)
     return dist <= radius * (1 + margin), centre, float(radius)
 

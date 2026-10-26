@@ -34,6 +34,7 @@
   .pair img { width: 100%; border-radius: 6px; border: 1px solid var(--line); }
   .hero { flex: 1; min-height: 0; margin-top: .8em; object-fit: cover; object-position: 50% 45%; }
   .slide.wide table { font-size: .82em; }
+  table.limits td:nth-child(2) { color: var(--muted); } table.limits td:last-child { font-weight: 650; }
   .foot { position: absolute; bottom: 2.2%; right: 3.5%; font-size: .5em; color: var(--muted); }
   .num { position: absolute; bottom: 2.2%; left: 3.5%; font-size: .5em; color: var(--muted); }
   aside.notes { display: none; }
@@ -75,6 +76,21 @@
     <div><img class="fig" src="assets/presentation/above.png" alt="The campus from above, aerial image draped on lidar terrain"><div class="cap">The Arts Quad and the Gates Hall site: 2020 lidar terrain draped with the New York State aerial flight of the selected year.</div></div>
   </div>
   <aside class="notes">Numbers on this slide come from the data: how many photographs, how many have GPS, how many of those are plausible.</aside>
+</section>
+
+<section class="slide wide">
+  <div class="kicker">Why this is a COLMAP hack</div>
+  <h2>Where COLMAP stops, and what we built past it</h2>
+  <table class="limits">
+    <tr><th></th><th>COLMAP on internet photographs</th><th>GhostMap adds</th><th>Measured here</th></tr>
+    <tr><td class="n">1</td><td>A model in its own frame: no scale, no north, no up. A map needs GPS or hand-picked control points.</td><td>Placement without GPS, inside public lidar and building footprints</td><td data-fill="lim-gps">—</td></tr>
+    <tr><td class="n">2</td><td>Never says when a placement cannot be trusted.</td><td>A certificate: which cue fixed what, or a refusal with the reason</td><td data-fill="lim-refuse">—</td></tr>
+    <tr><td class="n">3</td><td>Disconnected fragments, each in its own frame.</td><td>One shared world frame</td><td data-fill="lim-agree">—</td></tr>
+    <tr><td class="n">4</td><td>Splats trained on its output float paint in mid-air, unchecked.</td><td>The lidar as referee and as teacher</td><td data-fill="lim-splat">—</td></tr>
+    <tr><td class="n">5</td><td>One static scene: twenty years blended into one moment.</td><td>Years per point; dated buildings and aerial flights</td><td data-fill="lim-time">—</td></tr>
+  </table>
+  <div class="finding">The hack in one line: COLMAP's frame is arbitrary, so search for the one similarity transform that puts the reconstruction inside the world's own 3D model, and say when no such transform is determined.</div>
+  <aside class="notes">This is the slide that answers "why is this a COLMAP project". Everything starts from COLMAP's cameras and points; each row is a limit we hit on real internet photographs and the chapter of the demo that shows our answer. Live demo chapter 0 has the same five cards with links.</aside>
 </section>
 
 <section class="slide">
@@ -192,7 +208,7 @@
       <div class="cap" data-fill="teacher-render-cap">At a held-out photograph's pose: plain (left), lidar-taught (right).</div>
     </div>
   </div>
-  <aside class="notes">Show the plain/taught toggle in chapter 5 of the demo.</aside>
+  <aside class="notes">In chapter 5 of the demo, the fly-through: both splats side by side, the map (lower left) shows the camera among the photographers, and at each photographer's spot the real photograph appears. Then tick "paint each Gaussian by the lidar's verdict": red is paint in air the lidar measured empty, purple is under the bare ground.</aside>
 </section>
 
 <section class="slide">
@@ -294,6 +310,16 @@ try {
   set('frag-tags', tagged ? fmt(tagged.geotags.plausible) : '0');
   set('frag-photographers', fmt(new Set(own.map(p => p.artist)).size));
   if (years) { set('frag-years', `${years[0]} and ${years[1]}`); set('tower-years', `${years[0]}–${years[1]}`); }
+
+  // Where COLMAP stops: the evidence column
+  if (tagged) set('lim-gps', `${fmt(tagged.geotags.carried)} of ${fmt(own.length)} photographs carry GPS${tagged.geotags.wrong ? ', and it is 2,000 km off' : ''}`);
+  const others = (study.fragments || []).filter(f => f.run !== r.tag.slice(0, 8));
+  if (others.length) set('lim-refuse', `${others.filter(f => f.verdict !== 'usable').length} of ${others.length} campus fragments refused, each with a stated reason`);
+  const agreeTower = (study.agreement_with_validated_frame || []).filter(x => x.building === 'McGraw Tower').map(x => x.median_distance_m);
+  if (agreeTower.length) set('lim-agree', `wherever the tower pins another fragment, its tower points coincide within ${fmt(Math.min(...agreeTower), 1)}–${fmt(Math.max(...agreeTower), 1)} m`);
+  const [pl, ta] = [(r.splats || []).find(s => !s.lidar_taught), (r.splats || []).find(s => s.lidar_taught)];
+  if (pl && ta) set('lim-splat', `on lidar surfaces ${pct(pl.free_space.on_surfaces)} → ${pct(ta.free_space.on_surfaces)}; under the ground ${pct(pl.free_space.buried)} → ${pct(ta.free_space.buried)}`);
+  if (years) set('lim-time', `${fmt(dated.length)} dated photographs, ${years[0]}–${years[1]}; 6 aerial flights, 2002–2023`);
 
   const c = r.placement && r.placement.certificate;
   if (c) {
