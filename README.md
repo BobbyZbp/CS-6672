@@ -38,6 +38,7 @@ surviving buildings.
 
 Live demo: `http://127.0.0.1:8080/timemachine.html` (the time machine; the
 earlier COLMAP-extension demo stays at `ghostmap.html`; serve `dist/`, below).
+Slides: `http://127.0.0.1:8080/presentation.html` (arrows, F full screen, N speaker notes); talk track: `docs/presentation/talk-track.md`.
 
 ## Repository layout
 

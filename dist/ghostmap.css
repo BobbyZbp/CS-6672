@@ -29,7 +29,7 @@ main { display: grid; grid-template-columns: minmax(0, 1fr) 430px; gap: 12px; pa
 #chapter-body h2 { font-size: 18px; margin: 2px 0 8px; }
 #chapter-body p { margin: 6px 0; }
 .big { font-size: 26px; font-weight: 650; line-height: 1.15; }
-.stat { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; margin: 8px 0; }
+.stat { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 2px 12px; margin: 8px 0; }
 .stat div:nth-child(even) { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
 table { border-collapse: collapse; width: 100%; font-size: 13px; margin: 8px 0; }
 th, td { border-bottom: 1px solid var(--line); padding: 4px 6px; text-align: left; vertical-align: top; }

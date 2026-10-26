@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cornell Time Machine</title>
+<title>GhostMap</title>
 <link rel="stylesheet" href="ghostmap.css">
 <style>
   #timebar { position: absolute; left: 10px; right: 10px; top: 10px; background: color-mix(in srgb, var(--panel) 90%, transparent); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px 6px; display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; }
@@ -22,20 +22,31 @@
   .yearbar { display: flex; gap: 2px; align-items: flex-end; height: 42px; margin: 6px 0; }
   .yearbar div { flex: 1; background: var(--accent); opacity: .35; min-height: 2px; } .yearbar div.on { opacity: 1; }
   .yearlabels { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); }
+  footer .keys { margin-right: 10px; font-weight: 600; }
+  header h1 .sub { font-size: 14px; font-weight: 500; color: var(--muted); margin-left: 8px; letter-spacing: 0; }
+  #chapters .part { flex-basis: 100%; font-size: 11px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); margin: 2px 0 -2px 2px; }
+  #chapters .part:not(:first-child) { margin-top: 6px; }
+  #chapter-body h3 { font-size: 15px; margin: 14px 0 4px; }
+  figure.chart { margin: 8px 0; } figure.chart svg { width: 100%; height: auto; display: block; }
+  figure.chart figcaption, figure.render figcaption { font-size: 11.5px; color: var(--muted); }
+  figure.chart .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin: 0 4px -1px 6px; }
+  figure.render { margin: 8px 0; } figure.render img { width: 100%; border-radius: 6px; border: 1px solid var(--line); display: block; }
+  #chapter-body button { border: 1px solid var(--accent); background: var(--accent); color: #fff; border-radius: 8px; padding: 6px 12px; font: inherit; cursor: pointer; }
+  #chapter-body button#play, #chapter-body button#replay { background: var(--chip); color: var(--ink); border-color: var(--line); }
 </style>
 <script type="importmap">{"imports": {"three": "./vendor/three.module.js"}}</script>
 </head>
 <body>
 <header>
-  <h1>Cornell Time Machine</h1>
-  <p class="thesis">Twenty years of the campus from licensed online photographs, public aerial imagery and lidar, in one COLMAP model: what changed, when, and which source says so.</p>
+  <h1>GhostMap <span class="sub">an interactive 3D time machine of Cornell</span></h1>
+  <p class="thesis"><b>Geographically grounded · time-aware · visually immersive.</b> Licensed internet photographs, reconstructed with COLMAP, placed without GPS inside the world's own 3D model (public USGS lidar), rendered as Gaussian splats that the lidar checks and teaches, and replayed over twenty years.</p>
 </header>
 <main>
   <section id="viewport" aria-label="3D view">
     <canvas id="scene"></canvas>
     <div id="timebar">
-      <div id="year">2002</div>
-      <div><input type="range" id="slider" min="2002" max="2026" step="1" value="2002" aria-label="Year"><div id="ticks"></div></div>
+      <div id="year">2023</div>
+      <div><input type="range" id="slider" min="2002" max="2026" step="1" value="2023" aria-label="Year"><div id="ticks"></div></div>
       <div id="basis"></div>
     </div>
     <div id="legend"></div>
@@ -46,7 +57,7 @@
     <article id="chapter-body"></article>
   </aside>
 </main>
-<footer id="attribution"></footer>
+<footer><span class="keys">← → chapters · F full screen · drag to orbit, scroll to zoom</span> <span id="attribution"></span></footer>
 <script type="module" src="timemachine.js"></script>
 </body>
 </html>

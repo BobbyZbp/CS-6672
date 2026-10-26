@@ -154,7 +154,43 @@ def export_mesh(dense_dir, sim, shift, out_dir, tag):
             'vertices': int(len(v)), 'faces': int(len(faces)), 'colour': 'per vertex, from the nearest dense point'}
 
 
-def build(output=OUT, anchored_runs=None, record_snapshot=None, ground_runs=None):
+def export_splat(splat_dir, lidar, shift, path, min_opacity=0.05):
+    """A compact `.splat` (32 bytes per Gaussian: position, scale, RGBA, rotation) for the page's splat renderer.
+    Only Gaussians inside the lidar's measured volume are kept (the far field, mostly sky, would hang over the
+    campus); colour is the view-independent term; sorted by size times opacity, as splat viewers expect."""
+    import torch
+    from ghostmap.evaluate.splat_geometry import classify
+    ck = torch.load(Path(splat_dir) / 'ckpt.pt', map_location='cpu')
+    means = ck['means'].numpy().astype(np.float64); opacity = torch.sigmoid(ck['opacities']).numpy()
+    scales = np.exp(ck['scales'].numpy()); quats = ck['quats'].numpy(); quats = quats / np.linalg.norm(quats, axis=1, keepdims=True)
+    rgb = np.clip(0.5 + 0.28209479177387814 * ck['sh0'][:, 0, :].numpy(), 0, 1)
+    keep = (opacity >= min_opacity) & (classify(means, lidar) != 'far')
+    order = np.argsort(-(scales[keep].prod(1) * opacity[keep]))
+    m, s, c, o, q = means[keep][order] + shift, scales[keep][order], rgb[keep][order], opacity[keep][order], quats[keep][order]
+    record = np.zeros(len(m), dtype=[('pos', '<f4', 3), ('scale', '<f4', 3), ('rgba', 'u1', 4), ('rot', 'u1', 4)])
+    record['pos'] = m; record['scale'] = s
+    record['rgba'] = np.column_stack([c * 255, o * 255]).round().clip(0, 255)
+    record['rot'] = (q * 128 + 128).round().clip(0, 255)
+    record.tofile(path)
+    return int(len(m))
+
+
+def certificate_summary(path):
+    """What the page shows of a fragment's certificate (anchor/georegister.py report)."""
+    r = json.loads(Path(path).read_text()); c = r['certificate']; m = r['metrics']
+    prof = c.get('profiles', {})
+    return {'verdict': c['verdict'], 'failure_mode': c['failure_mode'], 'reasons': c['reasons'], 'scale_fixed_by': c['scale_fixed_by'],
+            'scale_uncertainty_relative': c.get('scale_uncertainty_relative'), 'scale_band': c['scale_band'],
+            'yaw_contrast': m['yaw']['contrast'], 'cue_scores': {k: v['score_at_optimum'] for k, v in r['cues'].items()},
+            'cue_ablation': c['cue_ablation'], 'landmark': r.get('landmark_building'), 'building': r['building'],
+            'points_within_1m_of_walls': m['points_within_1m_of_walls'], 'cameras_in_height_band': m['cameras_in_height_band'], 'cameras': m['cameras'],
+            'scale_m_per_unit': r['similarity']['scale_m_per_model_unit'],
+            'profiles': {k: prof[k] for k in prof if k in ('scale_grid_m_per_unit', 'all', 'only_walls', 'only_roof_edges', 'only_landmark', 'only_camera_height', 'without_landmark', 'without_roof_edges')},
+            'report': str(path)}
+
+
+def build(output=OUT, anchored_runs=None, record_snapshot=None, ground_runs=None, with_splats=True):
+    import pycolmap
     from ghostmap.archival.reference import Reference
     output = Path(output); (output / 'photos').mkdir(parents=True, exist_ok=True); (output / 'crops').mkdir(exist_ok=True)
     timeline = json.loads(TIMELINE.read_text()); years = timeline['aerial_years']
@@ -224,25 +260,54 @@ def build(output=OUT, anchored_runs=None, record_snapshot=None, ground_runs=None
                    np.array(ref.report['similarity']['translation_utm18n']) - ref.origin)
             mesh = export_mesh(ply.parent, sim, shift, output / 'mesh', tag); mesh['dense_report'] = str(ply.parent / 'report.json')
             break
-        # A Gaussian splat of this fragment scored against the lidar (evaluate/splat_geometry.py): its centres, coloured by
-        # distance to the lidar, become a layer; the renderer for the splat itself is a separate vendored viewer.
-        splat_geometry = None
-        for geometry in sorted((Path(run) / 'splats').glob('*/geometry.json')):
+        # Gaussian splats of this fragment scored against the lidar (dense/splats.py, evaluate/splat_geometry.py): each
+        # becomes a compact .splat for the renderer, a layer of its centres coloured by their lidar class, its scores
+        # and a few held-out photographs beside their renderings.
+        from ghostmap.evaluate.splat_geometry import classify
+        lidar_crop = Path(ref.report['lidar_report']).parent
+        splats = []
+        for geometry in (sorted((Path(run) / 'splats').glob('*/geometry.json')) if with_splats else []):
             splat_report = json.loads((geometry.parent / 'report.json').read_text()) if (geometry.parent / 'report.json').exists() else {}
-            if str(splat_report.get('anchor')) != comp: continue
-            g = json.loads(geometry.read_text())
-            xyz_g = np.fromfile(geometry.parent / g['viewer_layer']['xyz_url'], dtype=np.float32).reshape(-1, 3) + shift.astype(np.float32)
+            if str(splat_report.get('anchor')) != comp or splat_report.get('schema_version', 1) < 2: continue
+            g = json.loads(geometry.read_text()); name = geometry.parent.name; key = f'{tag}-{name}'
             (output / 'splats').mkdir(exist_ok=True)
-            xyz_g.tofile(output / 'splats' / f'{tag}-geometry.f32'); shutil.copy2(geometry.parent / g['viewer_layer']['rgb_url'], output / 'splats' / f'{tag}-geometry.u8')
-            ply = geometry.parent / 'splat.ply'
-            if ply.exists(): shutil.copy2(ply, output / 'splats' / f'{tag}.ply')
-            splat_geometry = {'name': geometry.parent.name, 'xyz_url': f'splats/{tag}-geometry.f32', 'rgb_url': f'splats/{tag}-geometry.u8', 'ply_url': f'splats/{tag}.ply' if ply.exists() else None,
-                              'gaussians': g['gaussians'], 'overall': g['overall_distance_to_lidar'], 'colour': g['viewer_layer']['colour'],
-                              'per_building': {k: {'gaussians': v['gaussians'], 'median_m': v['distance_to_lidar']['median_m'], 'within_1m': v['distance_to_lidar']['within_1m'],
-                                                   'floaters': v['distance_to_lidar']['floaters_beyond_5m'], 'coverage': v['coverage_within_1m']} for k, v in g['per_building'].items()},
-                              'psnr': splat_report.get('psnr'), 'images': splat_report.get('images'), 'geometry_report': str(geometry)}
-            break
-        reconstructions.append({'tag': tag, 'run': str(run), 'anchor_report': str(report), 'intervals_report': str(intervals_path) if intervals else None, 'mesh': mesh, 'splat_geometry': splat_geometry,
+            xyz_g = np.fromfile(geometry.parent / g['viewer_layer']['xyz_url'], dtype=np.float32).reshape(-1, 3) + shift.astype(np.float32)
+            xyz_g.tofile(output / 'splats' / f'{key}-geometry.f32'); shutil.copy2(geometry.parent / g['viewer_layer']['rgb_url'], output / 'splats' / f'{key}-geometry.u8')
+            shown = export_splat(geometry.parent, lidar_crop, shift, output / 'splats' / f'{key}.splat')
+            renders = []
+            for jpg in sorted((geometry.parent / 'renders').glob('*.jpg'))[:6]:
+                dest = output / 'splats' / f'{key}-render-{jpg.name}'
+                from PIL import Image
+                with Image.open(jpg) as im: im.thumbnail((1200, 600)); im.save(dest, quality=85)
+                psnr = next((x['psnr'] for x in (splat_report.get('psnr') or {}).get('test', []) if Path(x['image']).stem == jpg.stem), None)
+                renders.append({'url': f'splats/{dest.name}', 'photo': jpg.stem, 'psnr': psnr})
+            splats.append({'name': name, 'lidar_taught': bool(splat_report.get('lidar_prior')), 'prior': splat_report.get('lidar_prior'),
+                           'splat_url': f'splats/{key}.splat', 'splat_gaussians': shown,
+                           'xyz_url': f'splats/{key}-geometry.f32', 'rgb_url': f'splats/{key}-geometry.u8', 'colour': g['viewer_layer']['colour'],
+                           'gaussians': g['gaussians'], 'free_space': g['free_space'], 'overall': g['overall_distance_to_lidar'],
+                           'per_building': {k: {'gaussians': v['gaussians'], 'median_m': v['distance_to_lidar']['median_m'], 'within_1m': v['distance_to_lidar']['within_1m'],
+                                                'in_free_air': v.get('in_free_air'), 'coverage': v['coverage_within_1m']} for k, v in g['per_building'].items()},
+                           'psnr': splat_report.get('psnr'), 'images': splat_report.get('images'), 'steps': splat_report.get('steps'),
+                           'seconds': splat_report.get('seconds'), 'renders': renders, 'geometry_report': str(geometry)})
+        splats.sort(key=lambda s: s['lidar_taught'])
+        # The fragment before placement: its native COLMAP coordinates (arbitrary scale, orientation and origin) and the
+        # similarity that places it, so the page can show it floating and then snapping into the lidar.
+        native = pycolmap.Reconstruction(str(Path(run) / ref.report['model_path']))
+        native_xyz = np.array([native.points3D[i].xyz for i in ids], dtype=np.float32)
+        native_xyz.tofile(output / f'points-{tag}-native.f32')
+        native_centres = {im.name: np.asarray(im.projection_center()).round(5).tolist() for im in native.images.values()}
+        for p_ in photographers:
+            if p_['reconstruction'] == tag: p_['centre_native'] = native_centres.get(p_['name'])
+        from scipy.spatial.transform import Rotation as Rot
+        S = ref.report['similarity']
+        free = classify(xyz.astype(np.float64) - shift, lidar_crop)
+        cert_path = Path(run) / 'certificates' / comp / 'report.json'
+        placement = {'native_url': f'points-{tag}-native.f32', 'scale': S['scale_m_per_model_unit'],
+                     'quaternion_xyzw': Rot.from_matrix(np.array(S['rotation'])).as_quat().tolist(),
+                     'translation': (np.array(S['translation_utm18n']) - ref.origin + shift).tolist(),
+                     'sparse_points_free_space': {k: float(np.mean(free == k)) for k in ('surface', 'air', 'buried', 'far')},
+                     'certificate': certificate_summary(cert_path) if cert_path.exists() else None}
+        reconstructions.append({'tag': tag, 'run': str(run), 'anchor_report': str(report), 'intervals_report': str(intervals_path) if intervals else None, 'mesh': mesh, 'splats': splats, 'placement': placement,
                                 'points': len(ids), 'dated_photographs': intervals['dated_photographs'] if intervals else None,
                                 'xyz_url': f'points-{tag}.f32', 'rgb_url': f'points-{tag}.u8', 'first_url': f'points-{tag}-first.i16', 'last_url': f'points-{tag}-last.i16',
                                 'scale_status': ref.report['scale_status'], 'anchored_through': ref.report.get('landmark_building'),
@@ -309,7 +374,31 @@ def build(output=OUT, anchored_runs=None, record_snapshot=None, ground_runs=None
             if b['name'] in ground_record: entry['ground_record'] = ground_record[b['name']]
         buildings.append(entry)
 
-    scene = {'schema_version': 1, 'title': 'Cornell Time Machine', 'generated_utc': datetime.now(timezone.utc).isoformat(),
+    # The placement study (evaluate/georegistration.py, evaluate/identifiability_sweep.py): every campus fragment's
+    # certificate against held-out geotags and against the validated frame, the synthetic identifiability table,
+    # and how many of the collection's photographs carry a usable geotag at all.
+    study = {}
+    geo = ROOT / 'artifacts/georegistration'
+    if (geo / 'report.json').exists():
+        g = json.loads((geo / 'report.json').read_text())
+        study['fragments'] = [{k: f.get(k) for k in ('fragment', 'building', 'cameras', 'geotags', 'verdict', 'failure_mode', 'scale_fixed_by', 'ours_vs_geotags_m', 'geotag_baseline')}
+                              | {'run': Path(f['run']).name[:8]} for f in g['fragments']]
+        study['agreement_with_validated_frame'] = [a for a in g['cross_fragment_agreement'] if any(x.startswith('6406b8ea') for x in a['fragments'])]
+        study['summary'] = g['summary']
+        campus = [Path(r) for r in g['runs'] if not Path(r).name.startswith('6406b8ea')]
+        if campus and (campus[0] / 'report.json').exists():
+            cr = json.loads((campus[0] / 'report.json').read_text())
+            study['campus_run'] = {'run': campus[0].name[:8], 'photographs': len(cr.get('input_images', [])),
+                                   'registered': len(cr.get('input_images', [])) - len(cr.get('unregistered_images', [])), 'fragments': len(cr.get('components', []))}
+    if (geo / 'identifiability.json').exists():
+        study['identifiability'] = json.loads((geo / 'identifiability.json').read_text())['rows']
+    manifest = ROOT / 'data/artsquad_modern/manifest.json'
+    if manifest.exists():
+        from ghostmap.evaluate.georegistration import geotags, plausible
+        tags = geotags(manifest); images = json.loads(manifest.read_text())['images']
+        study['geotags'] = {'photographs': len(images), 'with_gps': len(tags), 'plausible': sum(1 for v in tags.values() if plausible(v))}
+
+    scene = {'schema_version': 2, 'title': 'GhostMap', 'generated_utc': datetime.now(timezone.utc).isoformat(), 'placement_study': study,
              'frame': {'crs': 'EPSG:32618 minus origin', 'origin_utm18n': origin.tolist(), 'up': 'z, metres'},
              'years': years, 'sites': sites, 'buildings': buildings, 'reconstructions': reconstructions, 'photographers': photographers,
              'roof_rule': next(iter({v['rule'] for v in roof.values()}), None),
@@ -325,8 +414,9 @@ def main():
     parser.add_argument('--run', type=Path, nargs='*', default=[ROOT / 'artifacts/artsquad_modern/runs/6406b8eaae260163b303'], help='anchored runs to include')
     parser.add_argument('--snapshot', type=Path, help='deduplicated snapshot whose photographs give each building its ground record')
     parser.add_argument('--ground-run', type=Path, nargs='*', default=[], help='runs mapped on one building target, reported as reconstruction attempts')
+    parser.add_argument('--without-splats', action='store_true', help='leave the Gaussian splats out (while they are still training)')
     args = parser.parse_args()
-    s = build(args.output, args.run, args.snapshot, args.ground_run)
+    s = build(args.output, args.run, args.snapshot, args.ground_run, with_splats=not args.without_splats)
     print(len(s['sites']), 'sites,', len(s['buildings']), 'buildings,', sum(r['points'] for r in s['reconstructions']), 'points,', len(s['photographers']), 'photographers')
 
 

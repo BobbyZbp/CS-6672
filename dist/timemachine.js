@@ -1,5 +1,6 @@
-// Cornell Time Machine viewer. All numbers come from assets/timemachine/scene.json
-// (built by web/timemachine_scene.py from report files); nothing is typed in here.
+// GhostMap viewer: internet photographs of Cornell placed in the world's own 3D model (USGS lidar), rendered as
+// Gaussian splats scored and taught by that lidar, and replayed over twenty years. All numbers come from
+// assets/timemachine/scene.json (built by web/timemachine_scene.py from report files); nothing is typed in here.
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/OrbitControls.js';
 import * as GaussianSplats3D from './vendor/gaussian-splats-3d.module.js';
@@ -107,8 +108,9 @@ for (const [site, s] of Object.entries(scene.sites)) {
     (o < 0 ? wallsStatic : flats[o].walls).push(i0, i1, i2);
   }
   const wg = new THREE.BufferGeometry(); wg.setAttribute('position', g.getAttribute('position')); wg.setIndex(wallsStatic); wg.computeVertexNormals();
-  world.add(new THREE.Mesh(wg, new THREE.MeshLambertMaterial({ color: 0xbdb7aa, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 })));
-  terrains[site] = { mesh, geometry: g, flats, walls: wg, wallsStatic, wallKey: '', box: s.ortho_box_local, orthos: s.orthoimagery };
+  const wallMesh = new THREE.Mesh(wg, new THREE.MeshLambertMaterial({ color: 0xbdb7aa, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }));
+  world.add(wallMesh);
+  terrains[site] = { mesh, wallMesh, geometry: g, flats, walls: wg, wallsStatic, wallKey: '', box: s.ortho_box_local, orthos: s.orthoimagery };
 }
 
 // --- footprints and lidar volumes of the changed buildings ----------------------------------
@@ -136,18 +138,20 @@ for (const r of scene.reconstructions) {
   const colour = new Float32Array(rgb.length); for (let i = 0; i < rgb.length; i++) colour[i] = rgb[i] / 255;
   g.setAttribute('color', new THREE.BufferAttribute(colour, 3));
   const pts = new THREE.Points(g, new THREE.PointsMaterial({ size: 1.3, vertexColors: true }));
-  world.add(pts); const cloud = { pts, g, rgb: colour, first, last, meta: r, surface: null, splat: null, splatViewer: null }; clouds.push(cloud);
-  // The Gaussian splat's centres coloured by their distance to the lidar (green 0 m, red 3 m), shown on request.
-  if (r.splat_geometry) {
-    Promise.all([binary(r.splat_geometry.xyz_url, Float32Array), binary(r.splat_geometry.rgb_url, Uint8Array)]).then(([xyz, rgb]) => {
+  world.add(pts); const cloud = { pts, g, rgb: colour, first, last, meta: r, surface: null, splats: [], native: null, anchored: xyz.slice() }; clouds.push(cloud);
+  // Each Gaussian splat of the fragment: a layer of its centres coloured by their lidar class (loaded now, small) and
+  // the splat itself, rendered by the vendored Gaussian-splat viewer when a chapter first asks for it.
+  for (const s of r.splats || []) {
+    const entry = { meta: s, layer: null, viewer: null, loading: null }; cloud.splats.push(entry);
+    Promise.all([binary(s.xyz_url, Float32Array), binary(s.rgb_url, Uint8Array)]).then(([xyz, rgb]) => {
       const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.BufferAttribute(xyz, 3));
       const col = new Float32Array(rgb.length); for (let i = 0; i < rgb.length; i++) col[i] = rgb[i] / 255;
       sg.setAttribute('color', new THREE.BufferAttribute(col, 3));
-      const splat = new THREE.Points(sg, new THREE.PointsMaterial({ size: 1.0, vertexColors: true }));
-      splat.visible = false; world.add(splat); cloud.splat = splat;
-      const box = document.getElementById('splatgeo'); if (box) box.disabled = false;
-    }).catch(e => console.warn('splat geometry not loaded', e));
+      entry.layer = new THREE.Points(sg, new THREE.PointsMaterial({ size: 1.1, vertexColors: true })); entry.layer.visible = false; world.add(entry.layer);
+      applyView();
+    }).catch(e => console.warn('splat layer not loaded', e));
   }
+  if (r.placement) binary(r.placement.native_url, Float32Array).then(a => { cloud.native = a; }).catch(e => console.warn('native fragment not loaded', e));
   // A dense surface of the fragment (vertex colours from the dense cloud), loaded in the background and shown on request.
   if (r.mesh && r.mesh.faces_url) {
     Promise.all([binary(r.mesh.xyz_url, Float32Array), binary(r.mesh.rgb_url, Uint8Array), binary(r.mesh.faces_url, Uint32Array)]).then(([xyz, rgb, faces]) => {
@@ -156,7 +160,7 @@ for (const r of scene.reconstructions) {
       mg.setAttribute('color', new THREE.BufferAttribute(col, 3)); mg.setIndex(new THREE.BufferAttribute(faces, 1));
       const surface = new THREE.Mesh(mg, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }));
       surface.visible = false; world.add(surface); cloud.surface = surface;
-      const box = document.getElementById('surface'); if (box) box.disabled = false;
+      const box = document.getElementById('surface'); if (box) box.disabled = false; applyView();
     }).catch(e => console.warn('dense surface not loaded', e));
   }
 }
@@ -206,7 +210,11 @@ function setYear(y) {
     }
     col.needsUpdate = true;
   }
-  for (const m of photographerGroup.children) { const py = m.userData.year; m.visible = py !== null; m.material.color.set(py === y ? 0xd0453a : py && py < y ? 0x2a6fdb : 0x9aa5b1); m.scale.setScalar(py === y ? 1.8 : 1); }
+  for (const m of photographerGroup.children) {
+    const py = m.userData.year;
+    if (view.allPhotographers) { m.visible = true; m.material.color.set(0x2a6fdb); m.scale.setScalar(1); continue; }
+    m.visible = py !== null; m.material.color.set(py === y ? 0xd0453a : py && py < y ? 0x2a6fdb : 0x9aa5b1); m.scale.setScalar(py === y ? 1.8 : 1);
+  }
   document.getElementById('basis').textContent = `aerial image: ${fy} flight (${y === fy ? 'same year' : 'latest before ' + y}) · buildings by documented dates · points by photograph dates`;
   for (const f of document.querySelectorAll('.strip figure')) f.classList.toggle('on', +f.dataset.year === fy);
   for (const bar of document.querySelectorAll('.yearbar div')) bar.classList.toggle('on', +bar.dataset.year === y);
@@ -219,6 +227,112 @@ const slider = document.getElementById('slider'); slider.oninput = () => setYear
 document.getElementById('ticks').innerHTML = Array.from({ length: MAX_YEAR - MIN_YEAR + 1 }, (_, i) => MIN_YEAR + i).filter(y => y % 2 === 0 || YEARS.includes(y)).map(y => `<span class="${YEARS.includes(y) ? 'flight' : ''}">${y % 4 === 2 || YEARS.includes(y) ? y : ''}</span>`).join('');
 let timer = null;
 function play() { if (timer) { clearInterval(timer); timer = null; return; } timer = setInterval(() => setYear(year >= MAX_YEAR ? MIN_YEAR : year + 1), 700); }
+
+// --- what is shown: one view per chapter -------------------------------------------------------------
+const DEFAULT_VIEW = { terrain: true, outlines: true, volumes: true, points: true, photographers: true, surface: false, splat: null, splatLayer: null, dark: false, allPhotographers: false };
+const view = { ...DEFAULT_VIEW };
+function applyView() {
+  for (const t of Object.values(terrains)) { t.mesh.visible = view.terrain; t.wallMesh.visible = view.terrain; }
+  outlines.visible = view.outlines; volumes.visible = view.volumes;
+  world.background.set(view.dark ? 0x15191e : 0xdfe6ea);
+  for (const c of clouds) {
+    c.pts.visible = view.points;
+    if (c.surface) c.surface.visible = view.surface;
+    for (const s of c.splats) {
+      if (s.layer) s.layer.visible = view.splatLayer === s.meta.name;
+      if (s.viewer) s.viewer.visible = view.splat === s.meta.name;
+    }
+  }
+  photographerGroup.visible = view.photographers;
+}
+function setView(v = {}) {
+  Object.assign(view, DEFAULT_VIEW, v);
+  surfaceOn = !!(view.surface || view.splat);   // a measured surface replaces the lidar shape of the buildings it covers
+  applyView();
+}
+const mainCloud = () => clouds.find(c => c.meta.placement) || clouds[0];
+const status = text => { document.getElementById('status').textContent = text; };
+
+// --- Gaussian splats, loaded on first use ------------------------------------------------------------
+function splatEntry(name) { const c = mainCloud(); return c ? c.splats.find(s => s.meta.name === name) : null; }
+function loadSplat(entry) {
+  if (!entry.loading) entry.loading = (async () => {
+    const viewer = new GaussianSplats3D.DropInViewer({ gpuAcceleratedSort: false, sharedMemoryForWorkers: false, integerBasedSort: true, halfPrecisionCovariancesOnGPU: false });
+    const options = { showLoadingUI: false, splatAlphaRemovalThreshold: 5 };
+    if (GaussianSplats3D.SceneFormat) options.format = GaussianSplats3D.SceneFormat.Splat;
+    await viewer.addSplatScene(BASE + entry.meta.splat_url, options);
+    viewer.visible = false; world.add(viewer); entry.viewer = viewer; return viewer;
+  })();
+  return entry.loading;
+}
+async function showSplat(name, chapterId) {
+  const e = splatEntry(name); if (!e) return;
+  if (!e.viewer) {
+    status('Loading the Gaussian splat (' + fmt(e.meta.splat_gaussians) + ' Gaussians)…');
+    try { await loadSplat(e); } catch (err) { console.warn('splat not loaded', err); status('The splat could not be loaded in this browser; the lidar check layer still works.'); return; }
+    status('');
+  }
+  if (current === chapterId) applyView();
+}
+
+// --- the fragment before and after placement ---------------------------------------------------------
+// scene local = scale * R * native + translation. The floating pose keeps the raw COLMAP frame (its arbitrary
+// orientation) at half the true scale, above the campus, slowly turning: no scale, no north, no up.
+const placement = { mode: 'placed', t0: 0, ms: 3200 };
+function centroid3(a) { const c = [0, 0, 0], n = a.length / 3; for (let i = 0; i < a.length; i += 3) { c[0] += a[i]; c[1] += a[i + 1]; c[2] += a[i + 2]; } return c.map(v => v / n); }
+function poseAt(alpha, spin) {
+  const c = mainCloud(); if (!c || !c.native || !c.meta.placement) return;
+  const P = c.meta.placement;
+  if (!c.nativeCentre) { c.nativeCentre = centroid3(c.native); c.anchoredCentre = centroid3(c.anchored); }
+  const q1 = new THREE.Quaternion(...P.quaternion_xyzw), q0 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), spin);
+  const q = q0.clone().slerp(q1, alpha);
+  const s = Math.exp((1 - alpha) * Math.log(P.scale / 2) + alpha * Math.log(P.scale));
+  const start = new THREE.Vector3(c.anchoredCentre[0] - 150, c.anchoredCentre[1] - 110, c.anchoredCentre[2] + 140);
+  const centre = start.lerp(new THREE.Vector3(...c.anchoredCentre), alpha);
+  const R = new THREE.Matrix3().setFromMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(q)).elements;  // column-major
+  const [nx, ny, nz] = c.nativeCentre;
+  const move = (x, y, z, out, k) => {
+    x -= nx; y -= ny; z -= nz;
+    out[k] = s * (R[0] * x + R[3] * y + R[6] * z) + centre.x; out[k + 1] = s * (R[1] * x + R[4] * y + R[7] * z) + centre.y; out[k + 2] = s * (R[2] * x + R[5] * y + R[8] * z) + centre.z;
+  };
+  const pos = c.g.attributes.position.array;
+  if (alpha >= 1) pos.set(c.anchored); else for (let i = 0; i < c.native.length; i += 3) move(c.native[i], c.native[i + 1], c.native[i + 2], pos, i);
+  c.g.attributes.position.needsUpdate = true; c.g.computeBoundingSphere();
+  const tmp = [0, 0, 0];
+  for (const m of photographerGroup.children) {
+    const p = m.userData; if (p.reconstruction !== c.meta.tag) continue;
+    if (alpha >= 1 || !p.centre_native) m.position.set(...p.centre); else { move(...p.centre_native, tmp, 0); m.position.set(...tmp); }
+  }
+  return centre;
+}
+function float() { placement.mode = 'floating'; placement.t0 = performance.now(); }
+function snapIntoPlace() { placement.mode = 'snapping'; placement.t0 = performance.now(); }
+function stepPlacement() {
+  const now = performance.now();
+  if (placement.mode === 'floating') poseAt(0, (now - placement.t0) / 1000 * 0.25);
+  else if (placement.mode === 'snapping') {
+    const s = Math.min(1, (now - placement.t0) / placement.ms), e = s < .5 ? 4 * s * s * s : 1 - Math.pow(-2 * s + 2, 3) / 2;
+    poseAt(e, 0);
+    if (s >= 1) { placement.mode = 'placed'; poseAt(1, 0); if (placement.done) placement.done(); }
+  }
+}
+
+// --- small charts ------------------------------------------------------------------------------------
+function profileChart(cert) {
+  const P = cert.profiles; if (!P || !P.scale_grid_m_per_unit) return '';
+  const g = P.scale_grid_m_per_unit, x = v => Math.log(v / cert.scale_m_per_unit), xs = g.map(x);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), W = 380, H = 150, L = 8, B = 22;
+  const series = [['all', 'all cues', 'var(--ink)', 2.6], ['only_landmark', 'tower top alone', 'var(--accent)', 1.6], ['only_roof_edges', 'roof edges alone', 'var(--amber)', 1.6], ['only_walls', 'walls alone', 'var(--ok)', 1.6]];
+  const path = v => { const lo = Math.min(...v), hi = Math.max(...v), r = hi - lo || 1; return v.map((y, i) => `${i ? 'L' : 'M'}${(L + (xs[i] - x0) / (x1 - x0) * (W - 2 * L)).toFixed(1)},${(H - B - (y - lo) / r * (H - B - 10)).toFixed(1)}`).join(''); };
+  const xFit = L + (0 - x0) / (x1 - x0) * (W - 2 * L);
+  return `<figure class="chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="How well each cue explains the fragment at each scale">
+    <line x1="${xFit}" x2="${xFit}" y1="6" y2="${H - B}" stroke="var(--muted)" stroke-dasharray="3 3"/>
+    ${series.filter(([k]) => P[k]).map(([k, , c, w]) => `<path d="${path(P[k])}" fill="none" stroke="${c}" stroke-width="${w}"/>`).join('')}
+    <text x="${L}" y="${H - 6}" font-size="11" fill="var(--muted)">×${fmt(Math.exp(x0), 2)}</text><text x="${xFit - 24}" y="${H - 6}" font-size="11" fill="var(--muted)">fitted scale</text><text x="${W - L - 30}" y="${H - 6}" font-size="11" fill="var(--muted)">×${fmt(Math.exp(x1), 1)}</text>
+  </svg><figcaption>${series.filter(([k]) => P[k]).map(([, l, c]) => `<span class="sw" style="background:${c}"></span>${l}`).join(' ')}<br>How well each cue explains the fragment at each scale (each curve scaled to its own range). The tower top and the roof edges peak at the fitted scale; the walls alone would accept a fragment stretched along its facades.</figcaption></figure>`;
+}
+const pct = (x, d = 0) => x === null || x === undefined ? '—' : fmt(100 * x, d) + ' %';
+function verdictBadge(v, mode) { return v === 'usable' ? '<span class="state present">usable</span>' : `<span class="state before">not usable${mode ? ' — ' + mode : ''}</span>`; }
 
 // --- chapters -------------------------------------------------------------------------------------
 const body = document.getElementById('chapter-body'), nav = document.getElementById('chapters');
@@ -257,77 +371,201 @@ function buildingChapter(name, intro) {
   body.innerHTML = `<h2>${name.replace('Bill and Melinda ', '')}</h2><p>${intro}</p>${evidence(b)}`;
   const span = Math.max(...b.ring.map(p => p[0])) - Math.min(...b.ring.map(p => p[0]));
   flyTo([c[0], c[1], b.ground + 5], Math.max(160, span * 2.4), 0.55, -2.3);
+  legend([['#b5532c', 'buildings that changed (outline; volume from 2020 lidar when standing)'], ['#303030', 'other footprints (OpenStreetMap)']]);
   setYear(year);
 }
+// Where the photographers stood, as seen from the tower: the side from which the splat is best seen.
+function photographersAzimuth(tower) {
+  const c = centroid(tower.ring), own = scene.photographers.filter(p => p.reconstruction === (mainCloud() || {}).meta?.tag);
+  const v = own.reduce((a, p) => [a[0] + p.centre[0] - c[0], a[1] + p.centre[1] - c[1]], [0, 0]);
+  return Math.atan2(v[1], v[0]);
+}
+function splatNumbers(s) {
+  return `<div class="stat">
+      <div>Gaussians shown (inside the lidar's measured volume)</div><div>${fmt(s.splat_gaussians)}</div>
+      <div>in air the lidar saw empty</div><div class="${s.free_space.in_free_air > 0.1 ? 'bad' : 'ok'}">${pct(s.free_space.in_free_air)}</div>
+      <div>buried under the bare ground</div><div>${pct(s.free_space.buried)}</div>
+      <div>on lidar surfaces (within 2.5 m)</div><div>${pct(s.free_space.on_surfaces)}</div>
+      <div>median distance to the nearest lidar return</div><div>${fmt(s.overall.median_m, 2)} m</div>
+      <div>held-out photographs, PSNR</div><div>${s.psnr && s.psnr.test_mean ? fmt(s.psnr.test_mean, 1) + ' dB' : '—'}</div>
+    </div>`;
+}
+function rendersHtml(s, n = 2) {
+  return (s.renders || []).slice(0, n).map(r => `<figure class="render"><img src="${BASE + r.url}" alt="held-out photograph beside the splat's rendering of it"><figcaption>held out: ${r.photo.replace(/^modern__/, '').replace(/^openverse-[0-9a-f-]+_/, '').replace(/_/g, ' ')} — photograph | splat${r.psnr ? ' · ' + fmt(r.psnr, 1) + ' dB' : ''}</figcaption></figure>`).join('');
+}
+const LEGEND_LIDAR = [['#28b34a', 'on a lidar surface'], ['#d9b316', '3 m or more from the nearest lidar return'], ['#e02924', 'in air the lidar saw empty'], ['#8c40bf', 'under the bare ground']];
+
 const chapters = [
-  { id: 'above', title: '1 · From above', render() {
+  { id: 'void', part: 'Where', title: '1 · Lost in space', render() {
+      const c = mainCloud(), r = c.meta, cert = r.placement && r.placement.certificate, st = scene.placement_study || {}, gt = st.geotags || {};
+      const own = scene.photographers.filter(p => p.reconstruction === r.tag);
+      const tagged = (st.fragments || []).find(f => f.run === r.tag.slice(0, 8) && String(f.fragment) === r.tag.split('-')[1]);
+      body.innerHTML = `<h2>What COLMAP gives you: a model in a void</h2>
+        <p>${fmt(own.length)} licensed internet photographs of McGraw Tower and Uris Library, reconstructed by COLMAP (SuperPoint and LightGlue features). The result floats in its own coordinate frame: <b>no scale, no north, no up</b>.</p>
+        <div class="stat"><div>photographs in the collection</div><div>${fmt(gt.photographs)}</div><div>with a GPS tag at all</div><div>${fmt(gt.with_gps)}</div>
+          <div>GPS tags among this fragment's ${fmt(own.length)} photographs</div><div>${tagged ? tagged.geotags.carried + (tagged.geotags.wrong ? ', and it is 2,000 km off' : '') : '—'}</div></div>
+        <p>The usual fix, aligning to the photographs' GPS, cannot even start. But the world already has a 3D model: public USGS airborne lidar covers most of the United States, and OpenStreetMap knows every building's footprint.</p>
+        <p><button type="button" id="go-snap">Place it in the world →</button></p>`;
+      document.getElementById('go-snap').onclick = () => show('snap');
+      setView({ terrain: false, outlines: false, volumes: false, dark: true, allPhotographers: true });
+      float();
+      const ac = c.anchoredCentre || centroid3(c.anchored);
+      flyTo([ac[0] - 150, ac[1] - 110, ac[2] + 140], 150, 0.25, -2.2);
+      legend([['#2a6fdb', 'photographers, as COLMAP placed them'], ['#c8c2b4', 'reconstructed points (photo colours)']]);
+      setYear(2023);
+    } },
+  { id: 'snap', part: 'Where', title: '2 · Snap to the world', render() {
+      const r = mainCloud().meta, P = r.placement || {}, cert = P.certificate, fs = P.sparse_points_free_space || {};
+      body.innerHTML = `<h2>Snap to the world, with a certificate</h2>
+        <p>Placed in metres in the 2020 USGS lidar using only public data and physics: building walls from OpenStreetMap, the lidar roof edges, the tower top, photographers standing at eye height on the lidar ground, and free space along every camera ray. <b>No GPS tag, no hand-picked point.</b></p>
+        ${cert ? `<p>${verdictBadge(cert.verdict, cert.failure_mode)} scale fixed by ${cert.scale_fixed_by.join(' and ')} (±${fmt(100 * cert.scale_uncertainty_relative, 1)} %)</p>
+        <div class="stat"><div>scale</div><div>${fmt(cert.scale_m_per_unit, 2)} m per model unit</div>
+          <div>its points on lidar surfaces (within 2.5 m)</div><div>${pct(fs.surface)}</div>
+          <div>best other heading reaches</div><div>${pct(Math.max(...Object.values(cert.yaw_contrast).filter(v => v !== null)))} of the best</div></div>
+        ${profileChart(cert)}
+        <table><tr><th>cue</th><th class="num">score</th><th class="num">removing it moves the scale by</th></tr>${Object.entries(cert.cue_scores).map(([k, v]) => `<tr><td>${k.replace(/_/g, ' ')}</td><td class="num">${fmt(v, 2)}</td><td class="num">${pct(Math.abs((cert.cue_ablation[k] || {}).scale_ratio - 1), 1)}</td></tr>`).join('')}</table>` : ''}
+        <p><button type="button" id="replay">↺ replay the snap</button></p>`;
+      setView({ allPhotographers: true });
+      const tower = building('McGraw Tower'), tc = centroid(tower.ring), az = photographersAzimuth(tower);
+      const go = () => { float(); placement.t0 = performance.now(); snapIntoPlace(); placement.done = () => flyTo([tc[0], tc[1], tower.ground + 20], 240, 0.42, az, 1.6); };
+      document.getElementById('replay').onclick = go;
+      const ac = mainCloud().anchoredCentre || centroid3(mainCloud().anchored);
+      flyTo([ac[0] - 60, ac[1] - 40, ac[2] + 60], 420, 0.45, -2.2, 1.0); go();
+      legend([['#2a6fdb', 'photographers, placed'], ['#303030', 'OpenStreetMap footprints'], ['#b5532c', 'buildings that changed since 2002']]);
+      setYear(2023);
+    } },
+  { id: 'refuse', part: 'Where', title: "3 · Knowing when it can't", render() {
+      const st = scene.placement_study || {}, frs = (st.fragments || []).filter(f => f.run !== (mainCloud().meta.tag || '').slice(0, 8));
+      const agree = (st.agreement_with_validated_frame || []).filter(a => a.building === 'McGraw Tower').map(a => a.median_distance_m);
+      const lib = (st.agreement_with_validated_frame || []).filter(a => a.building === 'Uris Library');
+      const synth = (st.identifiability || []).filter(x => x.cues === 'all cues' && x.camera_height_noise_m === 0 && x.seed === 0);
+      body.innerHTML = `<h2>Knowing when it can't</h2>
+        <p>The whole campus collection reconstructed at once on the GPU (${fmt(st.campus_run ? st.campus_run.photographs : null)} photographs in minutes, ${fmt(st.campus_run ? st.campus_run.registered : null)} registered): ${frs.length} fragments with eight or more cameras. The certificate refuses every one, each for a stated reason, and every placement the photographs' own GPS tags could check was far off, and refused.</p>
+        <table><tr><th>fragment</th><th class="num">cameras</th><th>certificate</th><th class="num">GPS tags</th><th class="num">off by</th></tr>
+          ${frs.map(f => `<tr><td>${f.building.replace('Bill and Melinda ', '')}</td><td class="num">${f.cameras}</td><td>${verdictBadge(f.verdict, f.failure_mode)}</td><td class="num">${f.geotags.plausible}/${f.geotags.carried}</td><td class="num">${f.ours_vs_geotags_m ? fmt(f.ours_vs_geotags_m.median) + ' m' : '—'}</td></tr>`).join('')}</table>
+        ${agree.length ? `<p class="note">Against the validated tower-and-library placement: wherever the tower pins a campus fragment, its tower points coincide within ${fmt(Math.min(...agree), 1)}–${fmt(Math.max(...agree), 1)} m${lib.length ? `; the largest fragment's library points are ${fmt(lib[0].median_distance_m)} m off — its heading around the tower is wrong, and it was refused` : ''}.</p>` : ''}
+        <h3>Why: a synthetic hall with a known answer</h3>
+        <table><tr><th>facades in view</th><th class="num">roof-edge error</th><th class="num">scale</th><th class="num">heading</th><th>certificate</th></tr>
+          ${synth.map(x => `<tr><td>${x.facades}</td><td class="num">${fmt(x.roof_edge_error_m)} m</td><td class="num">×${fmt(x.scale_ratio, 3)}</td><td class="num">${fmt(x.yaw_error_deg, 1)}°</td><td>${verdictBadge(x.verdict, x.failure_mode)}</td></tr>`).join('')}</table>
+        <p class="note">One facade cannot fix its own scale; two parallel facades slide along each other; a wrong lidar roof edge is caught when walls fix the scale independently ("cues disagree"), and otherwise shows up as the stated scale uncertainty.</p>`;
+      setView({ allPhotographers: true }); legend([['#303030', 'OpenStreetMap footprints']]);
+      const t = building('McGraw Tower'), c = centroid(t.ring); flyTo([c[0] + 60, c[1] + 120, t.ground], 760, 0.95, -1.9);
+      setYear(2023);
+    } },
+  { id: 'referee', part: 'How it looked', title: '4 · The lidar as referee', render() {
+      const r = mainCloud().meta, plain = (r.splats || []).find(s => !s.lidar_taught) || (r.splats || [])[0];
+      if (!plain) { body.innerHTML = '<h2>The lidar as referee</h2><p>No Gaussian splat has been trained for this fragment yet.</p>'; setView(); setYear(2023); return; }
+      const fs = r.placement ? r.placement.sparse_points_free_space : null;
+      const pb = Object.entries(plain.per_building).sort((a, b) => b[1].gaussians - a[1].gaussians).slice(0, 4);
+      body.innerHTML = `<h2>How it looked, checked against the world</h2>
+        <p>A Gaussian splat trained from the same ${fmt(plain.images ? plain.images.train : null)} photographs (${fmt(plain.images ? plain.images.test : null)} held out), directly in the lidar's metres. Because it lives in the lidar frame, every Gaussian can be checked against what the lidar measured.</p>
+        <div class="cues"><label><input type="radio" name="ref" value="splat" checked>the splat</label><label><input type="radio" name="ref" value="layer">the lidar's verdict on every Gaussian</label></div>
+        ${splatNumbers(plain)}
+        <table><tr><th>building</th><th class="num">Gaussians</th><th class="num">median to lidar</th><th class="num">in free air</th><th class="num">covers the lidar building</th></tr>
+          ${pb.map(([n, v]) => `<tr><td>${n}</td><td class="num">${fmt(v.gaussians)}</td><td class="num">${fmt(v.median_m, 2)} m</td><td class="num">${pct(v.in_free_air)}</td><td class="num">${pct(v.coverage)}</td></tr>`).join('')}</table>
+        ${fs ? `<p class="note">For scale: COLMAP's own sparse points of this fragment sit on lidar surfaces ${pct(fs.surface)} of the time (${pct(fs.air)} in free air). Airborne lidar sees roofs and ground densely and walls thinly, so the distance is a conservative score for wall Gaussians.</p>` : ''}
+        ${rendersHtml(plain)}`;
+      const mode = () => document.querySelector('input[name=ref]:checked').value;
+      const apply = () => { setView({ points: false, photographers: false, splat: mode() === 'splat' ? plain.name : null, splatLayer: mode() === 'layer' ? plain.name : null });
+                            legend(mode() === 'layer' ? LEGEND_LIDAR : [['#b5532c', 'buildings that changed since 2002']]); setYear(year); if (mode() === 'splat') showSplat(plain.name, 'referee'); };
+      for (const x of document.querySelectorAll('input[name=ref]')) x.onchange = apply;
+      apply();
+      const tower = building('McGraw Tower'), c = centroid(tower.ring); flyTo([c[0], c[1], tower.ground + 18], 190, 0.3, photographersAzimuth(tower));
+      setYear(2023);
+    } },
+  { id: 'teacher', part: 'How it looked', title: '5 · The lidar as teacher', render() {
+      const r = mainCloud().meta, S = r.splats || [], plain = S.find(s => !s.lidar_taught), taught = S.find(s => s.lidar_taught);
+      if (!plain || !taught) { body.innerHTML = '<h2>The lidar as teacher</h2><p>The lidar-taught splat has not been trained yet.</p>'; setView(); setYear(2023); return; }
+      const row = (label, f, cls) => `<tr><td>${label}</td><td class="num">${f(plain)}</td><td class="num ${cls || ''}">${f(taught)}</td></tr>`;
+      body.innerHTML = `<h2>The lidar as teacher</h2>
+        <p>Same photographs, same steps, one extra rule from the lidar: <b>the air above the measured surface is empty</b>, and nothing lies under the bare ground. Gaussians that break it are made transparent, and the ones far in the air are removed.</p>
+        <div class="cues"><label><input type="radio" name="tch" value="${taught.name}" checked>lidar-taught</label><label><input type="radio" name="tch" value="${plain.name}">plain</label><label><input type="checkbox" id="tch-layer">show the lidar's verdict</label></div>
+        <table><tr><th></th><th class="num">plain</th><th class="num">lidar-taught</th></tr>
+          ${row('in air the lidar saw empty', s => pct(s.free_space.in_free_air, 1), taught.free_space.in_free_air < plain.free_space.in_free_air ? 'ok' : 'bad')}
+          ${row('under the bare ground', s => pct(s.free_space.buried, 1))}
+          ${row('on lidar surfaces', s => pct(s.free_space.on_surfaces, 1))}
+          ${row('median distance to the lidar', s => fmt(s.overall.median_m, 2) + ' m')}
+          ${row('Gaussians in the measured volume', s => fmt(s.gaussians.in_measured_volume))}
+          ${row('held-out PSNR', s => s.psnr && s.psnr.test_mean ? fmt(s.psnr.test_mean, 1) + ' dB' : '—')}
+          ${row('training time', s => s.seconds ? fmt(s.seconds / 60) + ' min' : '—')}</table>
+        <p class="note">${taught.prior ? `Removed during training: ${fmt(taught.prior.pruned)} Gaussians more than ${fmt(taught.prior.prune_above_m)} m into measured free air.` : ''} The far field (sky and the background beyond the lidar crop) is not judged and not shown.</p>
+        <h3>The same held-out photograph</h3>${rendersHtml(plain, 1)}${rendersHtml(taught, 1)}`;
+      const apply = () => { const name = document.querySelector('input[name=tch]:checked').value, layer = document.getElementById('tch-layer').checked;
+                            setView({ points: false, photographers: false, splat: layer ? null : name, splatLayer: layer ? name : null });
+                            legend(layer ? LEGEND_LIDAR : [['#b5532c', 'buildings that changed since 2002']]); setYear(year); if (!layer) showSplat(name, 'teacher'); };
+      for (const x of document.querySelectorAll('input[name=tch], #tch-layer')) x.onchange = apply;
+      apply();
+      const tower = building('McGraw Tower'), c = centroid(tower.ring); flyTo([c[0], c[1], tower.ground + 18], 190, 0.3, photographersAzimuth(tower));
+      setYear(2023);
+    } },
+  { id: 'above', part: 'When', title: '6 · From above', render() {
       body.innerHTML = `<h2>The campus from above, 2002 to 2023</h2>
         <p>Public New York State orthoimagery, one flight every few years, draped on USGS lidar terrain. Drag the year. The three outlined buildings did not exist in 2002.</p>
         <p><button type="button" id="play">▶ play the years</button></p>
         <ul>${changed.map(b => `<li><b>${b.name.replace('Bill and Melinda ', '')}</b> — <span class="state" data-state-of="${b.name}"></span></li>`).join('')}</ul>
         <p class="note">Flight years: ${YEARS.join(', ')}. Between flights the latest earlier image is shown. Building volumes are the 2020 lidar shape, shown only in years the documented dates say the building stood.</p>`;
       document.getElementById('play').onclick = play;
+      setView();
       legend([['#b5532c', 'buildings that changed (outline; volume from 2020 lidar when standing)'], ['#303030', 'other footprints (OpenStreetMap)']]);
-      const t = scene.buildings.find(b => b.name === 'McGraw Tower'), c = centroid(t.ring);
+      const t = building('McGraw Tower'), c = centroid(t.ring);
       flyTo([c[0] + 60, c[1] + 40, t.ground], 900, 0.95, -1.9); setYear(year);
     } },
-  { id: 'gates', title: '2 · Gates Hall', render() { buildingChapter('Bill and Melinda Gates Hall', 'A parking lot until 2012; a Thom Mayne building from 2014. Slide from 2007 to 2015 and watch the air photographs change; the volume is the lidar shape of the finished building.'); } },
-  { id: 'klarman', title: '3 · Klarman Hall', render() { buildingChapter('Klarman Hall', 'The courtyard behind Goldwin Smith Hall until the 2012 flight, under construction in the 2015 flight, a glass atrium from 2016.'); } },
-  { id: 'tower', title: '4 · McGraw Tower', render() {
-      const r = scene.reconstructions.find(x => x.anchored_through === 'McGraw Tower') || scene.reconstructions[0];
+  { id: 'gates', part: 'When', title: '7 · Gates Hall', render() { setView(); buildingChapter('Bill and Melinda Gates Hall', 'A parking lot until 2012; a Thom Mayne building from 2014. Slide from 2007 to 2015 and watch the air photographs change; the volume is the lidar shape of the finished building.'); } },
+  { id: 'klarman', part: 'When', title: '8 · Klarman Hall', render() { setView(); buildingChapter('Klarman Hall', 'The courtyard behind Goldwin Smith Hall until the 2012 flight, under construction in the 2015 flight, a glass atrium from 2016.'); } },
+  { id: 'tower', part: 'When', title: '9 · Twenty years of one tower', render() {
+      const r = mainCloud().meta;
       const own = scene.photographers.filter(p => p.reconstruction === r.tag); const dated = own.filter(p => p.year);
       const counts = {}; for (const p of dated) counts[p.year] = (counts[p.year] || 0) + 1;
       const maxc = Math.max(1, ...Object.values(counts));
       body.innerHTML = `<h2>McGraw Tower: the thing that does not change</h2>
-        <p>${fmt(own.length)} photographs of the tower and Uris Library are registered in one COLMAP model and anchored to the lidar (${r.scale_status}). ${fmt(r.dated_photographs)} carry capture dates from ${Math.min(...dated.map(p => p.year))} to ${Math.max(...dated.map(p => p.year))}.</p>
-        <p>Each reconstructed point carries the years in which photographs observed it. The slider shows the points seen by that year; "colour by first year" shows when each point first appeared in a photograph.</p>
+        <p>${fmt(own.length)} photographs of the tower and Uris Library, ${fmt(r.dated_photographs)} of them dated from ${Math.min(...dated.map(p => p.year))} to ${Math.max(...dated.map(p => p.year))}. Each reconstructed point carries the years in which photographs observed it; the slider shows the points seen by that year.</p>
         <div class="yearbar">${Array.from({ length: MAX_YEAR - MIN_YEAR + 1 }, (_, i) => MIN_YEAR + i).map(y => `<div data-year="${y}" style="height:${100 * (counts[y] || 0) / maxc}%" title="${y}: ${counts[y] || 0} dated photographs"></div>`).join('')}</div>
         <div class="yearlabels"><span>${MIN_YEAR}</span><span>dated photographs per year</span><span>${MAX_YEAR}</span></div>
-        <div class="cues"><label><input type="radio" name="col" value="photo" checked>photo colours</label><label><input type="radio" name="col" value="first">colour by first year seen</label>${r.mesh ? `<label><input type="checkbox" id="surface" ${clouds.some(c => c.surface) ? '' : 'disabled'}>dense surface (${fmt(r.mesh.faces)} faces, vertex colours)</label>` : ''}${r.splat_geometry ? `<label><input type="checkbox" id="splatgeo" ${clouds.some(c => c.splat) ? '' : 'disabled'}>splat centres by distance to the lidar (${r.splat_geometry.colour})</label>` : ''}${r.splat_geometry && r.splat_geometry.ply_url ? `<label><input type="checkbox" id="splatrender">render the Gaussian splat (loads on first use)</label>` : ''}</div>
-        ${r.splat_geometry ? `<p><b>The splat against the lidar.</b> ${fmt(r.splat_geometry.gaussians.total)} Gaussians trained from the same photographs in the lidar frame; median distance from a Gaussian's centre to the nearest lidar point ${fmt(r.splat_geometry.overall.median_m, 2)} m, ${fmt(100 * r.splat_geometry.overall.within_1m)} % within 1 m, ${fmt(100 * r.splat_geometry.overall.floaters_beyond_5m, 1)} % floaters beyond 5 m${r.splat_geometry.psnr && r.splat_geometry.psnr.test_mean ? `; held-out PSNR ${fmt(r.splat_geometry.psnr.test_mean, 1)} dB` : ''}. ${Object.entries(r.splat_geometry.per_building).map(([n, v]) => `${n}: median ${fmt(v.median_m, 2)} m, ${fmt(100 * v.within_1m)} % within 1 m${v.coverage !== null ? `, covers ${fmt(100 * v.coverage)} % of the lidar building` : ''}`).join('; ')}.</p>` : ''}
+        <div class="cues"><label><input type="radio" name="col" value="photo" ${colourMode === 'photo' ? 'checked' : ''}>photo colours</label><label><input type="radio" name="col" value="first" ${colourMode === 'first' ? 'checked' : ''}>colour by first year seen</label>${r.mesh ? `<label><input type="checkbox" id="surface" ${mainCloud().surface ? '' : 'disabled'}>dense surface (${fmt(r.mesh.faces)} faces)</label>` : ''}</div>
         <p>Click a photographer (sphere) to see the photograph; red = taken in the selected year.</p><div id="pick"></div>`;
       for (const x of document.querySelectorAll('input[name=col]')) x.onchange = () => { colourMode = x.value; setYear(year); };
-      const sf = document.getElementById('surface'); if (sf) sf.onchange = () => { surfaceOn = sf.checked; for (const c of clouds) if (c.surface) { c.surface.visible = sf.checked; c.pts.visible = !sf.checked && !(document.getElementById('splatgeo') || {}).checked; } setYear(year); };
-      const sp = document.getElementById('splatgeo'); if (sp) sp.onchange = () => { for (const c of clouds) if (c.splat) { c.splat.visible = sp.checked; c.pts.visible = !sp.checked && !(sf && sf.checked); } };
-      // The splat itself, rendered by the vendored Gaussian-splat viewer inside this scene (same local metres, z up);
-      // the lidar bumps it covers are flattened while it shows, like the dense surface.
-      const sr = document.getElementById('splatrender'); if (sr) sr.onchange = async () => {
-        const c = clouds.find(x => x.meta === r); if (!c) return;
-        if (sr.checked && !c.splatViewer) {
-          sr.disabled = true; document.getElementById('status').textContent = 'Loading the Gaussian splat…';
-          try {
-            const viewer = new GaussianSplats3D.DropInViewer({ gpuAcceleratedSort: false, sharedMemoryForWorkers: false, integerBasedSort: true, halfPrecisionCovariancesOnGPU: false });
-            await viewer.addSplatScene(BASE + r.splat_geometry.ply_url, { showLoadingUI: false, splatAlphaRemovalThreshold: 5 });
-            world.add(viewer); c.splatViewer = viewer; document.getElementById('status').textContent = '';
-          } catch (e) { console.warn('splat not loaded', e); document.getElementById('status').textContent = 'The splat could not be loaded.'; sr.checked = false; }
-          sr.disabled = false;
-        }
-        if (c.splatViewer) c.splatViewer.visible = sr.checked;
-        c.pts.visible = !sr.checked && !(sf && sf.checked) && !(sp && sp.checked);
-        surfaceOn = sr.checked || (sf && sf.checked); setYear(year);
-      };
+      setView();
+      const sf = document.getElementById('surface'); if (sf) sf.onchange = () => { setView({ surface: sf.checked, points: !sf.checked }); setYear(year); };
       legend([['#2a6fdb', 'photographers before the selected year'], ['#d0453a', 'photographers in the selected year'], ['#9aa5b1', 'later photographers']]);
-      const t = scene.buildings.find(b => b.name === 'McGraw Tower'), c = centroid(t.ring);
-      flyTo([c[0], c[1], t.ground + 20], 220, 0.35, -2.4); setYear(year);
+      const t = building('McGraw Tower'), c = centroid(t.ring);
+      flyTo([c[0], c[1], t.ground + 20], 220, 0.35, photographersAzimuth(t)); setYear(year);
     } },
-  { id: 'limits', title: '5 · Limits', render() {
+  { id: 'limits', part: 'When', title: '10 · What the record cannot show', render() {
+      const st = scene.placement_study || {};
       body.innerHTML = `<h2>What the record cannot show</h2>
         <ul>
+          <li><b>Most fragments cannot be placed yet.</b> Of the campus-wide run's ${(st.fragments || []).filter(f => f.run !== (mainCloud().meta.tag || '').slice(0, 8)).length} larger fragments none is certified: a square tower cannot fix its own heading, one facade cannot fix its own scale, and close-ups of an entrance show no facade the map knows. The certificate says which, instead of placing them wrongly.</li>
           <li><b>No licensed ground-level photograph of any site before construction exists online.</b> The "before" is aerial only; no 3D of the old parking lots or the courtyard is shown.</li>
-          <li><b>Building volumes are the 2020 lidar shape</b>, displayed only in years the documented dates say the building stood; a ground-level reconstruction replaces the volume only where its photographs could be anchored to the lidar.</li>
-          <li><b>One facade cannot fix its own scale.</b> The fifteen photographs around Goldwin Smith Hall see its portico and the A. D. White statue from the lawn; without the tower in view, a single facade matches walls of different heights at different scales (the portico shrunk onto a nine-metre wing wall fits as well as the portico at its own fifteen-metre wall), so that fragment is reported as not anchored and Klarman Hall's chapter rests on the aerial flights and the documented dates.</li>
+          <li><b>Airborne lidar sees roofs and ground, not walls.</b> A Gaussian on a wall is judged against the nearest roof edge or ground return, so the distance score is conservative there; the free-air test tolerates 2.5 m horizontally for the same reason.</li>
+          <li><b>Building volumes are the 2020 lidar shape</b>, displayed only in years the documented dates say the building stood.</li>
           <li><b>The automatic aerial test is a diagnostic.</b> Its outline score rises at every site when the building appears, but stable buildings vary between flights by as much, so the dates on this page are the documented ones.</li>
           <li><b>Boardman Hall (demolished 1959)</b> is beyond the time machine: its postcards can be matched to the surviving tower and library, but every recovered pose is a mirror image, because no licensed modern photograph looks at the tower from the Arts Quad side.</li>
         </ul>`;
-      legend([]); setYear(year);
+      setView(); legend([]); setYear(year);
     } },
 ];
-for (const ch of chapters) nav.append(Object.assign(el('button', { type: 'button' }, ch.title), { onclick: () => show(ch.id) }));
-function show(id) {
-  if (!chapters.some(c => c.id === id)) id = 'above';
-  for (const b of nav.children) b.setAttribute('aria-current', String(b.textContent === chapters.find(c => c.id === id).title));
-  body.innerHTML = ''; chapters.find(c => c.id === id).render(); history.replaceState(null, '', '#' + id);
+let current = null;
+let lastPart = null;
+for (const ch of chapters) {
+  if (ch.part !== lastPart) { nav.append(el('span', { className: 'part' }, ch.part)); lastPart = ch.part; }
+  nav.append(Object.assign(el('button', { type: 'button' }, ch.title), { onclick: () => show(ch.id) }));
 }
+function show(id) {
+  if (!chapters.some(c => c.id === id)) id = 'void';
+  const ch = chapters.find(c => c.id === id); current = id;
+  for (const b of nav.querySelectorAll('button')) b.setAttribute('aria-current', String(b.textContent === ch.title));
+  if (id !== 'void' && placement.mode === 'floating') { placement.mode = 'placed'; poseAt(1, 0); }
+  status(''); body.innerHTML = ''; ch.render(); body.scrollTop = 0; history.replaceState(null, '', '#' + id);
+}
+
+// --- presenter keys: arrows or page keys step through the chapters, F toggles full screen ------------------
+addEventListener('keydown', e => {
+  if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.metaKey || e.ctrlKey || e.altKey) return;
+  const i = chapters.findIndex(c => c.id === current);
+  if (['ArrowRight', 'PageDown'].includes(e.key) && i < chapters.length - 1) { e.preventDefault(); show(chapters[i + 1].id); }
+  else if (['ArrowLeft', 'PageUp'].includes(e.key) && i > 0) { e.preventDefault(); show(chapters[i - 1].id); }
+  else if (e.key === 'f' || e.key === 'F') { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {}); }
+});
 
 // --- picking ----------------------------------------------------------------------------------
 const ray = new THREE.Raycaster(), mouse = new THREE.Vector2();
@@ -344,10 +582,10 @@ canvas.addEventListener('click', e => {
 // --- loop -----------------------------------------------------------------------------------------
 function resize() { const { clientWidth: w, clientHeight: h } = canvas.parentElement; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
 new ResizeObserver(resize).observe(canvas.parentElement); resize();
-renderer.setAnimationLoop(() => { stepFlight(); controls.update(); renderer.render(world, camera); });
+renderer.setAnimationLoop(() => { stepFlight(); stepPlacement(); controls.update(); renderer.render(world, camera); });
 document.getElementById('attribution').textContent = scene.attribution.join(' ');
 document.getElementById('status').textContent = '';
 setYear(2007);
-show((location.hash || '#above').slice(1).replace(/[^a-z]/g, ''));
-window.__tm = { terrains, textures, scene };  // for the headless checks
+show((location.hash || '#void').slice(1).replace(/[^a-z]/g, ''));
+window.__tm = { terrains, textures, scene, clouds, view, placement, show };  // for the headless checks and the recorded tour
 document.documentElement.dataset.ready = 'true';

@@ -24,6 +24,12 @@ dated measurements; re-check the files they cite before quoting them as current.
 
 Module-level map: [../pipeline/README.md](../pipeline/README.md).
 
+## presentation/ — the CS 6672 presentation
+
+| File | What it is |
+| --- | --- |
+| [talk-track.md](presentation/talk-track.md) | Run of show for the CS 6672 presentation: pre-flight, timings, clicks, likely questions, fallbacks. |
+
 ## checkpoints/ — dated measurements (oldest first)
 
 | Document | What it records |

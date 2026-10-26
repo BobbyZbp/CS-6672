@@ -75,10 +75,12 @@ as a subprocess through its entry-point name.
 | | `archival/modern_control.py` | `-m ghostmap.archival.modern_control` | Positive control: re-resect every modern photographer from its own anchors. |
 | | `archival/people.py` | `-m ghostmap.archival.people` | Standing-pedestrian detection (foot and head pixels). |
 | | `web/ghostmap_scene.py` | `-m ghostmap.web.ghostmap_scene` | Data for the earlier demo `dist/ghostmap.html` (lidar anchoring, postcards, certificates). |
-| | `web/timemachine_scene.py` | `-m ghostmap.web.timemachine_scene` | Data for the Cornell Time Machine `dist/timemachine.html`: terrain, dated aerial textures, changed-building volumes, dated point clouds, per-building ground records and dense surfaces. The current page is built with `--run artifacts/artsquad_modern/runs/6406b8eaae260163b303 --snapshot artifacts/artsquad_modern/snapshots/f1dccd0c8a49b760445a9a71/snapshot.json --ground-run artifacts/artsquad_modern/runs/6da4ccc327cb12bf14df`; without `--snapshot` the ground records are absent. |
-| | `qa/timemachine_page.py` | `-m ghostmap.qa.timemachine_page` | Playwright checks of `dist/timemachine.html`: every chapter and year, no page errors. |
+| | `web/timemachine_scene.py` | `-m ghostmap.web.timemachine_scene` | Data for the GhostMap page `dist/timemachine.html`: terrain, dated aerial textures, changed-building volumes, dated point clouds, the fragment before and after placement with its certificate, the placement study, the Gaussian splats (`.splat`) with their lidar scores and layers, per-building ground records and dense surfaces. The current page is built with `--run artifacts/artsquad_modern/runs/6406b8eaae260163b303 --snapshot artifacts/artsquad_modern/snapshots/f1dccd0c8a49b760445a9a71/snapshot.json --ground-run artifacts/artsquad_modern/runs/6da4ccc327cb12bf14df`; without `--snapshot` the ground records are absent. |
+| | `qa/timemachine_page.py` | `-m ghostmap.qa.timemachine_page` | Playwright checks of `dist/timemachine.html` (all ten chapters, the snap animation, the splats, every year) and of every slide of the decks; no page errors. |
 | | `qa/reel.py` | `check_artsquad_reel.py` | Playwright checks of `dist/demo-reel.html`. |
 | | `qa/record_demo.py` | `record_artsquad_demo.py` | Scripted headless tour recording. |
+| | `qa/record_tour.py` | `-m ghostmap.qa.record_tour` | Captioned headless tour of the ten demo chapters as a WebM fallback (`artifacts/presentation/ghostmap-tour.webm`) and a still of each chapter for the slides (`dist/assets/presentation/`). |
+| | `package/presentation_bundle.py` | `-m ghostmap.package.presentation_bundle` | The presentation site (demo page, slides, vendored modules, `assets/timemachine/`) as one offline zip with `serve.py`; checks every asset the scene references. |
 
 ## Conventions
 
