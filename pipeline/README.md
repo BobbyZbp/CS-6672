@@ -42,6 +42,8 @@ as a subprocess through its entry-point name.
 | | `sfm/inspect_run.py` | `inspect_artsquad_run.py` | Recompute component reports from saved native models. |
 | evaluate | `evaluate/holdouts.py` | `validate_artsquad_holdouts.py` | Localize held-out test images against a frozen component. |
 | | `evaluate/georegistration.py` | `-m ghostmap.evaluate.georegistration` | Held-out geotags versus anchored cameras, the geotag-similarity baseline (leave-one-out), cross-fragment agreement, the certificate as a predictor; `artifacts/georegistration/`. |
+| | `evaluate/synthetic.py` | — | The synthetic hall with a known similarity (facade choice, roof-edge error, camera-height noise) used by the fixtures and the sweep. |
+| | `evaluate/identifiability_sweep.py` | `-m ghostmap.evaluate.identifiability_sweep` | Identifiability curves: scale, yaw and position error and the certificate's verdict over facade counts, roof-edge error, camera-height noise and cue sets. |
 | | `evaluate/bridges.py` | `analyze_artsquad_bridges.py` | Inter-component edges, triangulation angles, calibration-strain warnings. |
 | dense | `dense/openmvs_cpu.py` | `run_cpu_mvs.py` | COLMAP undistortion -> OpenMVS CPU densify / mesh / texture. |
 | | `dense/texture_from_cameras.py` | `texture_from_cameras.py` | Texture the unchanged mesh from calibrated source cameras. |

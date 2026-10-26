@@ -122,12 +122,18 @@ class Fragment:
         self.rays = None
         if observations is not None and len(observations):
             obs = np.asarray(observations); self.rays = obs[rng.choice(len(obs), min(FREE_SPACE_RAYS, len(obs)), replace=False)]
-        # Wall cells of the named building on a 1 m grid (recall).
+        # Wall cells of the named building and of footprints within 40 m of it on a 1 m grid (recall: the wall length
+        # the points cover; a tower's library and a hall's wings count, the far side of the campus does not).
         self.wall_cells = np.zeros((int(np.ceil(self.box[3] - self.box[1])), int(np.ceil(self.box[2] - self.box[0]))), bool)
-        for a, b in zip(self.edges.a, self.edges.b):
-            for t in np.linspace(0, 1, max(2, int(np.linalg.norm(b - a) * 2))):
-                e, n = a + t * (b - a); r, c = int(self.box[3] - n), int(e - self.box[0])
-                if 0 <= r < self.wall_cells.shape[0] and 0 <= c < self.wall_cells.shape[1]: self.wall_cells[r, c] = True
+        from shapely.geometry import Polygon as _Polygon
+        near_rings = [r for r in self.rings if _Polygon(r).distance(self.poly) <= 40.0]
+        self.recall_buildings = [n for n, r in zip(self.names, self.rings) if _Polygon(r).distance(self.poly) <= 40.0]
+        for ring in near_rings:
+            ring = np.asarray(ring)
+            for a, b in zip(ring[:-1], ring[1:]):
+                for t in np.linspace(0, 1, max(2, int(np.linalg.norm(b - a) * 2))):
+                    e, n = a + t * (b - a); r, c = int(self.box[3] - n), int(e - self.box[0])
+                    if 0 <= r < self.wall_cells.shape[0] and 0 <= c < self.wall_cells.shape[1]: self.wall_cells[r, c] = True
         # Landmark: a tower in the box (named, or the tallest footprint well above its ground) and the fragment's tallest cluster.
         self.landmark = None
         lm = landmark or self._tallest_footprint()
@@ -151,13 +157,17 @@ class Fragment:
         if 'free_space' in self.cues and (self.rays is None or self.building_raster is None): self.cues.pop('free_space')
 
     def _tallest_footprint(self):
+        """A landmark is a slender footprint (height at least twice the square root of its area) at least 25 m above its
+        ground within 200 m of the named building; the tallest such, so a tower, not a tall laboratory block."""
+        from shapely.geometry import Polygon
         best = None
         for name, ring in zip(self.names, self.rings):
-            if name == self.building: continue
-            r = np.asarray(ring); c = r.mean(0)
+            r = np.asarray(ring); poly = Polygon(r)
+            if poly.distance(self.poly) > 200.0 or poly.area <= 0: continue
             top = float(np.nanmax(raster_lookup(self.surface, self.box, self.cell, r)))
             ground = float(np.nanmedian(raster_lookup(self.ground, self.box, self.cell, r)))
-            if top - ground >= TOWER_MIN_HEIGHT_M and (best is None or top - ground > best[0]): best = (top - ground, name)
+            height = top - ground
+            if height >= TOWER_MIN_HEIGHT_M and height / np.sqrt(poly.area) >= 2.0 and (best is None or height > best[0]): best = (height, name)
         return best[1] if best else None
 
     # --- placement -----------------------------------------------------------------------------
@@ -256,8 +266,13 @@ class Fragment:
         return np.column_stack([np.repeat(gx, len(gy)), np.tile(gy, len(gx))])
 
     def descend(self, theta, s, offsets, coarse, iterations=15):
-        """Best grid cell for the fragment's centre (precision on all walls), then descent along the named building's wall field."""
+        """Position for one yaw and scale. With a landmark, the tower's axis goes onto its footprint centre and that is
+        the position (the landmark pins it; the walls then decide the yaw and the tower top the scale). Otherwise the
+        best grid cell for the fragment's centre (precision on all walls), then descent along the named building's
+        wall field."""
         R2 = rot_z(theta)[:2, :2]
+        if self.landmark is not None:
+            return self.landmark['centre'] - s * (R2 @ self.landmark['axis_xy'])
         base = s * (self.pg[coarse, :2] - self.centroid_model) @ R2.T
         pts = (base[None] + offsets[:, None]).reshape(-1, 2)
         precision = np.exp(-(self.walls_all(pts) / KERNEL_M) ** 2).reshape(len(offsets), -1).mean(1)
@@ -546,16 +561,40 @@ def run(run_path, component, building=None, landmark=None, cues=None, output=Non
     return result
 
 
+def run_all(run_path, min_cameras=8, landmark=None, cues=None):
+    """Anchor every fragment of a run that has enough cameras and a named building; failures of a fragment are recorded, not fatal."""
+    import pycolmap
+    run_path = Path(run_path).resolve(); report = json.loads((run_path / 'report.json').read_text()); done = {}
+    for comp in report['components']:
+        if comp['registered_cameras'] < min_cameras: continue
+        model = pycolmap.Reconstruction(str(run_path / comp['model_path'])); building = building_for(model, run_path)
+        if building is None: done[str(comp['id'])] = {'skipped': 'no building named by its photographs'}; continue
+        try:
+            result = run(run_path, comp['id'], building, landmark, cues)
+            done[str(comp['id'])] = {'building': building, 'cameras': comp['registered_cameras'], 'verdict': result['certificate']['verdict'],
+                                     'failure_mode': result['certificate']['failure_mode'], 'scale_status': result['scale_status']}
+        except Exception as error:  # a fragment that breaks the estimator is a finding, kept with the others
+            done[str(comp['id'])] = {'building': building, 'cameras': comp['registered_cameras'], 'error': f'{type(error).__name__}: {error}'}
+        print(json.dumps({comp['id']: done[str(comp['id'])]}), flush=True)
+    (run_path / 'anchor' / 'summary.json').write_text(json.dumps({'created_utc': datetime.now(timezone.utc).isoformat(), 'min_cameras': min_cameras, 'fragments': done}, indent=2) + '\n')
+    return done
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--run', required=True, type=Path)
-    parser.add_argument('--component', required=True)
+    parser.add_argument('--component', help='fragment id; or --all')
+    parser.add_argument('--all', action='store_true', help='every fragment with at least --min-cameras cameras and a named building')
+    parser.add_argument('--min-cameras', type=int, default=8)
     parser.add_argument('--building', help='footprint name; default: the target most of the fragment\'s photographs carry')
     parser.add_argument('--landmark', help='footprint name of a tower to use as the landmark; default: the tallest one in the box')
     parser.add_argument('--without', default='', help='comma-separated cues to leave out, e.g. free_space,landmark')
     parser.add_argument('--output', type=Path, help='report directory (default: <run>/anchor/<component>)')
     args = parser.parse_args()
     cues = [c for c in WEIGHTS if c not in set(filter(None, args.without.split(',')))]
+    if args.all:
+        run_all(args.run, args.min_cameras, args.landmark, cues); return
+    if not args.component: parser.error('--component or --all')
     result = run(args.run, args.component, args.building, args.landmark, cues, args.output)
     shown = {k: result[k] for k in ('building', 'similarity', 'scale_status', 'metric_frame_usable')}
     shown['certificate'] = {k: v for k, v in result['certificate'].items() if k not in ('profiles', 'limits')}
