@@ -72,7 +72,7 @@ def initial_gaussians(model, device):
     from scipy.spatial import cKDTree
     pts = np.array([p.xyz for p in model.points3D.values()], dtype=np.float32)
     rgb = np.array([p.color for p in model.points3D.values()], dtype=np.float32) / 255.0
-    d, _ = cKDTree(pts).query(pts, k=4); nn = np.clip(d[:, 1:].mean(1), 0.05, 5.0)
+    d, _ = cKDTree(pts).query(pts, k=4); nn = np.clip(d[:, 1:].mean(1), 0.05, 5.0).astype(np.float32)
     params = torch.nn.ParameterDict({
         'means': torch.nn.Parameter(torch.from_numpy(pts).to(device)),
         'scales': torch.nn.Parameter(torch.log(torch.from_numpy(nn).to(device))[:, None].repeat(1, 3)),

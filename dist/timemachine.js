@@ -2,6 +2,7 @@
 // (built by web/timemachine_scene.py from report files); nothing is typed in here.
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/OrbitControls.js';
+import * as GaussianSplats3D from './vendor/gaussian-splats-3d.module.js';
 
 const BASE = 'assets/timemachine/';
 const fmt = (x, d = 0) => (x === null || x === undefined || Number.isNaN(x)) ? '—' : Number(x).toLocaleString('en-US', { maximumFractionDigits: d });
@@ -135,7 +136,7 @@ for (const r of scene.reconstructions) {
   const colour = new Float32Array(rgb.length); for (let i = 0; i < rgb.length; i++) colour[i] = rgb[i] / 255;
   g.setAttribute('color', new THREE.BufferAttribute(colour, 3));
   const pts = new THREE.Points(g, new THREE.PointsMaterial({ size: 1.3, vertexColors: true }));
-  world.add(pts); const cloud = { pts, g, rgb: colour, first, last, meta: r, surface: null, splat: null }; clouds.push(cloud);
+  world.add(pts); const cloud = { pts, g, rgb: colour, first, last, meta: r, surface: null, splat: null, splatViewer: null }; clouds.push(cloud);
   // The Gaussian splat's centres coloured by their distance to the lidar (green 0 m, red 3 m), shown on request.
   if (r.splat_geometry) {
     Promise.all([binary(r.splat_geometry.xyz_url, Float32Array), binary(r.splat_geometry.rgb_url, Uint8Array)]).then(([xyz, rgb]) => {
@@ -282,12 +283,29 @@ const chapters = [
         <p>Each reconstructed point carries the years in which photographs observed it. The slider shows the points seen by that year; "colour by first year" shows when each point first appeared in a photograph.</p>
         <div class="yearbar">${Array.from({ length: MAX_YEAR - MIN_YEAR + 1 }, (_, i) => MIN_YEAR + i).map(y => `<div data-year="${y}" style="height:${100 * (counts[y] || 0) / maxc}%" title="${y}: ${counts[y] || 0} dated photographs"></div>`).join('')}</div>
         <div class="yearlabels"><span>${MIN_YEAR}</span><span>dated photographs per year</span><span>${MAX_YEAR}</span></div>
-        <div class="cues"><label><input type="radio" name="col" value="photo" checked>photo colours</label><label><input type="radio" name="col" value="first">colour by first year seen</label>${r.mesh ? `<label><input type="checkbox" id="surface" ${clouds.some(c => c.surface) ? '' : 'disabled'}>dense surface (${fmt(r.mesh.faces)} faces, vertex colours)</label>` : ''}${r.splat_geometry ? `<label><input type="checkbox" id="splatgeo" ${clouds.some(c => c.splat) ? '' : 'disabled'}>splat centres by distance to the lidar (${r.splat_geometry.colour})</label>` : ''}</div>
+        <div class="cues"><label><input type="radio" name="col" value="photo" checked>photo colours</label><label><input type="radio" name="col" value="first">colour by first year seen</label>${r.mesh ? `<label><input type="checkbox" id="surface" ${clouds.some(c => c.surface) ? '' : 'disabled'}>dense surface (${fmt(r.mesh.faces)} faces, vertex colours)</label>` : ''}${r.splat_geometry ? `<label><input type="checkbox" id="splatgeo" ${clouds.some(c => c.splat) ? '' : 'disabled'}>splat centres by distance to the lidar (${r.splat_geometry.colour})</label>` : ''}${r.splat_geometry && r.splat_geometry.ply_url ? `<label><input type="checkbox" id="splatrender">render the Gaussian splat (loads on first use)</label>` : ''}</div>
         ${r.splat_geometry ? `<p><b>The splat against the lidar.</b> ${fmt(r.splat_geometry.gaussians.total)} Gaussians trained from the same photographs in the lidar frame; median distance from a Gaussian's centre to the nearest lidar point ${fmt(r.splat_geometry.overall.median_m, 2)} m, ${fmt(100 * r.splat_geometry.overall.within_1m)} % within 1 m, ${fmt(100 * r.splat_geometry.overall.floaters_beyond_5m, 1)} % floaters beyond 5 m${r.splat_geometry.psnr && r.splat_geometry.psnr.test_mean ? `; held-out PSNR ${fmt(r.splat_geometry.psnr.test_mean, 1)} dB` : ''}. ${Object.entries(r.splat_geometry.per_building).map(([n, v]) => `${n}: median ${fmt(v.median_m, 2)} m, ${fmt(100 * v.within_1m)} % within 1 m${v.coverage !== null ? `, covers ${fmt(100 * v.coverage)} % of the lidar building` : ''}`).join('; ')}.</p>` : ''}
         <p>Click a photographer (sphere) to see the photograph; red = taken in the selected year.</p><div id="pick"></div>`;
       for (const x of document.querySelectorAll('input[name=col]')) x.onchange = () => { colourMode = x.value; setYear(year); };
       const sf = document.getElementById('surface'); if (sf) sf.onchange = () => { surfaceOn = sf.checked; for (const c of clouds) if (c.surface) { c.surface.visible = sf.checked; c.pts.visible = !sf.checked && !(document.getElementById('splatgeo') || {}).checked; } setYear(year); };
       const sp = document.getElementById('splatgeo'); if (sp) sp.onchange = () => { for (const c of clouds) if (c.splat) { c.splat.visible = sp.checked; c.pts.visible = !sp.checked && !(sf && sf.checked); } };
+      // The splat itself, rendered by the vendored Gaussian-splat viewer inside this scene (same local metres, z up);
+      // the lidar bumps it covers are flattened while it shows, like the dense surface.
+      const sr = document.getElementById('splatrender'); if (sr) sr.onchange = async () => {
+        const c = clouds.find(x => x.meta === r); if (!c) return;
+        if (sr.checked && !c.splatViewer) {
+          sr.disabled = true; document.getElementById('status').textContent = 'Loading the Gaussian splat…';
+          try {
+            const viewer = new GaussianSplats3D.DropInViewer({ gpuAcceleratedSort: false, sharedMemoryForWorkers: false, integerBasedSort: true, halfPrecisionCovariancesOnGPU: false });
+            await viewer.addSplatScene(BASE + r.splat_geometry.ply_url, { showLoadingUI: false, splatAlphaRemovalThreshold: 5 });
+            world.add(viewer); c.splatViewer = viewer; document.getElementById('status').textContent = '';
+          } catch (e) { console.warn('splat not loaded', e); document.getElementById('status').textContent = 'The splat could not be loaded.'; sr.checked = false; }
+          sr.disabled = false;
+        }
+        if (c.splatViewer) c.splatViewer.visible = sr.checked;
+        c.pts.visible = !sr.checked && !(sf && sf.checked) && !(sp && sp.checked);
+        surfaceOn = sr.checked || (sf && sf.checked); setYear(year);
+      };
       legend([['#2a6fdb', 'photographers before the selected year'], ['#d0453a', 'photographers in the selected year'], ['#9aa5b1', 'later photographers']]);
       const t = scene.buildings.find(b => b.name === 'McGraw Tower'), c = centroid(t.ring);
       flyTo([c[0], c[1], t.ground + 20], 220, 0.35, -2.4); setYear(year);
