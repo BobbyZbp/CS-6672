@@ -332,7 +332,8 @@ try {
       <tr><td>scale uncertainty</td><td class="n">${c.scale_uncertainty_relative ? '±' + pct(c.scale_uncertainty_relative, 1) : '—'}</td></tr>
       <tr><td>other yaw quadrants (share of the best score)</td><td class="n">${['+90', '+180', '+270'].map(q => yc[q] === undefined ? '—' : fmt(yc[q], 2)).join(' · ')}</td></tr>
       <tr><td>points within 1 m of a footprint wall</td><td class="n">${pct(c.points_within_1m_of_walls)}</td></tr>
-      <tr><td>landmark</td><td>${c.landmark || '—'}</td></tr>`;
+      <tr><td>landmark</td><td>${c.landmark || '—'}</td></tr>
+      <tr><td>vertical levelled by the photographers' heights</td><td class="n">${c.levelling_correction_deg ? fmt(c.levelling_correction_deg, 1) + '°' : 'not needed'}</td></tr>`;
     document.getElementById('ablation-table').innerHTML = '<tr><th>without</th><th class="n">scale ×</th><th class="n">yaw °</th><th class="n">position m</th></tr>' +
       Object.entries(c.cue_ablation || {}).map(([k, v]) => `<tr><td>${k.replace(/_/g, ' ')}</td><td class="n">${fmt(v.scale_ratio, 3)}</td><td class="n">${fmt(v.yaw_shift_deg, 1)}</td><td class="n">${fmt(v.position_shift_m, 1)}</td></tr>`).join('');
     // scale profile chart

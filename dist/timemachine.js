@@ -569,7 +569,9 @@ const chapters = [
         ${cert ? `<p>${verdictBadge(cert.verdict, cert.failure_mode)} scale fixed by ${cert.scale_fixed_by.join(' and ')} (±${fmt(100 * cert.scale_uncertainty_relative, 1)} %)</p>
         <div class="stat"><div>scale</div><div>${fmt(cert.scale_m_per_unit, 2)} m per model unit</div>
           <div>its points on lidar surfaces (within 2.5 m)</div><div>${pct(fs.surface)}</div>
-          <div>best other heading reaches</div><div>${pct(Math.max(...Object.values(cert.yaw_contrast).filter(v => v !== null)))} of the best</div></div>
+          <div>best other heading reaches</div><div>${pct(Math.max(...Object.values(cert.yaw_contrast).filter(v => v !== null)))} of the best</div>
+          ${cert.levelling_correction_deg ? `<div>vertical levelled by the photographers' heights</div><div>${fmt(cert.levelling_correction_deg, 1)}°</div>` : ''}</div>
+        ${cert.levelling_correction_deg ? `<p class="note">The vertical comes from the facades. The photographers' heights over the lidar ground still showed a ${fmt(cert.levelling_tilt_deg, 1)}° tilt; of the verticals tried (none, a third, two thirds or all of that tilt), turning by ${fmt(cert.levelling_correction_deg, 1)}° scored best on all cues together.</p>` : ''}
         ${profileChart(cert)}
         <table><tr><th>cue</th><th class="num">score</th><th class="num">removing it moves the scale by</th></tr>${Object.entries(cert.cue_scores).map(([k, v]) => `<tr><td>${k.replace(/_/g, ' ')}</td><td class="num">${fmt(v, 2)}</td><td class="num">${pct(Math.abs((cert.cue_ablation[k] || {}).scale_ratio - 1), 1)}</td></tr>`).join('')}</table>` : ''}
         <p><button type="button" id="replay">↺ replay the snap</button></p>`;

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Record a captioned tour of the GhostMap demo page, and a still of every chapter for the slides.
 
-The fallback for the live demo: a headless Chromium walks through the ten chapters of
+The fallback for the live demo: a headless Chromium walks through the chapters (0 to 10) of
 `dist/timemachine.html` (served at --base-url) in presentation order, waits for each chapter's data
 (the snap animation, the splats), moves the year slider where the chapter is about time, and
 records the whole tour as a WebM video with a caption bar. Each chapter's settled view is also

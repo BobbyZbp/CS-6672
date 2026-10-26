@@ -219,6 +219,7 @@ def certificate_summary(path):
             'cue_ablation': c['cue_ablation'], 'landmark': r.get('landmark_building'), 'building': r['building'],
             'points_within_1m_of_walls': m['points_within_1m_of_walls'], 'cameras_in_height_band': m['cameras_in_height_band'], 'cameras': m['cameras'],
             'scale_m_per_unit': r['similarity']['scale_m_per_model_unit'],
+            'levelling_correction_deg': c.get('levelling_correction_deg'), 'levelling_tilt_deg': ((r.get('levelling') or {}).get('plane') or {}).get('tilt_deg'),
             'profiles': {k: prof[k] for k in prof if k in ('scale_grid_m_per_unit', 'all', 'only_walls', 'only_roof_edges', 'only_landmark', 'only_camera_height', 'without_landmark', 'without_roof_edges')},
             'report': str(path)}
 
