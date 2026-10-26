@@ -193,7 +193,7 @@ def splat_views(src, dest, url_prefix):
         if not ((Path(src) / render).exists() and (Path(src) / photograph).exists()): continue
         shutil.copy2(Path(src) / render, Path(dest) / render); shutil.copy2(Path(src) / photograph, Path(dest) / photograph)
         held = p.get('kind') == 'held-out' if 'kind' in p else not p.get('is_training', True)
-        poses.append({'photo': stem, 'title': p.get('photo') if p.get('stem') else stem, 'held_out': bool(held), 'psnr': p.get('psnr_fitted', p.get('psnr_here')),
+        poses.append({'photo': stem, 'image': p.get('image'), 'title': p.get('photo') if p.get('stem') else stem, 'held_out': bool(held), 'psnr': p.get('psnr_fitted', p.get('psnr_here')),
                       'render_url': url_prefix + render, 'photo_url': url_prefix + photograph, 'size': p.get('size')})
     fly = ix.get('fly') or {}
     pattern = fly.get('pattern', 'fly-%03d.jpg'); frames = 0
@@ -321,6 +321,19 @@ def build(output=OUT, anchored_runs=None, record_snapshot=None, ground_runs=None
                            'psnr': splat_report.get('psnr'), 'images': splat_report.get('images'), 'steps': splat_report.get('steps'),
                            'seconds': splat_report.get('seconds'), 'renders': renders, 'geometry_report': str(geometry)})
         splats.sort(key=lambda s: s['lidar_taught'])
+        # Ablations of the training prior (dense/splats.py runs kept outside splats/): their scores only, for the
+        # trade-off between agreement with the lidar and the best-covered held-out view.
+        ablations = []
+        best_photo = next((s['renders'][0]['photo'] for s in splats if not s['lidar_taught'] and s['renders']), None)
+        for geometry in sorted((Path(run) / 'splat-ablations').glob('*/geometry.json')) if with_splats else []:
+            rep_a = json.loads((geometry.parent / 'report.json').read_text()); g = json.loads(geometry.read_text())
+            if str(rep_a.get('anchor')) != comp: continue
+            covered = next((x['psnr'] for x in rep_a['psnr']['test'] if best_photo and Path(x['image']).stem == best_photo), None)
+            ablations.append({'name': geometry.parent.name, 'prior': rep_a.get('lidar_prior'), 'gaussians': rep_a['gaussians'], 'free_space': g['free_space'],
+                              'median_m': g['overall_distance_to_lidar']['median_m'], 'psnr_test_mean': rep_a['psnr']['test_mean'], 'psnr_best_covered_view': covered,
+                              'report': str(geometry.parent / 'report.json')})
+        for s in splats:
+            s['psnr_best_covered_view'] = next((x['psnr'] for x in (s['psnr'] or {}).get('test', []) if best_photo and Path(x['image']).stem == best_photo), None)
         # The fragment before placement: its native COLMAP coordinates (arbitrary scale, orientation and origin) and the
         # similarity that places it, so the page can show it floating and then snapping into the lidar.
         native = pycolmap.Reconstruction(str(Path(run) / ref.report['model_path']))
@@ -338,7 +351,7 @@ def build(output=OUT, anchored_runs=None, record_snapshot=None, ground_runs=None
                      'translation': (np.array(S['translation_utm18n']) - ref.origin + shift).tolist(),
                      'sparse_points_free_space': {k: float(np.mean(free == k)) for k in ('surface', 'air', 'buried', 'far')},
                      'certificate': certificate_summary(cert_path) if cert_path.exists() else None}
-        reconstructions.append({'tag': tag, 'run': str(run), 'anchor_report': str(report), 'intervals_report': str(intervals_path) if intervals else None, 'mesh': mesh, 'splats': splats, 'placement': placement,
+        reconstructions.append({'tag': tag, 'run': str(run), 'anchor_report': str(report), 'intervals_report': str(intervals_path) if intervals else None, 'mesh': mesh, 'splats': splats, 'splat_ablations': ablations, 'placement': placement,
                                 'points': len(ids), 'dated_photographs': intervals['dated_photographs'] if intervals else None,
                                 'xyz_url': f'points-{tag}.f32', 'rgb_url': f'points-{tag}.u8', 'first_url': f'points-{tag}-first.i16', 'last_url': f'points-{tag}-last.i16',
                                 'scale_status': ref.report['scale_status'], 'anchored_through': ref.report.get('landmark_building'),

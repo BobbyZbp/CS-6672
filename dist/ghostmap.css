@@ -42,6 +42,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 select, input[type=range] { width: 100%; font: inherit; }
 .photo { width: 100%; border-radius: 6px; border: 1px solid var(--line); display: block; margin: 6px 0; }
 .cues { display: flex; flex-wrap: wrap; gap: 6px; }
+.cues[hidden] { display: none; }
 .cues label { border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; font-size: 13px; cursor: pointer; }
 .cues input { margin-right: 4px; }
 a { color: var(--accent); }

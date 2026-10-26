@@ -423,7 +423,7 @@ function showWipe(a, b, size) {   // a, b: {url, label}
   const [w, h] = fitBox(size);
   overlay.innerHTML = `<div class="wipe" style="width:${w}px;height:${h}px"><img class="a" src="${BASE + a.url}" alt=""><img class="b" src="${BASE + b.url}" alt=""><div class="bar"></div>
     <span class="lab a">${a.label}</span><span class="lab b">${b.label}</span><input type="range" min="0" max="100" value="50" aria-label="drag to compare"></div>`;
-  const ov = overlay.querySelector('.wipe'), range = ov.querySelector('input'), top = ov.querySelector('.b'), bar = ov.querySelector('.bar');
+  const ov = overlay.querySelector('.wipe'), range = ov.querySelector('input'), top = ov.querySelector('img.b'), bar = ov.querySelector('.bar');
   range.oninput = () => { top.style.clipPath = `inset(0 0 0 ${range.value}%)`; bar.style.left = range.value + '%'; };
 }
 function showFly(a, b) {   // a, b: {views, label}: the same fly-through of two splats, frame by frame
@@ -442,7 +442,7 @@ function showFly(a, b) {   // a, b: {views, label}: the same fly-through of two 
 function stopFly() { if (flyTimer) { clearInterval(flyTimer); flyTimer = null; } }
 function hideOverlay() { stopFly(); overlay.hidden = true; overlay.innerHTML = ''; }
 const poseLabel = (p, i) => p.held_out ? `held-out photograph${p.psnr ? ' · ' + fmt(p.psnr, 1) + ' dB' : ''}` : `photographer ${i}`;
-const photographerOf = stem => scene.photographers.find(p => p.name.replace(/\.[^.]+$/, '') === stem);
+const photographerOf = pose => scene.photographers.find(p => p.name === pose.image) || scene.photographers.find(p => p.name.replace(/\.[^.]+$/, '') === pose.photo);
 
 const LEGEND_LIDAR = [['#28b34a', 'on a lidar surface'], ['#d9b316', '3 m or more from the nearest lidar return'], ['#e02924', 'in air the lidar saw empty'], ['#8c40bf', 'under the bare ground']];
 
@@ -524,7 +524,7 @@ const chapters = [
       const apply = () => {
         const mode = document.querySelector('input[name=refmode]:checked').value, hint = document.getElementById('refhint');
         if (mode.startsWith('pose-')) {
-          const p = poses[+mode.slice(5)], ph = photographerOf(p.photo);
+          const p = poses[+mode.slice(5)], ph = photographerOf(p);
           setView({ points: false, photographers: false, splat: null }); legend([]);
           showWipe({ url: p.photo_url, label: 'the photograph' }, { url: p.render_url, label: 'the splat, from the same pose' }, p.size);
           if (ph) flyToPhotographer(ph, 0.01);
@@ -564,7 +564,8 @@ const chapters = [
           ${row('Gaussians in the measured volume', s => fmt(s.gaussians.in_measured_volume))}
           ${row('held-out PSNR (mean of ' + fmt(plain.images ? plain.images.test : null) + ')', s => s.psnr && s.psnr.test_mean ? fmt(s.psnr.test_mean, 1) + ' dB' : '—')}
           ${row('training time', s => s.seconds ? fmt(s.seconds / 60) + ' min' : '—')}</table>
-        <p class="note">${taught.prior ? `Removed during training: ${fmt(taught.prior.pruned)} Gaussians more than ${fmt(taught.prior.prune_above_m)} m into measured free air.` : ''} The far field (sky and the background beyond the lidar crop) is not judged and not shown.</p>`;
+        <p class="note">${taught.prior ? `Removed during training: ${fmt(taught.prior.pruned)} Gaussians more than ${fmt(taught.prior.prune_above_m)} m into measured free air.` : ''} The far field (sky and the background beyond the lidar crop) is not judged and not shown.</p>
+        ${(r.splat_ablations || []).map(a => `<p class="finding">How far can the teacher go? A ${fmt(a.prior.weight / taught.prior.weight)}-times stronger rule puts ${pct(a.free_space.on_surfaces)} of the Gaussians on lidar surfaces — more than COLMAP's own points (${pct(r.placement ? r.placement.sparse_points_free_space.surface : null)}) — but the best-covered held-out view drops from ${fmt(taught.psnr_best_covered_view, 1)} to ${fmt(a.psnr_best_covered_view, 1)} dB: at that strength it carves real structure that the lidar's 2.5 m tolerance and the placement's few-metre error put outside. The demo keeps the gentler rule.</p>`).join('')}`;
       const tower = building('McGraw Tower'), c = centroid(tower.ring);
       const apply = () => {
         const mode = document.querySelector('input[name=tchmode]:checked').value, hint = document.getElementById('tchhint');
@@ -574,7 +575,7 @@ const chapters = [
           showFly({ views: plain.views, label: 'plain' }, { views: taught.views, label: 'lidar-taught' });
           hint.textContent = 'The same camera path through both splats, between the photographers who face the tower. Drag the divider; the left half is the plain splat, the right half the lidar-taught one.';
         } else if (mode.startsWith('pose-')) {
-          const p = poses[+mode.slice(5)], q = taught.views.poses.find(x => x.photo === p.photo), ph = photographerOf(p.photo);
+          const p = poses[+mode.slice(5)], q = taught.views.poses.find(x => x.photo === p.photo), ph = photographerOf(p);
           setView({ points: false, photographers: false }); legend([]);
           showWipe({ url: p.render_url, label: 'plain' + (p.psnr ? ' · ' + fmt(p.psnr, 1) + ' dB' : '') }, { url: q.render_url, label: 'lidar-taught' + (q.psnr ? ' · ' + fmt(q.psnr, 1) + ' dB' : '') }, p.size);
           if (ph) flyToPhotographer(ph, 0.01);
