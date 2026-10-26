@@ -458,8 +458,12 @@ def fit_arrays(points, centres, rotations, building, buildings, rasters, observa
     reasons = []; failure = None
     # A facade is a wall seen from the ground to its roof edge. A fragment whose points reach no roof edge and hold no
     # landmark (close-ups of an entrance, a lawn) has seen no facade, whatever the walls score says.
-    if (at_optimum.get('roof_edges', 0.0) < LIMITS['roof_edge_min'] and f.landmark is None) or metrics['points_within_1m_of_walls'] < LIMITS['walls_fraction_1m']:
-        failure = 'no facade seen'; reasons.append(f"the points reach no wall's roof edge (roof-edge score {at_optimum.get('roof_edges', 0.0):.2f}) and {100 * metrics['points_within_1m_of_walls']:.0f} % lie within 1 m of a wall at the best placement; the photographs do not show a facade from the ground to its roof edge")
+    no_roof_edge = 'roof_edges' in f.cues and at_optimum['roof_edges'] < LIMITS['roof_edge_min'] and f.landmark is None
+    few_on_walls = metrics['points_within_1m_of_walls'] < LIMITS['walls_fraction_1m']
+    if no_roof_edge or few_on_walls:
+        failure = 'no facade seen'
+        if no_roof_edge: reasons.append(f"the points reach no wall's roof edge (roof-edge score {at_optimum['roof_edges']:.2f}); the photographs do not show a facade from the ground to its roof edge")
+        if few_on_walls: reasons.append(f"only {100 * metrics['points_within_1m_of_walls']:.0f} % of the points lie within 1 m of a footprint wall at the best placement; the photographs do not show the walls the map knows")
     elif inside_fraction > LIMITS['cameras_inside']:
         failure = 'cameras inside buildings'; reasons.append(f"{100 * inside_fraction:.0f} % of the photographers would stand inside a building")
     elif not (scale_band[0] >= 1 - LIMITS['scale_band'] and scale_band[1] <= 1 + LIMITS['scale_band']):
