@@ -90,7 +90,8 @@ def nelder_mead(fun, x0, steps, maxiter):
 class Fragment:
     """A fragment in its gravity frame with the public data around its named building, and the cue scores."""
 
-    def __init__(self, points, centres, rotations, building, buildings, rasters, observations=None, landmark=None, cues=None, seed=0):
+    def __init__(self, points, centres, rotations, building, buildings, rasters, observations=None, landmark=None, cues=None, seed=0, evidence=None):
+        self.evidence = evidence or {}   # footprint name -> number of the fragment's photographs that name it (metadata, no annotation)
         from ghostmap.anchor.lidar import fill_nearest
         from shapely.geometry import Polygon
         self.building = building
@@ -136,7 +137,7 @@ class Fragment:
                     e, n = a + t * (b - a); r, c = int(self.box[3] - n), int(e - self.box[0])
                     if 0 <= r < self.wall_cells.shape[0] and 0 <= c < self.wall_cells.shape[1]: self.wall_cells[r, c] = True
         # Landmark: a tower in the box (named, or the tallest footprint well above its ground) and the fragment's tallest cluster.
-        self.landmark = None
+        self.landmark = None; self.landmark_decision = {'candidate': None, 'used': False}
         lm = landmark or self._tallest_footprint()
         if lm is not None and lm in self.names:
             ring = self.rings[self.names.index(lm)]; poly = Polygon(ring)
@@ -150,7 +151,13 @@ class Fragment:
             ring_pts = np.array([outer.interpolate(d).coords[0] for d in np.arange(0, outer.length, 0.5)])
             ground = float(np.nanmedian(raster_lookup(self.ground, self.box, self.cell, ring_pts)))
             mask, axis_xy, radius = tallest_cluster(self.pg)
-            if top is not None and top - ground >= TOWER_MIN_HEIGHT_M and mask.sum() >= 50:
+            cluster_height = float(np.percentile(self.pg[mask, 2], 99.5) - np.percentile(self.pg[mask, 2], 5)) if mask.sum() else 0.0
+            tower_like = mask.sum() >= 50 and radius > 0 and cluster_height / radius >= 1.5   # tall and compact in the model too
+            seen = (lm == self.building) or self.evidence.get(lm, 0) >= 3 or not self.evidence   # the photographs must say the tower is in the fragment
+            self.landmark_decision = {'candidate': lm, 'lidar_height_m': None if top is None else top - ground, 'cluster_points': int(mask.sum()),
+                                      'cluster_height_over_radius': float(cluster_height / radius) if radius > 0 else None,
+                                      'photographs_naming_it': int(self.evidence.get(lm, 0)), 'used': bool(top is not None and top - ground >= TOWER_MIN_HEIGHT_M and tower_like and seen)}
+            if self.landmark_decision['used']:
                 self.landmark = {'name': lm, 'centre': np.asarray(poly.centroid.coords[0]), 'lidar_top': top, 'lidar_ground': ground,
                                  'mask': mask, 'axis_xy': axis_xy, 'model_top': float(np.percentile(self.pg[mask, 2], 99.5))}
         self.cues = {c: WEIGHTS[c] for c in (cues or WEIGHTS) if c in WEIGHTS}
@@ -326,10 +333,10 @@ def _touches(ring, box, margin=10.0):
 
 
 def fit_arrays(points, centres, rotations, building, buildings, rasters, observations=None, landmark=None, cues=None, seed=0,
-               yaw_step_deg=3.0, scale_steps=21):
+               yaw_step_deg=3.0, scale_steps=21, evidence=None):
     """Fit from arrays (model units): points, camera centres, cam-from-world rotations, optional (camera, point) observation
     pairs; the named building; all footprints; the lidar rasters. Returns (report, (scale, R, t))."""
-    f = Fragment(points, centres, rotations, building, buildings, rasters, observations, landmark, cues, seed)
+    f = Fragment(points, centres, rotations, building, buildings, rasters, observations, landmark, cues, seed, evidence)
     yaws = np.radians(np.arange(0, 360, yaw_step_deg))
     offsets = f.position_grid(); coarse = f.sub[:400]
 
@@ -521,7 +528,7 @@ def fit_arrays(points, centres, rotations, building, buildings, rasters, observa
     report = {
         'method': 'cue-based similarity from public lidar and OpenStreetMap footprints: walls (precision and recall), roof edges, camera height, '
                   + ('a landmark, ' if f.landmark else '') + ('free space, ' if 'free_space' in f.cues else '') + 'cameras outside buildings; coarse scale-yaw table with per-cell positions, joint refinement, certificate from the stored table',
-        'building': building, 'landmark_building': f.landmark['name'] if f.landmark else building, 'neighbour_building': None,
+        'building': building, 'landmark_building': f.landmark['name'] if f.landmark else None, 'landmark_decision': f.landmark_decision, 'neighbour_building': None,
         'cues': {c: {'weight': f.cues[c], 'score_at_optimum': at_optimum[c]} for c in f.cues},
         'similarity': {'scale_m_per_model_unit': float(s_), 'rotation': R_.tolist(), 'translation_utm18n': t_.tolist()},
         'gravity': {'model_up': f.up.tolist(), **f.gravity_quality},
@@ -539,14 +546,19 @@ def fit_arrays(points, centres, rotations, building, buildings, rasters, observa
     return report, sim
 
 
-def building_for(model, run_path):
-    """The fragment's named building: the footprint of the acquisition target most of its photographs carry."""
+def footprint_votes(model, run_path):
+    """Footprint name -> number of the fragment's photographs whose acquisition target names it (metadata, no annotation)."""
     from collections import Counter
     report = json.loads((Path(run_path) / 'report.json').read_text())
     snapshot = json.loads(Path(report['snapshot_path']).read_text())
     targets = {r['filename']: (r.get('discovery') or {}).get('targets', []) for r in snapshot['images']}
     config = json.loads(CONFIG.read_text()); footprint = {t['id']: t.get('footprint') for t in config['targets']}
-    votes = Counter(footprint[t] for im in model.images.values() for t in targets.get(im.name, []) if footprint.get(t))
+    return Counter(footprint[t] for im in model.images.values() for t in targets.get(im.name, []) if footprint.get(t))
+
+
+def building_for(model, run_path):
+    """The fragment's named building: the footprint most of its photographs carry."""
+    votes = footprint_votes(model, run_path)
     return votes.most_common(1)[0][0] if votes else None
 
 
@@ -558,7 +570,7 @@ def observations_of(model):
     return np.array(pairs, dtype=np.int64) if pairs else None
 
 
-def fit(model, building, landmark=None, cues=None, footprints=FOOTPRINTS, seed=0):
+def fit(model, building, landmark=None, cues=None, footprints=FOOTPRINTS, seed=0, evidence=None):
     buildings = json.loads(Path(footprints).read_text())['buildings']
     ring = next(b for b in buildings if b['name'] == building)['ring']
     crop_name, crop, rasters = crop_for(ring)
@@ -566,7 +578,7 @@ def fit(model, building, landmark=None, cues=None, footprints=FOOTPRINTS, seed=0
     rotations = [im.cam_from_world().rotation.matrix() for im in images]
     centres = np.array([im.projection_center() for im in images])
     points = np.array([p.xyz for p in model.points3D.values()])
-    report, sim = fit_arrays(points, centres, rotations, building, buildings, rasters, observations_of(model), landmark, cues, seed)
+    report, sim = fit_arrays(points, centres, rotations, building, buildings, rasters, observations_of(model), landmark, cues, seed, evidence=evidence)
     report['camera_heights_m'] = {im.name: report['camera_heights_m'][str(i)] for i, im in enumerate(images)}
     report['lidar_crop'] = crop_name
     return report, sim, crop
@@ -581,7 +593,7 @@ def run(run_path, component, building=None, landmark=None, cues=None, output=Non
     model = pycolmap.Reconstruction(str(run_path / comp['model_path']))
     building = building or building_for(model, run_path)
     if building is None: raise ValueError('no building named for this fragment (no target photographs); pass --building')
-    result, (s, R, t), crop = fit(model, building, landmark, cues)
+    result, (s, R, t), crop = fit(model, building, landmark, cues, evidence=dict(footprint_votes(model, run_path)))
     out = Path(output) if output else run_path / 'anchor' / str(component); out.mkdir(parents=True, exist_ok=True)
     lidar_report = json.loads((crop / 'report.json').read_text())
     anchored = pycolmap.Reconstruction(str(run_path / comp['model_path']))
