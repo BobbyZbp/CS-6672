@@ -441,10 +441,11 @@ function showFly(a, b) {   // a, b: {views, label, splat}: the same fly-through 
   const url = (v, k, verdict) => (verdict && v.fly.verdict_url_pattern ? v.fly.verdict_url_pattern : v.fly.url_pattern).replace('%03d', String(k).padStart(3, '0'));
   for (let k = 0; k < n; k++) for (const v of [a.views, b.views]) for (const d of [false, true]) new Image().src = BASE + url(v, k, d);   // preload
   const W = overlay.clientWidth - 32, H = overlay.clientHeight - 24, ar = F.size ? F.size[0] / F.size[1] : 4 / 3;
-  const pw = Math.floor(Math.min((W - 10) / 2, (H - 250) * ar)), ph = Math.round(pw / ar);
+  const MAP_W = 290, MAP_H = 190;   // the map's box; the panes get what is left after the header and the footer
+  const pw = Math.floor(Math.min((W - 10) / 2, (H - MAP_H - 70) * ar)), ph = Math.round(pw / ar);
   const who = keys.map(k => scene.photographers.find(p => p.name === k.image));
   overlay.innerHTML = `<div class="fly" style="width:${2 * pw + 10}px">
-    <div class="flyhead"><b>A camera path no photographer took.</b> It walks between the spots where ${keys.length} photographers stood (map, lower left). Both splats were trained on the same photographs.</div>
+    <div class="flyhead"><b>A camera path no photographer took.</b> It walks between the spots where ${keys.length} photographers stood (map, lower left; McGraw Tower in gold). Both splats were trained on the same photographs.</div>
     <div class="panes">${[a, b].map((s, i) => `<figure style="width:${pw}px;height:${ph}px"><img src="${BASE + url(s.views, 0)}" alt=""><figcaption>${s.label}</figcaption><span class="share"></span></figure>`).join('')}</div>
     <div class="flyfoot"><svg class="minimap" aria-label="map of the camera path"></svg>
       <div class="flytext"><p class="where"></p><p class="what"></p>
@@ -457,7 +458,8 @@ function showFly(a, b) {   // a, b: {views, label, splat}: the same fly-through 
   const svg = ov.querySelector('.minimap'), pts = cams.map(c => c.centre).concat(keys.map(k => k.centre));
   const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]), tower = building('McGraw Tower'), tc = tower ? centroid(tower.ring) : [0, 0];
   const x0 = Math.min(...xs, tc[0]) - 25, x1 = Math.max(...xs, tc[0]) + 25, y0 = Math.min(...ys, tc[1]) - 25, y1 = Math.max(...ys, tc[1]) + 25;
-  const mw = 290, s = mw / (x1 - x0), mh = Math.round((y1 - y0) * s), X = x => ((x - x0) * s).toFixed(1), Y = y => ((y1 - y) * s).toFixed(1);
+  const s = Math.min(MAP_W / (x1 - x0), MAP_H / (y1 - y0)), mw = Math.round((x1 - x0) * s), mh = Math.round((y1 - y0) * s);
+  const X = x => ((x - x0) * s).toFixed(1), Y = y => ((y1 - y) * s).toFixed(1);
   svg.setAttribute('viewBox', `0 0 ${mw} ${mh}`); svg.style.width = mw + 'px'; svg.style.height = mh + 'px';
   const near = scene.buildings.filter(bd => bd.ring.some(([x, y]) => x > x0 && x < x1 && y > y0 && y < y1));
   const own = scene.photographers.filter(p => p.reconstruction === (mainCloud() || {}).meta?.tag && p.centre[0] > x0 && p.centre[0] < x1 && p.centre[1] > y0 && p.centre[1] < y1);
@@ -467,7 +469,7 @@ function showFly(a, b) {   // a, b: {views, label, splat}: the same fly-through 
     <polyline points="${cams.map(c => X(c.centre[0]) + ',' + Y(c.centre[1])).join(' ')}" fill="none" stroke="#e8e2d0" stroke-width="1.2" stroke-dasharray="3 2"/>
     ${keys.map((k, i) => `<g><circle cx="${X(k.centre[0])}" cy="${Y(k.centre[1])}" r="6.5" fill="#2a6fdb" stroke="#fff" stroke-width="1"/><text x="${X(k.centre[0])}" y="${(+Y(k.centre[1]) + 3.2).toFixed(1)}" text-anchor="middle" font-size="8.5" font-weight="700" fill="#fff">${i + 1}</text></g>`).join('')}
     <path class="cone" fill="rgba(224,41,36,.28)" stroke="#e02924" stroke-width="1"/><circle class="cam" r="3.6" fill="#e02924" stroke="#fff" stroke-width="1"/>
-    <text x="6" y="${mh - 6}" font-size="9" fill="#c8c2b4">${tower ? 'McGraw Tower in gold · ' : ''}north up</text>
+    <text x="6" y="${mh - 6}" font-size="9" fill="#c8c2b4">N ↑</text>
     <line x1="${mw - 6 - 20 * s}" x2="${mw - 6}" y1="${mh - 9}" y2="${mh - 9}" stroke="#c8c2b4" stroke-width="1.5"/><text x="${mw - 6 - 10 * s}" y="${mh - 12}" text-anchor="middle" font-size="8.5" fill="#c8c2b4">20 m</text>`;
   const cone = svg.querySelector('.cone'), cam = svg.querySelector('.cam');
   const share = s => s.splat ? `${pct(s.splat.free_space.in_free_air, 0)} in empty air · ${pct(s.splat.free_space.buried, 0)} under the ground` : '';
@@ -660,7 +662,9 @@ const chapters = [
           ${row('held-out PSNR (mean of ' + fmt(plain.images ? plain.images.test : null) + ')', s => s.psnr && s.psnr.test_mean ? fmt(s.psnr.test_mean, 1) + ' dB' : '—')}
           ${row('training time', s => s.seconds ? fmt(s.seconds / 60) + ' min' : '—')}</table>
         <p class="note">${taught.prior ? `Removed during training: ${fmt(taught.prior.pruned)} Gaussians more than ${fmt(taught.prior.prune_above_m)} m into measured free air.` : ''} The far field (sky and the background beyond the lidar crop) is not judged and not shown.</p>
-        ${(r.splat_ablations || []).map(a => `<p class="finding">How far can the teacher go? A ${fmt(a.prior.weight / taught.prior.weight)}-times stronger rule puts ${pct(a.free_space.on_surfaces)} of the Gaussians on lidar surfaces — more than COLMAP's own points (${pct(r.placement ? r.placement.sparse_points_free_space.surface : null)}) — but the best-covered held-out view drops from ${fmt(taught.psnr_best_covered_view, 1)} to ${fmt(a.psnr_best_covered_view, 1)} dB: at that strength it carves real structure that the lidar's 2.5 m tolerance and the placement's few-metre error put outside. The demo keeps the gentler rule.</p>`).join('')}`;
+        ${(r.splat_ablations || []).map(a => {
+          const floor = r.placement ? r.placement.sparse_points_free_space.surface : null, drop = taught.psnr_best_covered_view - a.psnr_best_covered_view;
+          return `<p class="finding">How far can the teacher go? A ${fmt(a.prior.weight / taught.prior.weight)}-times stronger rule puts ${pct(a.free_space.on_surfaces)} of the Gaussians on lidar surfaces${floor === null ? '' : a.free_space.on_surfaces > floor ? ` — more than COLMAP's own points (${pct(floor)})` : ` (COLMAP's own points: ${pct(floor)})`}, and the best-covered held-out view goes from ${fmt(taught.psnr_best_covered_view, 1)} to ${fmt(a.psnr_best_covered_view, 1)} dB${drop > 1 ? ': at that strength it carves real structure that the lidar\'s 2.5 m tolerance and the placement\'s error put outside. The demo keeps the gentler rule.' : '.'}</p>`; }).join('')}`;
       const tower = building('McGraw Tower'), c = centroid(tower.ring);
       const apply = () => {
         const mode = document.querySelector('input[name=tchmode]:checked').value, hint = document.getElementById('tchhint');

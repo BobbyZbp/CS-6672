@@ -50,9 +50,16 @@ def load_views(model, image_dir, device):
         K = torch.tensor([[fx, 0, cx], [0, fy, cy], [0, 0, 1]], dtype=torch.float32)
         R = torch.tensor(image.cam_from_world().rotation.matrix(), dtype=torch.float32); t = torch.tensor(image.cam_from_world().translation, dtype=torch.float32)
         viewmat = torch.eye(4); viewmat[:3, :3] = R; viewmat[:3, 3] = t
-        img = torch.from_numpy(np.asarray(Image.open(image_dir / image.name).convert('RGB'), dtype=np.float32) / 255.0)
-        views.append({'name': image.name, 'K': K.to(device), 'viewmat': viewmat.to(device), 'image': img.to(device), 'width': cam.width, 'height': cam.height})
+        # Photographs stay on the host as bytes and go to the GPU one at a time (88 photographs as floats on the GPU
+        # crowded an 8 GB card into paging once a splat passed a million Gaussians).
+        pixels = torch.from_numpy(np.asarray(Image.open(image_dir / image.name).convert('RGB'), dtype=np.uint8).copy())
+        views.append({'name': image.name, 'K': K.to(device), 'viewmat': viewmat.to(device), 'pixels': pixels, 'width': cam.width, 'height': cam.height})
     return views
+
+
+def image_of(v, device):
+    """A view's photograph on the device, (H, W, 3) floats in [0, 1]."""
+    return v['pixels'].to(device, non_blocking=True).float() / 255.0
 
 
 def ssim(a, b, window=11, sigma=1.5):
@@ -140,7 +147,7 @@ def train(run, anchor, name, steps=15000, sh_degree=3, device='cuda', seed=0, li
     optimizers = {k: torch.optim.Adam([{'params': params[k], 'lr': lr[k], 'name': k}], eps=1e-15) for k in params}
     # Per image: an affine colour map (exposure, white balance) and a background colour (the sky), both learned.
     affine = torch.nn.Parameter(torch.eye(3, 4, device=device)[None].repeat(len(views), 1, 1))
-    background = torch.nn.Parameter(torch.stack([v['image'][: max(1, v['height'] // 20)].reshape(-1, 3).median(0).values for v in views]))
+    background = torch.nn.Parameter(torch.stack([image_of(v, device)[: max(1, v['height'] // 20)].reshape(-1, 3).median(0).values for v in views]))
     opt_image = torch.optim.Adam([{'params': [affine], 'lr': 1e-3}, {'params': [background], 'lr': 1e-2}])
     strategy = DefaultStrategy(verbose=False, refine_start_iter=500, refine_stop_iter=int(steps * 0.6), reset_every=3000, refine_every=100)
     strategy.check_sanity(params, optimizers)
@@ -155,11 +162,13 @@ def train(run, anchor, name, steps=15000, sh_degree=3, device='cuda', seed=0, li
     def render(v, step=None, bg=None):
         sh = min(step // 1000, sh_degree) if step is not None else sh_degree
         colors = torch.cat([params['sh0'], params['shN']], 1)
+        # Packed rasterization (the memory-lean layout, same image); the background is composited here, as gsplat
+        # would (colour + (1 - alpha) * background), since its packed path rejects a background tensor.
         img, alpha, info = rasterization(params['means'], params['quats'] / params['quats'].norm(dim=-1, keepdim=True), torch.exp(params['scales']),
                                          torch.sigmoid(params['opacities']), colors, v['viewmat'][None], v['K'][None], v['width'], v['height'],
-                                         sh_degree=sh, packed=False, absgrad=False,
-                                         backgrounds=(bg if bg is not None else torch.ones(3, device=device))[None])
-        return img[0], alpha[0], info
+                                         sh_degree=sh, packed=True, absgrad=False)
+        bg = bg if bg is not None else torch.ones(3, device=device)
+        return img[0] + (1 - alpha[0]) * bg, alpha[0], info
 
     t0 = time.time(); log = []; pruned_by_prior = 0
     for step in range(steps):
@@ -167,7 +176,8 @@ def train(run, anchor, name, steps=15000, sh_degree=3, device='cuda', seed=0, li
         img, alpha, info = render(v, step, background[i].clamp(0, 1))
         A = affine[i]
         pred = (img @ A[:, :3].T + A[:, 3]).clamp(0, 1)
-        l1 = (pred - v['image']).abs().mean(); s = ssim(pred, v['image'])
+        target = image_of(v, device)
+        l1 = (pred - target).abs().mean(); s = ssim(pred, target)
         loss = 0.8 * l1 + 0.2 * (1 - s)
         prior_loss = None
         if prior is not None:
@@ -177,7 +187,7 @@ def train(run, anchor, name, steps=15000, sh_degree=3, device='cuda', seed=0, li
         loss.backward()
         for o in optimizers.values(): o.step(); o.zero_grad(set_to_none=True)
         opt_image.step(); opt_image.zero_grad(set_to_none=True); sched.step()
-        strategy.step_post_backward(params, optimizers, state, step, info, packed=False)
+        strategy.step_post_backward(params, optimizers, state, step, info, packed=True)
         if prior is not None and step >= 500 and step % 100 == 0:
             with torch.no_grad(): far = prior.violation(params['means']) > prune_above_m
             if far.any() and int((~far).sum()) > 1000:
@@ -191,17 +201,18 @@ def train(run, anchor, name, steps=15000, sh_degree=3, device='cuda', seed=0, li
     # (least squares on the rendering, the usual protocol for in-the-wild collections).
     def psnr_of(v, i=None):
         with torch.no_grad():
-            bg = background[i].clamp(0, 1) if i is not None else v['image'][: max(1, v['height'] // 20)].reshape(-1, 3).median(0).values
+            photo = image_of(v, device)
+            bg = background[i].clamp(0, 1) if i is not None else photo[: max(1, v['height'] // 20)].reshape(-1, 3).median(0).values
             img, alpha, _ = render(v, bg=bg)
-            X = torch.cat([img.reshape(-1, 3), torch.ones(img.shape[0] * img.shape[1], 1, device=device)], 1); Y = v['image'].reshape(-1, 3)
+            X = torch.cat([img.reshape(-1, 3), torch.ones(img.shape[0] * img.shape[1], 1, device=device)], 1); Y = photo.reshape(-1, 3)
             M = torch.linalg.lstsq(X, Y).solution; pred = (X @ M).reshape(img.shape).clamp(0, 1)
-            return float(10 * torch.log10(1 / ((pred - v['image']) ** 2).mean())), pred
+            return float(10 * torch.log10(1 / ((pred - photo) ** 2).mean())), pred
     (out / 'renders').mkdir(exist_ok=True)
     from PIL import Image
     test_psnr = []
     for v in test:
         p, pred = psnr_of(v); test_psnr.append({'image': v['name'], 'psnr': p})
-        side = np.concatenate([v['image'].cpu().numpy(), pred.cpu().numpy()], 1)
+        side = np.concatenate([v['pixels'].numpy().astype(np.float32) / 255.0, pred.cpu().numpy()], 1)
         Image.fromarray((side * 255).astype(np.uint8)).save(out / 'renders' / (Path(v['name']).stem + '.jpg'), quality=90)
     train_psnr = [psnr_of(v, view_index[v['name']])[0] for v in train_views[:8]]
     # The per-photograph colour maps and backgrounds are saved too (renders at training poses need no refit).

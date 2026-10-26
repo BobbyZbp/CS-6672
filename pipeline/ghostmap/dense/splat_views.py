@@ -147,13 +147,19 @@ def fly_path(model, centre_xy, holdout, frames, count=7, height=None):
 
 def verdict_still(splats_dir, names, frames):
     """The fly-through frame where the lidar's verdict separates the splats most (share of pixels painted red or purple,
-    first splat minus second), side by side, for the slides (`verdict-plain-vs-lidar-taught.jpg`)."""
+    first splat minus second) among frames where both still show the scene (at most 60 % painted, and the photo-colour
+    frames hold visible structure: a mean luminance gradient of at least 0.01, where a Gaussian right in front of the
+    camera leaves a featureless blur), side by side, for the slides (`verdict-plain-vs-lidar-taught.jpg`)."""
     from PIL import Image
     def flagged(name, k):
         x = np.asarray(Image.open(Path(splats_dir) / name / 'views' / f'fly-verdict-{k:03d}.jpg').convert('RGB')).astype(float) / 255
         return float(np.mean([(np.abs(x - c).max(-1) < 0.12).mean() for c in VERDICT_RGB.values()]) * len(VERDICT_RGB))
+    def structure(name, k):
+        x = np.asarray(Image.open(Path(splats_dir) / name / 'views' / f'fly-{k:03d}.jpg').convert('L')).astype(float) / 255
+        gy, gx = np.gradient(x); return float(np.mean(np.hypot(gx, gy)))
     shares = [(flagged(names[0], k), flagged(names[1], k)) for k in range(frames)]
-    k = int(np.argmax([a - b for a, b in shares]))
+    shows_scene = [min(structure(n, k) for n in names) >= 0.01 for k in range(frames)]
+    k = int(np.argmax([a - b if max(a, b) <= 0.6 and ok else -1.0 for (a, b), ok in zip(shares, shows_scene)]))
     pair = [Image.open(Path(splats_dir) / n / 'views' / f'fly-verdict-{k:03d}.jpg').convert('RGB') for n in names]
     out = Image.new('RGB', (pair[0].width * 2 + 12, pair[0].height), (255, 255, 255))
     out.paste(pair[0], (0, 0)); out.paste(pair[1], (pair[0].width + 12, 0))

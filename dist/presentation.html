@@ -199,11 +199,11 @@
       <p>Same photographs, same steps; one extra term: the lidar's measured free space is empty. Gaussians in it fade, and those far in the air are removed.</p>
       <table id="teacher-table"></table>
       <div class="finding" data-fill="teacher-sentence">The floaters disappear.</div>
-      <p class="muted" style="font-size:.66em">Ablation: a five-times stronger prior puts 91 % of the Gaussians on lidar surfaces, better than COLMAP's own points (86 %), but loses 4 dB on the covered held-out view: it carves real structure that a few metres of placement error put outside the surface. The placement's accuracy sets how hard the lidar can teach.</p>
+      <p class="muted" style="font-size:.66em" data-fill="ablation-sentence"></p>
     </div>
     <div>
-      <img class="fig" src="assets/presentation/walk-plain-vs-lidar-taught.jpg" alt="Plain and lidar-taught splats from the same new viewpoint">
-      <div class="cap">The same new viewpoint between the photographers, rendered by gsplat: plain splat (left), lidar-taught (right). Between photographs every view is new, which is where floaters show.</div>
+      <img class="fig" src="assets/presentation/verdict-plain-vs-lidar-taught.jpg" alt="Plain and lidar-taught splats from the same new viewpoint, painted by the lidar's verdict">
+      <div class="cap">A view between the photographers that nobody took, every Gaussian painted by the lidar's verdict (red: in air the lidar measured empty): plain splat (left), lidar-taught (right), rendered by gsplat.</div>
       <div class="pair" style="margin-top:.5em"><img src="assets/presentation/view-6333253-tower-and-library.jpg" alt="plain splat at a held-out pose"><img src="assets/presentation/view-6333253-tower-and-library-lidar-taught.jpg" alt="lidar-taught splat at the same held-out pose"></div>
       <div class="cap" data-fill="teacher-render-cap">At a held-out photograph's pose: plain (left), lidar-taught (right).</div>
     </div>
@@ -390,6 +390,8 @@ try {
     const air = [plain.free_space.in_free_air, taught.free_space.in_free_air];
     const dP = (taught.psnr && plain.psnr) ? taught.psnr.test_mean - plain.psnr.test_mean : null;
     set('teacher-sentence', `Gaussians in measured free air: ${pct(air[0], 1)} → <b>${pct(air[1], 1)}</b>${dP !== null ? `; held-out PSNR ${dP >= 0 ? 'up' : 'down'} ${fmt(Math.abs(dP), 1)} dB` : ''}.`);
+    const ab = (r.splat_ablations || [])[0], floor = r.placement && r.placement.sparse_points_free_space;
+    if (ab && taught.prior) set('ablation-sentence', `Ablation: a ${fmt(ab.prior.weight / taught.prior.weight)}-times stronger prior puts ${pct(ab.free_space.on_surfaces)} of the Gaussians on lidar surfaces${floor ? ` (COLMAP's own points: ${pct(floor.surface)})` : ''}, and the best-covered held-out view goes from ${fmt(taught.psnr_best_covered_view, 1)} to ${fmt(ab.psnr_best_covered_view, 1)} dB. How hard the lidar can teach is set by how well the fragment is placed.`);
     const pick = (plain.renders || []).find(x => (taught.renders || []).some(y => y.photo === x.photo));
     if (pick) {
       const t = taught.renders.find(y => y.photo === pick.photo);

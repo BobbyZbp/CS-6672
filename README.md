@@ -24,12 +24,14 @@ of GhostMap is built past one of them:
 
 **Where** — placement with a certificate ([measurements](docs/checkpoints/2026-10-26-georegistration.md)):
 
-- of 393 campus photographs only 129 carry GPS, and the tower-and-library fragment's 63
+- of 393 campus photographs only 129 carry GPS, and the tower-and-library fragment's 88
   photographs carry one, which is 2,000 km off: GPS alignment cannot even start;
 - a cue-based estimator (walls, lidar roof edges, the tower top, photographers at eye height,
-  free space along camera rays) places the 63-camera fragment in metres; its certificate
-  reads usable, scale fixed by the tower top (±3.9 %) and four roof edges, and it reproduces
-  the earlier landmark anchor within 1.2 % in scale;
+  free space along camera rays) places the 88-camera fragment (with 178 Flickr photographs
+  added) in metres; its certificate reads usable, scale fixed three independent ways (the
+  tower top, ±3.9 %; the walls alone; four roof edges), and the photographers' heights over
+  the lidar ground level it by 3.7° where the other cues agree
+  ([checkpoint](docs/checkpoints/2026-10-26-more-photographs-levelled.md));
 - on the campus-wide run (339 photographs, GPU) all seven larger fragments are refused,
   each for a stated reason (a square tower cannot fix its heading, one facade cannot fix its
   scale, close-ups show no facade); the three placements GPS tags could check were 64 to
@@ -38,12 +40,15 @@ of GhostMap is built past one of them:
 **How it looked** — the lidar as referee and teacher:
 
 - a Gaussian splat trained in the lidar's metres can be judged Gaussian by Gaussian against
-  what the lidar measured; the plain splat puts 30 % of its Gaussians on lidar surfaces,
-  46 % under the ground and 25 % in air the lidar saw empty;
+  what the lidar measured; the plain splat puts 41 % of its Gaussians on lidar surfaces,
+  41 % under the ground and 18 % in air the lidar saw empty;
 - trained with one lidar rule (the air above the measured surface is empty), the same
-  splat puts 70 % on lidar surfaces and 10 % under the ground, halves its median distance
-  to the lidar (5.2 m to 1.9 m), needs half the Gaussians and a third of the time, at the
-  same held-out PSNR (14.4 against 14.2 dB; 24 dB on the best-covered held-out view).
+  splat puts 88 % on lidar surfaces (COLMAP's own points: 83 %), 5 % under the ground and
+  7 % in empty air, cuts its median distance to the lidar from 3.6 m to 1.3 m with 38 % fewer
+  Gaussians, and renders held-out photographs as well (14.5 against 14.4 dB); a five times
+  stronger rule reaches 96 % on lidar surfaces;
+- between the photographers, where the splat has to invent the view, 20 % of the plain
+  splat's pixels are paint the lidar refutes, against 4 % for the lidar-taught one.
 
 **When** — twenty years: six New York State aerial flights 2002–2023 draped on the lidar
 terrain, documented construction dates for Gates, Klarman and Milstein Hall, and every

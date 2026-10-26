@@ -36,10 +36,11 @@ live (the snap, the splats, the year slider). Every number on the slides is read
 
 ## Likely questions
 
-- **How accurate is the placement?** The unified estimator reproduces the earlier landmark method within about
-  a percent in scale and a degree in rotation, and two independent scales (vertical from the tower, horizontal
-  from the library walls) agree within 2 %. The certificate states the scale uncertainty from the cue that fixed
-  it (slide 6).
+- **How accurate is the placement?** Three independent things fix the scale of the 88-photograph fragment: the
+  tower top (±3.9 %), the walls alone and four lidar roof edges. Its heading agrees with the earlier landmark method
+  within 2°. The photographers' heights over the lidar ground showed a leftover tilt; levelling by two thirds of it
+  (3.7°) scored best on all cues together, levelling by all of it made the walls fit worse. The certificate states
+  all of this (slide 6).
 - **Why not just use GPS?** Look at slide 2: few photographs carry it, the tower fragment has essentially none,
   and some tags are thousands of kilometres off. Where geotags exist we use them only as held-out truth.
 - **Is the lidar a fair referee for walls?** Airborne lidar sees roofs and ground densely and walls thinly, so
@@ -49,11 +50,10 @@ live (the snap, the splats, the year slider). Every number on the slides is read
   lidar box up to 120 m above the ground) and only on Gaussians more than 2 m above the highest lidar surface
   within 2.5 m; held-out photographs (never trained on) are the check that the rendering did not get worse for
   views the training never saw.
-- **Why not push the prior harder?** We tried: five times the weight and removal from 3 m puts 91 % of the
-  Gaussians on lidar surfaces (better than COLMAP's own points, 86 %), but the held-out view the
-  photographers covered drops from 23.8 to 19.9 dB. The prior then carves away real structure that a few
-  metres of placement error put outside the surface: how hard the lidar can teach is set by how well we
-  placed the fragment.
+- **Why not push the prior harder?** We tried: five times the weight puts 96 % of the Gaussians on lidar
+  surfaces and the mean held-out PSNR rises (14.5 to 14.8 dB), but the best-covered held-out view loses about
+  a decibel (22.5 to 21.4 dB). On the earlier, unlevelled placement the same push cost 4 dB: how hard the
+  lidar can teach is set by how well we placed the fragment.
 - **What about change over time? The lidar is from 2020.** Exactly why the time machine shows documented dates
   and aerial flights; the free-space prior would wrongly delete a building that stood only before 2020, so it is
   applied to a fragment of buildings that stood throughout (the tower and the library).

@@ -226,7 +226,12 @@ def certificate_summary(path):
 def build(output=OUT, anchored_runs=None, record_snapshot=None, ground_runs=None, with_splats=True):
     import pycolmap
     from ghostmap.archival.reference import Reference
-    output = Path(output); (output / 'photos').mkdir(parents=True, exist_ok=True); (output / 'crops').mkdir(exist_ok=True)
+    output = Path(output)
+    # Outputs written per reconstruction are cleared first, so a page built from another run carries none of the
+    # previous run's points, splats, surfaces or photographs (the offline bundle packs the whole folder).
+    for stale in ('splats', 'mesh', 'photos'): shutil.rmtree(output / stale, ignore_errors=True)
+    for stale in output.glob('points-*'): stale.unlink()
+    (output / 'photos').mkdir(parents=True, exist_ok=True); (output / 'crops').mkdir(exist_ok=True)
     timeline = json.loads(TIMELINE.read_text()); years = timeline['aerial_years']
     quad_lidar = json.loads((SITES['quad']['lidar'] / 'report.json').read_text())
     origin = np.array(quad_lidar['box_utm'][:2] + [0.0])
