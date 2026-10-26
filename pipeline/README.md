@@ -44,10 +44,12 @@ as a subprocess through its entry-point name.
 | | `evaluate/georegistration.py` | `-m ghostmap.evaluate.georegistration` | Held-out geotags versus anchored cameras, the geotag-similarity baseline (leave-one-out), cross-fragment agreement, the certificate as a predictor; `artifacts/georegistration/`. |
 | | `evaluate/synthetic.py` | — | The synthetic hall with a known similarity (facade choice, roof-edge error, camera-height noise) used by the fixtures and the sweep. |
 | | `evaluate/identifiability_sweep.py` | `-m ghostmap.evaluate.identifiability_sweep` | Identifiability curves: scale, yaw and position error and the certificate's verdict over facade counts, roof-edge error, camera-height noise and cue sets. |
+| | `evaluate/splat_geometry.py` | `-m ghostmap.evaluate.splat_geometry` | Score a splat's geometry against the public lidar: per-Gaussian distance to the lidar surface, per building; coverage; a distance-coloured layer for the viewer. |
 | | `evaluate/bridges.py` | `analyze_artsquad_bridges.py` | Inter-component edges, triangulation angles, calibration-strain warnings. |
 | dense | `dense/openmvs_cpu.py` | `run_cpu_mvs.py` | COLMAP undistortion -> OpenMVS CPU densify / mesh / texture. |
 | | `dense/texture_from_cameras.py` | `texture_from_cameras.py` | Texture the unchanged mesh from calibrated source cameras. |
 | | `dense/mesh_supported_patches.py` | `mesh_supported_patches.py` | Conservative local-facet mesh from fused points with support filters. |
+| | `dense/splats.py` | `-m ghostmap.dense.splats` | Gaussian splat of an anchored fragment in the lidar frame (gsplat; per-image affine colour; held-out PSNR; standard PLY). |
 | | `dense/setup_openmvs.py` | `setup_openmvs.py` | Install the pinned OpenMVS v2.4.0 CPU runtime into `third_party/openmvs-bin`. |
 | surface | `surface/dense_support.py` | `audit_artsquad_dense_support.py` | Per-point view/source-family provenance of the fused cloud. |
 | | `surface/supported.py` | `build_artsquad_supported.py` | Family-supported surface fragments. |
