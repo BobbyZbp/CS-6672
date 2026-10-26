@@ -28,7 +28,26 @@ Measured today on the existing fragments (Quad run and the final Gates run):
 
 So the motivation holds: on the Quad, no baseline that needs GPS applies; where GPS exists it is noisy or wrong; and whether a fragment is placeable depends on its geometry. The plan's first experiment measures this across every fragment of the campus-wide run (table: geotags per fragment, baselines that can run, their errors, our certificate) so the paper's motivation is a measured table, not an anecdote.
 
-## Paper framing (working title)
+## Main line since decision 12: reconstruct internet photographs inside the world's own 3D model
+
+Public lidar (USGS 3DEP) covers most of the country; internet-photo reconstructions have always been built in a vacuum.
+Placing them in the lidar (the first step, built) lets the lidar **score** any in-the-wild reconstruction's geometry
+(per building: distance to the nearest lidar return, coverage, floaters — the first geometry benchmark for in-the-wild
+splats that anyone can reproduce where 3DEP exists) and **teach** it (ground, roof and wall priors in training). Work
+packages for this line:
+
+- WP-A (done 2026-10-26 night): `dense/splats.py` trains a splat of an anchored fragment in the lidar frame (gsplat,
+  per-image affine colour, held-out PSNR, standard PLY); `evaluate/splat_geometry.py` scores it against the lidar and
+  writes a distance-coloured layer the time machine shows. An unprivileged CUDA 12.6 compiler (micromamba into `.cuda`)
+  builds gsplat's kernels.
+- WP-B: lidar-regularised training — a depth/normal prior from the DSM and footprint walls, ablated against the plain
+  splat with the same scorer; the measured claim of the paper.
+- WP-C: a splat renderer in the page (vendored three.js splat viewer) on the lidar terrain, with the year slider.
+- WP-D: the same for every certified fragment; the second site if time allows.
+
+The sections below describe the first step (placement with certificates) as originally planned.
+
+## Paper framing of the first step (working title)
 
 **Where did the photographer stand? GPS-free metric placement of crowd-sourced reconstructions with public lidar, footprints and camera-height cues — with identifiability certificates.**
 

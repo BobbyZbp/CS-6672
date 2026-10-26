@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -223,7 +224,25 @@ def build(output=OUT, anchored_runs=None, record_snapshot=None, ground_runs=None
                    np.array(ref.report['similarity']['translation_utm18n']) - ref.origin)
             mesh = export_mesh(ply.parent, sim, shift, output / 'mesh', tag); mesh['dense_report'] = str(ply.parent / 'report.json')
             break
-        reconstructions.append({'tag': tag, 'run': str(run), 'anchor_report': str(report), 'intervals_report': str(intervals_path) if intervals else None, 'mesh': mesh,
+        # A Gaussian splat of this fragment scored against the lidar (evaluate/splat_geometry.py): its centres, coloured by
+        # distance to the lidar, become a layer; the renderer for the splat itself is a separate vendored viewer.
+        splat_geometry = None
+        for geometry in sorted((Path(run) / 'splats').glob('*/geometry.json')):
+            splat_report = json.loads((geometry.parent / 'report.json').read_text()) if (geometry.parent / 'report.json').exists() else {}
+            if str(splat_report.get('anchor')) != comp: continue
+            g = json.loads(geometry.read_text())
+            xyz_g = np.fromfile(geometry.parent / g['viewer_layer']['xyz_url'], dtype=np.float32).reshape(-1, 3) + shift.astype(np.float32)
+            (output / 'splats').mkdir(exist_ok=True)
+            xyz_g.tofile(output / 'splats' / f'{tag}-geometry.f32'); shutil.copy2(geometry.parent / g['viewer_layer']['rgb_url'], output / 'splats' / f'{tag}-geometry.u8')
+            ply = geometry.parent / 'splat.ply'
+            if ply.exists(): shutil.copy2(ply, output / 'splats' / f'{tag}.ply')
+            splat_geometry = {'name': geometry.parent.name, 'xyz_url': f'splats/{tag}-geometry.f32', 'rgb_url': f'splats/{tag}-geometry.u8', 'ply_url': f'splats/{tag}.ply' if ply.exists() else None,
+                              'gaussians': g['gaussians'], 'overall': g['overall_distance_to_lidar'], 'colour': g['viewer_layer']['colour'],
+                              'per_building': {k: {'gaussians': v['gaussians'], 'median_m': v['distance_to_lidar']['median_m'], 'within_1m': v['distance_to_lidar']['within_1m'],
+                                                   'floaters': v['distance_to_lidar']['floaters_beyond_5m'], 'coverage': v['coverage_within_1m']} for k, v in g['per_building'].items()},
+                              'psnr': splat_report.get('psnr'), 'images': splat_report.get('images'), 'geometry_report': str(geometry)}
+            break
+        reconstructions.append({'tag': tag, 'run': str(run), 'anchor_report': str(report), 'intervals_report': str(intervals_path) if intervals else None, 'mesh': mesh, 'splat_geometry': splat_geometry,
                                 'points': len(ids), 'dated_photographs': intervals['dated_photographs'] if intervals else None,
                                 'xyz_url': f'points-{tag}.f32', 'rgb_url': f'points-{tag}.u8', 'first_url': f'points-{tag}-first.i16', 'last_url': f'points-{tag}-last.i16',
                                 'scale_status': ref.report['scale_status'], 'anchored_through': ref.report.get('landmark_building'),
