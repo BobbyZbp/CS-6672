@@ -792,3 +792,14 @@ A Boardman surface claim requires all of:
 - the simulated-demolition direction showing that the Day-0 masked median/p75 sensitivity is pessimistic relative to lidar truth.
 
 If any of these fails, pivot to bounds (Ghost Hull). If the tower control also fails (it misses the lidar tower, overestimates by more than 3x, or the hull cannot close on 3 sides), pivot again: to the certificate/method paper on surviving controls, plus the modern-only the active-acquisition direction track, or to another destroyed Cornell structure. Commons has categories for Morse Hall, the Old Armory, the McGraw-Fiske Mansion and the 1890 Boathouse. Their counts, rights and independence are unverified, so run the same Day-1 census on them before switching. A reliable alternative beats a fake Boardman.
+## Related work for the georegistration paper (checked 2026-10-26)
+
+- Kaminsky, Snavely, Seitz, Szeliski, *Alignment of 3D point clouds to overhead images*, CVPR Workshops 2009 (DOI 10.1109/CVPRW.2009.5204180): SfM to an orthographic overhead image through point-to-edge matching and free-space penalties from camera visibility; a search over rotation, scale and translation. Our free-space cue follows it; we add lidar heights, explicit metric cues and a certificate.
+- Wang, Wilson, Snavely, *Accurate georegistration of point clouds using geographic data*, 3DV 2013: Flickr geotags as the start, Google Street View / Google Earth models as the reference. We use neither.
+- Goebbels, Pohle-Fröhlich, *Line-based registration of photogrammetric point clouds with 3D city models*, 2018 (SciTePress 65330): wall planes made vertical, footprints matched to CityGML; needs a coarse georeference first.
+- Zhang et al., *Improving details of building façades in open LiDAR data using ground images*, Remote Sensing 11(4):420, 2019: ground-image SfM to open airborne lidar through building outlines; GPS initialisation.
+- Sarlin et al., *OrienterNet: visual localization in 2D public maps with neural matching*, CVPR 2023: one image to OpenStreetMap, 3-DoF, learned; no lidar, no fragment, no scale cues beyond the map.
+- Kinoshita, Nishino, *Camera height doesn't change*, ECCV 2024: constant camera height as metric supervision for monocular road-scene depth. The same physical principle as our photographers-at-eye-height cue, applied to a different problem.
+- Untzelmann, Sattler, Middelberg, Kobbelt, *A scalable collaborative online system for city reconstruction*, ICCV Workshops 2013 (to verify before citing: OSM building outlines used to place SfM fragments).
+- Temporal line: Matzen, Snavely, *Scene Chronology*, ECCV 2014; Lin et al., *Neural Scene Chronology*, CVPR 2023; *ChronoGS* (arXiv 2511.18794, Nov 2025); *LTGS* (arXiv 2510.09881, Oct 2025).
+- Nothing found that georegisters internet SfM fragments to public lidar and OSM without any GPS, with explicit metric cues and per-degree-of-freedom identifiability.

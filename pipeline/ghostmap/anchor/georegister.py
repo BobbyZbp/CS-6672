@@ -57,7 +57,7 @@ EYE_M, EYE_SD_M = 1.6, 0.3          # photographer height above the lidar ground
 ROOF_EDGE_SD_M = 2.0                # facade top versus the lidar roof edge
 LANDMARK_SD_M = (3.0, 2.0)          # tower axis to footprint centre; tower top to lidar top
 TOWER_MIN_HEIGHT_M = 25.0           # a footprint this much above its ground counts as a landmark
-FREE_SPACE_STEP_M = 2.0
+FREE_SPACE_SAMPLES, FREE_SPACE_MAX_RAY_M = 32, 400.0   # samples along each camera-to-point ray; longer rays are outliers
 WEIGHTS = {'walls': 1.0, 'roof_edges': 0.5, 'camera_height': 0.3, 'landmark': 1.0, 'free_space': 0.5, 'outside': 0.5}
 COARSE_POINTS, REFINE_POINTS, FREE_SPACE_RAYS = 1000, 4000, 600
 BAND_DROP = 0.10                    # a degree of freedom is "inside the band" while the objective loses less than a tenth of its dynamic range
@@ -241,7 +241,11 @@ class Fragment:
         R2 = rot_z(theta)[:2, :2]
         pts = s * self.pg[pt_i, :2] @ R2.T + txy; cams = s * self.cg[cam_i, :2] @ R2.T + txy
         tz = self.tz_at(theta, s, txy); pz = s * self.pg[pt_i, 2] + tz; cz = s * self.cg[cam_i, 2] + tz
-        d = pts - cams; L = np.linalg.norm(d, axis=1); n = max(2, int(np.ceil(np.nanmax(L) / FREE_SPACE_STEP_M)))
+        d = pts - cams; L = np.linalg.norm(d, axis=1)
+        keep = L <= FREE_SPACE_MAX_RAY_M   # a far outlier point would otherwise dictate the sampling of every ray
+        if keep.sum() < 20: return 1.0
+        d, cams, L, pz, cz = d[keep], cams[keep], L[keep], pz[keep], cz[keep]
+        n = FREE_SPACE_SAMPLES
         t = np.linspace(0.05, 0.95, n)[None, :, None]
         samples = cams[:, None, :] + t * d[:, None, :]; heights = cz[:, None] + t[..., 0] * (pz - cz)[:, None]
         roof = raster_lookup(self.building_raster, self.box, self.cell, samples.reshape(-1, 2)).reshape(len(L), n)
