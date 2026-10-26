@@ -15,3 +15,6 @@ third_party/
 
 # Credentials (never committed)
 .secrets/
+
+# unprivileged CUDA toolchain (micromamba prefix; see README setup)
+.cuda/

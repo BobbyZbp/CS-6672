@@ -65,6 +65,17 @@ third_party/           pinned hloc checkout, NeuSC, OpenMVS CPU binaries
 ```bash
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements-artsquad.txt   # chains repair -> hloc -> base
+```
+
+GPU (optional, used by the learned matching and the splats): the CUDA build of torch
+(`torch==2.14.1 torchvision==0.29.1 --index-url https://download.pytorch.org/whl/cu126`) and, for
+gsplat's kernels, an unprivileged CUDA 12.6 compiler installed with micromamba into `.cuda/`:
+
+```bash
+micromamba create -p .cuda -c nvidia/label/cuda-12.6.3 -c conda-forge cuda-nvcc=12.6 cuda-cudart-dev=12.6 cuda-cccl=12.6 cuda-nvcc-dev_linux-64=12.6
+ln -s targets/x86_64-linux/lib .cuda/lib64
+export CUDA_HOME=$PWD/.cuda PATH=$PWD/.cuda/bin:$PATH CPATH=$PWD/.cuda/targets/x86_64-linux/include LIBRARY_PATH=$PWD/.cuda/targets/x86_64-linux/lib TORCH_CUDA_ARCH_LIST=8.6
+.venv/bin/python -m pip install gsplat==1.5.3 ninja   # kernels compile on first use (about five minutes)
 .venv/bin/python pipeline/setup_openmvs.py                     # private OpenMVS CPU runtime in third_party/openmvs-bin
 .venv/bin/python -m pip install -r requirements-geo.txt         # lidar and footprints (laspy, pyproj, shapely)
 ```
