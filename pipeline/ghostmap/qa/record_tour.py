@@ -31,11 +31,12 @@ STILLS = ROOT / 'dist/assets/presentation'
 VIDEO = ROOT / 'artifacts/presentation'
 # Chapter id, seconds to dwell, caption, years to step through (None: leave the slider alone).
 TOUR = [
+    ('colmap', 8, 'Where COLMAP stops: five limits on internet photographs of a real place, and what GhostMap builds past each one.', None),
     ('void', 6, 'Lost in space: COLMAP turns 63 internet photographs into a fragment with no scale, no up and no north.', None),
     ('snap', 12, 'Snap to the world: public lidar and OpenStreetMap footprints place it in metres, with no GPS, and say how sure that is.', None),
     ('refuse', 8, 'Knowing when it cannot: every campus fragment the evidence cannot pin down is refused, with the reason.', None),
     ('referee', 14, 'The lidar as referee: a Gaussian splat from the same photographs, judged against the lidar, Gaussian by Gaussian.', None),
-    ('teacher', 14, 'The lidar as teacher: train with the lidar\'s free space and the floaters disappear.', None),
+    ('teacher', 24, 'The lidar as teacher: a camera path between the photographers; red is paint in air the lidar measured empty.', None),
     ('above', 10, 'Twenty years from above: public aerial flights from 2002 to 2023 draped on the lidar terrain.', [2002, 2007, 2012, 2015, 2018, 2023]),
     ('gates', 8, 'Gates Hall: a parking lot until 2012, a building from 2014.', [2007, 2013, 2016]),
     ('klarman', 8, 'Klarman Hall fills the courtyard behind Goldwin Smith Hall.', [2012, 2015, 2018]),
@@ -54,10 +55,12 @@ async def sweep_wipe(page, seconds):
 
 
 async def teacher(page, seconds):
-    """Teacher: let the plain | lidar-taught fly-through play, then show one pose as a wipe."""
-    await page.wait_for_timeout(int(1000 * seconds * 0.7))
+    """Teacher: let the plain | lidar-taught fly-through play, then paint it by the lidar's verdict, then one pose as a wipe."""
+    await page.wait_for_timeout(int(1000 * seconds * 0.4))
+    await page.evaluate("(() => { const v = document.querySelector('.fly .verdict'); if (v) { v.checked = true; v.dispatchEvent(new Event('change')); } })()")
+    await page.wait_for_timeout(int(1000 * seconds * 0.35))
     await page.evaluate("(() => { const r = document.querySelector('input[name=tchmode][value=pose-0]'); if (r) { r.checked = true; r.dispatchEvent(new Event('change', { bubbles: true })); } })()")
-    await sweep_wipe(page, seconds * 0.3)
+    await sweep_wipe(page, seconds * 0.25)
 
 
 ACTIONS = {'referee': sweep_wipe, 'teacher': teacher}
@@ -87,12 +90,12 @@ async def tour(base_url, stills=STILLS, video_dir=VIDEO, width=1600, height=900,
         page.on('pageerror', lambda e: report['errors'].append('pageerror: ' + str(e)))
         page.on('console', lambda m: report['errors'].append('console: ' + m.text) if m.type == 'error' else None)
         page.set_default_timeout(120000)
-        await page.goto(base_url + '/timemachine.html#void')
+        await page.goto(base_url + '/timemachine.html#colmap')
         report['webgl_renderer'] = await page.evaluate(RENDERER_JS)
         await page.wait_for_function('document.documentElement.dataset.ready === "true"', timeout=120000)
-        for n, (chapter, dwell, caption, years) in enumerate(TOUR, start=1):
+        for chapter, dwell, caption, years in TOUR:
             await page.evaluate(CAPTION_JS, caption)
-            await page.click(f'#chapters button:has-text("{n} ·")')
+            await page.click(f'#chapters button[data-chapter="{chapter}"]')
             # Chapters that load splats say so in #status; wait until it clears (or give up after two minutes).
             try: await page.wait_for_function("!(document.getElementById('status') || {}).textContent", timeout=120000)
             except Exception: report['errors'].append(f'{chapter}: still loading after two minutes')

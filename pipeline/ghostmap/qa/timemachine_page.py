@@ -19,7 +19,7 @@ from pathlib import Path
 from ghostmap.paths import ROOT
 
 # Chapter (in page order) -> years viewed in it: aerial flights around each documented change.
-CHAPTERS = {'void': [2023], 'snap': [2023], 'refuse': [2023], 'referee': [2023], 'teacher': [2023],
+CHAPTERS = {'colmap': [2023], 'void': [2023], 'snap': [2023], 'refuse': [2023], 'referee': [2023], 'teacher': [2023],
             'above': [2002, 2012, 2023], 'gates': [2007, 2013, 2016], 'klarman': [2012, 2015, 2018],
             'tower': [2009, 2025], 'limits': [2023]}
 # Extra settling time after opening a chapter: the snap animation and the camera flight, the splats' loading.
@@ -40,8 +40,8 @@ async def check(base_url, output):
         page.on('console', lambda m: report['errors'].append('console: ' + m.text) if m.type == 'error' else None)
         await page.goto(base_url + '/timemachine.html?splats=' + str(SPLAT_CAP), timeout=180000)   # CPU-rendered WebGL: a prefix of each splat
         await page.wait_for_function('document.documentElement.dataset.ready === "true"', timeout=180000, polling=1000)
-        for i, (chapter, years) in enumerate(CHAPTERS.items(), start=1):
-            await page.click(f'#chapters button:has-text("{i} ·")')
+        for chapter, years in CHAPTERS.items():
+            await page.click(f'#chapters button[data-chapter="{chapter}"]')
             await page.wait_for_timeout(1500 + SETTLE_MS.get(chapter, 0))
             if chapter in ('referee', 'teacher'):   # a splat may still be loading: wait for the status line to clear
                 await page.wait_for_function("!document.getElementById('status').textContent.startsWith('Loading')", timeout=300000, polling=1000)
@@ -61,6 +61,7 @@ async def check(base_url, output):
                     report.setdefault('live_splat', {})[chapter] = await page.inner_text('#status') or 'loaded'
             text = await page.inner_text('#chapter-body')
             report['chapters'][chapter] = {'characters': len(text), 'year_shown': await page.inner_text('#year'), 'year_set': years[-1]}
+        await page.close()   # its CPU-rendered WebGL would keep the CPU busy and starve the slide screenshots
         for deck in DECKS:   # every deck the server has (an offline bundle carries only the main one)
             slides = await browser.new_page(viewport={'width': 1600, 'height': 900}); stem = Path(deck).stem
             slides.on('pageerror', lambda e, d=deck: report['errors'].append(f'{d} pageerror: ' + str(e)))
@@ -72,7 +73,7 @@ async def check(base_url, output):
                 if n > 1: await slides.keyboard.press('ArrowRight')
                 await slides.wait_for_timeout(400)
                 report['slides'][deck][n] = {'characters': len(await slides.inner_text('.slide.on'))}
-                await slides.screenshot(path=str(output / f'{stem}-{n:02d}.png'))
+                await slides.screenshot(path=str(output / f'{stem}-{n:02d}.png'), timeout=SHOT_MS)
             await slides.close()
         await browser.close()
     report['passed'] = (not report['errors'] and all(c['characters'] > 150 and c['year_shown'] == str(c['year_set']) for c in report['chapters'].values())

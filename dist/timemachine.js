@@ -18,11 +18,24 @@ const canvas = document.getElementById('scene');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-const world = new THREE.Scene(); world.background = new THREE.Color(0xdfe6ea);
+const world = new THREE.Scene();
+// A real GPU gets sun shadows; a browser that renders WebGL on the CPU (headless checks) does not.
+const gpuName = (() => { const gl = renderer.getContext(), d = gl.getExtension('WEBGL_debug_renderer_info'); return d ? gl.getParameter(d.UNMASKED_RENDERER_WEBGL) : ''; })();
+const SOFTWARE = /swiftshader|llvmpipe|software/i.test(gpuName);
+renderer.shadowMap.enabled = !SOFTWARE; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const sky = (() => {   // a vertical gradient for the background, from haze at the horizon to blue overhead
+  const c = document.createElement('canvas'); c.width = 2; c.height = 256; const g = c.getContext('2d'), gr = g.createLinearGradient(0, 0, 0, 256);
+  gr.addColorStop(0, '#8fb4d9'); gr.addColorStop(0.55, '#c9dbea'); gr.addColorStop(1, '#eef2f2'); g.fillStyle = gr; g.fillRect(0, 0, 2, 256);
+  const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace; return tx;
+})();
+world.background = sky; world.fog = new THREE.Fog(0xe6edf0, 900, 2600);
 const camera = new THREE.PerspectiveCamera(48, 1, 0.5, 8000); camera.up.set(0, 0, 1);
 const controls = new OrbitControls(camera, canvas); controls.enableDamping = true; controls.maxPolarAngle = Math.PI / 2 - 0.02;
-world.add(new THREE.HemisphereLight(0xffffff, 0x8a9a7a, 1.0));
-const sun = new THREE.DirectionalLight(0xffffff, 1.1); sun.position.set(-400, -300, 600); world.add(sun);
+world.add(new THREE.HemisphereLight(0xe8f0f8, 0x6f7d5c, 0.95));
+const sun = new THREE.DirectionalLight(0xfff1dc, 1.7); sun.position.set(-260, -340, 520);
+sun.castShadow = !SOFTWARE; sun.shadow.mapSize.set(4096, 4096); sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.6;
+Object.assign(sun.shadow.camera, { left: -520, right: 520, top: 520, bottom: -520, near: 10, far: 2000 });
+world.add(sun); world.add(sun.target);
 
 let flight = null;
 function flyTo(target, distance, elevation = 0.7, azimuth = -2.0, seconds = 1.4) {
@@ -47,52 +60,48 @@ function stepFlight() {
   if (s >= 1) flight = null;
 }
 
-// --- terrain draped with the selected year's aerial image -----------------------------------
+// --- the world: bare-earth ground and roofs draped with the year's aerial image, lidar walls, lidar trees ----------
 const loader = new THREE.TextureLoader();
 const textures = {};
 function texture(url) {
   if (!textures[url]) { const t = loader.load(BASE + url); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; textures[url] = t; }
   return textures[url];
 }
-const covered = new Set(scene.reconstructions.flatMap(r => r.covers || []));  // buildings a dense surface replaces when shown
+const covered = new Set(scene.reconstructions.flatMap(r => r.covers || []));  // buildings a measured surface replaces when shown
 let surfaceOn = false;
 const qt = scene.sites.quad.terrain;  // extent of the Quad terrain grid, used to trim the other sites' terrains
 const quadExtent = [qt.x0, qt.y_top - (qt.rows - 1) * qt.cell_m, qt.x0 + (qt.cols - 1) * qt.cell_m, qt.y_top];
-const terrains = {};
+const terrains = {}, cityParts = { roofs: [], walls: [], trees: [] }, specialMeshes = {};
 const changed = scene.buildings.filter(b => b.documented && !b.documented.stable);
 function presentFrom(b) {
   const d = b.documented; const y = (d.dedicated || d.completed || d.opened || d.occupied || '').slice(0, 4); return y ? +y : null;
 }
 function worksFrom(b) { const d = b.documented; return d.construction_start ? +d.construction_start.slice(0, 4) : null; }
-function nearRing(ring, x, y, d) {  // within d metres of the footprint's outline
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [ax, ay] = ring[j], [bx, by] = ring[i], vx = bx - ax, vy = by - ay, l2 = vx * vx + vy * vy || 1;
-    const s = Math.max(0, Math.min(1, ((x - ax) * vx + (y - ay) * vy) / l2));
-    if (Math.hypot(ax + s * vx - x, ay + s * vy - y) <= d) return true;
-  }
-  return false;
-}
-function inside(ring, x, y) {  // ray casting
-  let c = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [xi, yi] = ring[i], [xj, yj] = ring[j];
-    if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c;
-  }
-  return c;
-}
+const lin = (c) => Math.pow(c, 2.2);   // vertex colours are given in sRGB; three.js lights in linear space
+// A lumpy unit sphere for tree crowns (one shape shared by every tree), and a unit cylinder standing on z for trunks.
+const crownGeometry = (() => { const g = new THREE.IcosahedronGeometry(1, 2), p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) { const v = new THREE.Vector3().fromBufferAttribute(p, i), k = 1 + 0.13 * Math.sin(5.1 * v.x + 2.3 * v.y) * Math.cos(4.3 * v.z + 1.7 * v.x); p.setXYZ(i, v.x * k, v.y * k, v.z * k); }
+  g.computeVertexNormals(); return g; })();
+const crownMaterial = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true });
+const trunkGeometry = new THREE.CylinderGeometry(1, 1, 1, 6).rotateX(Math.PI / 2);
+const trunkMaterial = new THREE.MeshLambertMaterial({ color: 0x5b4a3a });
+const discTexture = (() => { const c = document.createElement('canvas'); c.width = c.height = 32; const g = c.getContext('2d');
+  const gr = g.createRadialGradient(16, 16, 2, 16, 16, 15); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.75, 'rgba(255,255,255,0.9)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.beginPath(); g.arc(16, 16, 15, 0, 2 * Math.PI); g.fill(); return new THREE.CanvasTexture(c); })();
 for (const [site, s] of Object.entries(scene.sites)) {
-  const t = s.terrain;
-  const [heights, mask] = await Promise.all([binary(t.height_url, Float32Array), binary(t.buildings_url, Uint8Array)]);
+  const t = s.terrain, ob = s.ortho_box_local;   // texture coordinates come from the aerial image's own box
+  const uvOf = (x, y) => [(x - ob[0]) / (ob[2] - ob[0]), (y - ob[1]) / (ob[3] - ob[1])];
+  const heights = await binary(t.height_url, Float32Array);
   const n = t.rows * t.cols, pos = new Float32Array(n * 3), uv = new Float32Array(n * 2);
   for (let r = 0; r < t.rows; r++) for (let c = 0; c < t.cols; c++) {
     const i = r * t.cols + c, x = t.x0 + c * t.cell_m, y = t.y_top - r * t.cell_m;
-    pos.set([x, y, heights[i] + t.z_offset], 3 * i); uv.set([c / (t.cols - 1), 1 - r / (t.rows - 1)], 2 * i);
+    pos.set([x, y, heights[i] + t.z_offset], 3 * i); uv.set(uvOf(x, y), 2 * i);
   }
-  const index = [];
   // Cells of the other sites that lie wholly under the Quad terrain are dropped; cells straddling its edge are kept,
   // so the meshes overlap by up to one cell instead of leaving a gap (the overlap is pushed back by polygon offset).
   const clip = site !== 'quad';
   const under = (i) => { const x = pos[3 * i], y = pos[3 * i + 1]; return x >= quadExtent[0] && x <= quadExtent[2] && y >= quadExtent[1] && y <= quadExtent[3]; };
+  const index = [];
   for (let r = 0; r < t.rows - 1; r++) for (let c = 0; c < t.cols - 1; c++) {
     const a = r * t.cols + c, b = a + 1, d = a + t.cols, e = d + 1;
     if (clip && under(a) && under(b) && under(d) && under(e)) continue;
@@ -100,48 +109,51 @@ for (const [site, s] of Object.entries(scene.sites)) {
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); g.setIndex(index); g.computeVertexNormals();
-  const mesh = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ map: null, polygonOffset: clip, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }));
+  const material = new THREE.MeshLambertMaterial({ map: null, polygonOffset: clip, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+  const mesh = new THREE.Mesh(g, material); mesh.receiveShadow = true;
   world.add(mesh);
-  // Vertices inside each changed building's footprint: flattened to the ground for years before it stood;
-  // the buildings a dense surface covers are flattened while that surface is shown, so it stands alone.
-  const flats = [];
-  for (const b of changed.concat(scene.buildings.filter(b => covered.has(b.name))).filter(b => b.site === site)) {
-    const idx = [], margin = covered.has(b.name) ? 2.5 : 0;   // the lidar shape of a covered building spills past its footprint
-    for (let i = 0; i < n; i++) if (inside(b.ring, pos[3 * i], pos[3 * i + 1]) || (margin && nearRing(b.ring, pos[3 * i], pos[3 * i + 1], margin))) idx.push(i);
-    flats.push({ building: b, idx, original: idx.map(i => pos[3 * i + 2]) });
+  terrains[site] = { mesh, geometry: g, box: s.ortho_box_local, orthos: s.orthoimagery };
+  // The city model (web/city_model.py): roofs share the ground's material, so they show the same year's aerial image.
+  const C = s.city; if (!C) continue;
+  const [xyz, shade, roofIdx, wallIdx, txyz, trgb] = await Promise.all([binary(C.xyz_url, Float32Array), binary(C.shade_url, Uint8Array), binary(C.roof_url, Uint32Array),
+    binary(C.wall_url, Uint32Array), binary(C.trees_url, Float32Array), binary(C.trees_rgb_url, Uint8Array)]);
+  const nv = xyz.length / 3, cuv = new Float32Array(nv * 2), col = new Float32Array(nv * 3);
+  for (let i = 0; i < nv; i++) {
+    cuv.set(uvOf(xyz[3 * i], xyz[3 * i + 1]), 2 * i);
+    const k = shade[i] / 255; col.set([0.84 * k, 0.80 * k, 0.72 * k].map(lin), 3 * i);   // limestone, darker towards the ground
   }
-  // Steep faces are building walls in the lidar surface; they get a flat wall colour instead of the aerial image
-  // smeared down them. Walls of a changed building are listed with it, so they vanish when its site is flattened.
-  const owner = new Int32Array(n).fill(-1);
-  flats.forEach((f, k) => { f.walls = []; f.idx.forEach(i => owner[i] = k); });
-  const wallsStatic = [];
-  for (let k = 0; k < index.length; k += 3) {
-    const i0 = index[k], i1 = index[k + 1], i2 = index[k + 2];
-    const ax = pos[3 * i1] - pos[3 * i0], ay = pos[3 * i1 + 1] - pos[3 * i0 + 1], az = pos[3 * i1 + 2] - pos[3 * i0 + 2];
-    const bx = pos[3 * i2] - pos[3 * i0], by = pos[3 * i2 + 1] - pos[3 * i0 + 1], bz = pos[3 * i2 + 2] - pos[3 * i0 + 2];
-    const nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
-    if (nz / Math.hypot(nx, ny, nz) > 0.5) continue;  // flatter than 60 degrees: ground, lawn or roof
-    const o = Math.max(owner[i0], owner[i1], owner[i2]);
-    (o < 0 ? wallsStatic : flats[o].walls).push(i0, i1, i2);
+  const posAttr = new THREE.BufferAttribute(xyz, 3), uvAttr = new THREE.BufferAttribute(cuv, 2), colAttr = new THREE.BufferAttribute(col, 3);
+  const wallMaterial = new THREE.MeshLambertMaterial({ vertexColors: true });
+  const part = (idx, [start, count], mat) => {
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', posAttr); geo.setAttribute('uv', uvAttr); geo.setAttribute('color', colAttr);
+    geo.setIndex(new THREE.BufferAttribute(idx.subarray(start, start + count), 1)); geo.computeVertexNormals();
+    const m = new THREE.Mesh(geo, mat); m.castShadow = true; m.receiveShadow = true; world.add(m); return m;
+  };
+  cityParts.roofs.push(part(roofIdx, C.static.roof, material)); cityParts.walls.push(part(wallIdx, C.static.wall, wallMaterial));
+  for (const [name, gr] of Object.entries(C.special)) specialMeshes[name] = [part(roofIdx, gr.roof, material), part(wallIdx, gr.wall, wallMaterial)];
+  // One tree per lidar canopy maximum (x, y, ground, top, crown radius): a crown of the measured area on a trunk.
+  const nt = txyz.length / 5, crowns = new THREE.InstancedMesh(crownGeometry, crownMaterial, nt), trunks = new THREE.InstancedMesh(trunkGeometry, trunkMaterial, nt);
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), zAxis = new THREE.Vector3(0, 0, 1), tint = new THREE.Color();
+  for (let i = 0; i < nt; i++) {
+    const [x, y, g, top, r] = txyz.subarray(5 * i, 5 * i + 5), h = top - g, base = g + Math.max(1.8, 0.3 * h), half = (top - base) / 2;
+    q.setFromAxisAngle(zAxis, (i * 2.39996) % (2 * Math.PI));   // the shared crown shape, turned differently per tree
+    m4.compose(new THREE.Vector3(x, y, base + half), q, new THREE.Vector3(r, r, Math.max(half, 0.8))); crowns.setMatrixAt(i, m4);
+    tint.setRGB(lin(trgb[3 * i] / 255), lin(trgb[3 * i + 1] / 255), lin(trgb[3 * i + 2] / 255)); crowns.setColorAt(i, tint);
+    m4.compose(new THREE.Vector3(x, y, g + (base - g + half * 0.4) / 2), q.identity(), new THREE.Vector3(0.12 + 0.012 * h, 0.12 + 0.012 * h, base - g + half * 0.4)); trunks.setMatrixAt(i, m4);
   }
-  const wg = new THREE.BufferGeometry(); wg.setAttribute('position', g.getAttribute('position')); wg.setIndex(wallsStatic); wg.computeVertexNormals();
-  const wallMesh = new THREE.Mesh(wg, new THREE.MeshLambertMaterial({ color: 0xbdb7aa, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }));
-  world.add(wallMesh);
-  terrains[site] = { mesh, wallMesh, geometry: g, flats, walls: wg, wallsStatic, wallKey: '', box: s.ortho_box_local, orthos: s.orthoimagery };
+  for (const m of [crowns, trunks]) { m.castShadow = true; m.receiveShadow = true; m.computeBoundingSphere(); world.add(m); cityParts.trees.push(m); }
 }
 
-// --- footprints and lidar volumes of the changed buildings ----------------------------------
+// --- outlines of the buildings that changed, and the construction-site frame while they were built ---------------
 const outlines = new THREE.Group(), volumes = new THREE.Group(); world.add(outlines, volumes);
 for (const b of scene.buildings) {
+  if (!b.documented) continue;
   const z = b.ground + 0.6;
   const g = new THREE.BufferGeometry().setFromPoints(b.ring.map(([x, y]) => new THREE.Vector3(x, y, z)));
-  const line = new THREE.Line(g, new THREE.LineBasicMaterial({ color: b.documented ? 0xb5532c : 0x303030, transparent: true, opacity: b.documented ? 1 : 0.55 }));
-  line.userData = b; outlines.add(line);
-  if (b.documented && !b.documented.stable) {
+  const line = new THREE.Line(g, new THREE.LineBasicMaterial({ color: 0xb5532c })); line.userData = b; outlines.add(line);
+  if (!b.documented.stable) {
     const shape = new THREE.Shape(b.ring.map(([x, y]) => new THREE.Vector2(x, y)));
     const geom = new THREE.ExtrudeGeometry(shape, { depth: Math.max(3, b.lidar_top - b.ground), bevelEnabled: false });
-    const vol = new THREE.Mesh(geom, new THREE.MeshLambertMaterial({ color: 0xe9d9c0, transparent: true, opacity: 0.85 }));
-    vol.position.z = b.ground; vol.userData = b; volumes.add(vol);
     const wire = new THREE.LineSegments(new THREE.EdgesGeometry(geom, 20), new THREE.LineBasicMaterial({ color: 0xb5532c }));
     wire.position.z = b.ground; wire.userData = { works: b }; volumes.add(wire);
   }
@@ -154,7 +166,7 @@ for (const r of scene.reconstructions) {
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(xyz, 3));
   const colour = new Float32Array(rgb.length); for (let i = 0; i < rgb.length; i++) colour[i] = rgb[i] / 255;
   g.setAttribute('color', new THREE.BufferAttribute(colour, 3));
-  const pts = new THREE.Points(g, new THREE.PointsMaterial({ size: 1.3, vertexColors: true }));
+  const pts = new THREE.Points(g, new THREE.PointsMaterial({ size: 1.1, vertexColors: true, map: discTexture, alphaTest: 0.5 }));
   world.add(pts); const cloud = { pts, g, rgb: colour, first, last, meta: r, surface: null, splats: [], native: null, anchored: xyz.slice() }; clouds.push(cloud);
   // Each Gaussian splat of the fragment: a layer of its centres coloured by their lidar class (loaded now, small) and
   // the splat itself, rendered by the vendored Gaussian-splat viewer when a chapter first asks for it.
@@ -164,7 +176,7 @@ for (const r of scene.reconstructions) {
       const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.BufferAttribute(xyz, 3));
       const col = new Float32Array(rgb.length); for (let i = 0; i < rgb.length; i++) col[i] = rgb[i] / 255;
       sg.setAttribute('color', new THREE.BufferAttribute(col, 3));
-      entry.layer = new THREE.Points(sg, new THREE.PointsMaterial({ size: 1.1, vertexColors: true })); entry.layer.visible = false; world.add(entry.layer);
+      entry.layer = new THREE.Points(sg, new THREE.PointsMaterial({ size: 1.0, vertexColors: true, map: discTexture, alphaTest: 0.5 })); entry.layer.visible = false; world.add(entry.layer);
       applyView();
     }).catch(e => console.warn('splat layer not loaded', e));
   }
@@ -201,23 +213,14 @@ function state(b, y) {
 function setYear(y) {
   year = y; document.getElementById('year').textContent = y; document.getElementById('slider').value = y;
   const fy = flightYearFor(y);
-  for (const t of Object.values(terrains)) {
-    const o = t.orthos[String(fy)]; if (o) t.mesh.material.map = texture(o.url); t.mesh.material.needsUpdate = true;
-    const z = t.geometry.attributes.position;
-    const standing = f => { const s = state(f.building, y); return s === 'present' || (s === 'stable' && !surfaceOn); };
-    for (const f of t.flats) { const up = standing(f); f.idx.forEach((i, k) => z.setZ(i, up ? f.original[k] : f.building.ground + 0.1)); }
-    z.needsUpdate = true;
-    // Which changed buildings stand this year decides the flattened sites, so the walls and normals follow that key.
-    const key = t.flats.map(f => standing(f) ? '1' : '0').join('');
-    if (key !== t.wallKey) {
-      t.wallKey = key; t.geometry.computeVertexNormals();
-      t.walls.setIndex(t.wallsStatic.concat(...t.flats.filter((f, k) => key[k] === '1').map(f => f.walls))); t.walls.computeVertexNormals();
-    }
+  for (const t of Object.values(terrains)) { const o = t.orthos[String(fy)]; if (o) t.mesh.material.map = texture(o.url); t.mesh.material.needsUpdate = true; }
+  // Buildings that changed stand only from their documented dates; a building a measured surface covers steps aside for it.
+  for (const [name, meshes] of Object.entries(specialMeshes)) {
+    const b = scene.buildings.find(x => x.name === name), s = b ? state(b, y) : 'stable';
+    const show = view.terrain && (s === 'present' || ((s === 'stable' || s === null) && !(surfaceOn && covered.has(name))));
+    for (const m of meshes) m.visible = show;
   }
-  for (const v of volumes.children) {
-    const b = v.userData.works || v.userData; const s = state(b, y);
-    v.visible = v.userData.works ? s === 'works' : s === 'present';
-  }
+  for (const v of volumes.children) v.visible = state(v.userData.works, y) === 'works';
   for (const c of clouds) {
     const col = c.g.attributes.color;
     for (let i = 0; i < c.first.length; i++) {
@@ -249,9 +252,10 @@ function play() { if (timer) { clearInterval(timer); timer = null; return; } tim
 const DEFAULT_VIEW = { terrain: true, outlines: true, volumes: true, points: true, photographers: true, surface: false, splat: null, splatLayer: null, dark: false, allPhotographers: false };
 const view = { ...DEFAULT_VIEW };
 function applyView() {
-  for (const t of Object.values(terrains)) { t.mesh.visible = view.terrain; t.wallMesh.visible = view.terrain; }
+  for (const t of Object.values(terrains)) t.mesh.visible = view.terrain;
+  for (const m of [...cityParts.roofs, ...cityParts.walls, ...cityParts.trees]) m.visible = view.terrain;
   outlines.visible = view.outlines; volumes.visible = view.volumes;
-  world.background.set(view.dark ? 0x15191e : 0xdfe6ea);
+  world.background = view.dark ? new THREE.Color(0x15191e) : sky; world.fog = view.dark ? null : new THREE.Fog(0xe6edf0, 900, 2600);
   for (const c of clouds) {
     c.pts.visible = view.points;
     if (c.surface) c.surface.visible = view.surface;
@@ -426,18 +430,74 @@ function showWipe(a, b, size) {   // a, b: {url, label}
   const ov = overlay.querySelector('.wipe'), range = ov.querySelector('input'), top = ov.querySelector('img.b'), bar = ov.querySelector('.bar');
   range.oninput = () => { top.style.clipPath = `inset(0 0 0 ${range.value}%)`; bar.style.left = range.value + '%'; };
 }
-function showFly(a, b) {   // a, b: {views, label}: the same fly-through of two splats, frame by frame
-  const n = Math.min(a.views.fly.frames, b.views.fly.frames), url = (v, k) => v.fly.url_pattern.replace('%03d', String(k).padStart(3, '0'));
-  for (let k = 0; k < n; k++) { new Image().src = BASE + url(a.views, k); new Image().src = BASE + url(b.views, k); }   // preload
-  showWipe({ url: url(a.views, 0), label: a.label }, { url: url(b.views, 0), label: b.label }, a.views.fly.size);
-  overlay.insertAdjacentHTML('beforeend', `<div class="flybar"><button type="button">❚❚</button><input type="range" min="0" max="${n - 1}" value="0" aria-label="frame"><span>fly-through between the photographers</span></div>`);
-  const imgs = overlay.querySelectorAll('.wipe img'), scrub = overlay.querySelector('.flybar input'), btn = overlay.querySelector('.flybar button');
-  let k = 0;
-  const setFrame = i => { k = (i + n) % n; imgs[0].src = BASE + url(a.views, k); imgs[1].src = BASE + url(b.views, k); scrub.value = k; };
-  scrub.oninput = () => { setFrame(+scrub.value); };
-  const play = () => { flyTimer = setInterval(() => setFrame(k + 1), 110); btn.textContent = '❚❚'; };
+// The fly-through, explained: the two splats side by side along one camera path that no photographer took, a map
+// of where the camera is among the photographers, the photograph itself whenever the camera reaches the spot
+// where it was taken, and a switch that paints every Gaussian by the lidar's verdict.
+function showFly(a, b) {   // a, b: {views, label, splat}: the same fly-through of two splats, frame by frame
+  stopFly(); overlay.hidden = false;
+  const F = a.views.fly, n = Math.min(F.frames, b.views.fly.frames), cams = F.cameras || [], keys = F.keys || [];
+  const url = (v, k, verdict) => (verdict && v.fly.verdict_url_pattern ? v.fly.verdict_url_pattern : v.fly.url_pattern).replace('%03d', String(k).padStart(3, '0'));
+  for (let k = 0; k < n; k++) for (const v of [a.views, b.views]) for (const d of [false, true]) new Image().src = BASE + url(v, k, d);   // preload
+  const W = overlay.clientWidth - 32, H = overlay.clientHeight - 24, ar = F.size ? F.size[0] / F.size[1] : 4 / 3;
+  const pw = Math.floor(Math.min((W - 10) / 2, (H - 250) * ar)), ph = Math.round(pw / ar);
+  const who = keys.map(k => scene.photographers.find(p => p.name === k.image));
+  overlay.innerHTML = `<div class="fly" style="width:${2 * pw + 10}px">
+    <div class="flyhead"><b>A camera path no photographer took.</b> It walks between the spots where ${keys.length} photographers stood (map, lower left). Both splats were trained on the same photographs.</div>
+    <div class="panes">${[a, b].map((s, i) => `<figure style="width:${pw}px;height:${ph}px"><img src="${BASE + url(s.views, 0)}" alt=""><figcaption>${s.label}</figcaption><span class="share"></span></figure>`).join('')}</div>
+    <div class="flyfoot"><svg class="minimap" aria-label="map of the camera path"></svg>
+      <div class="flytext"><p class="where"></p><p class="what"></p>
+        <div class="ctl"><button type="button">❚❚</button><input type="range" min="0" max="${n - 1}" value="0" aria-label="frame">
+          <label><input type="checkbox" class="verdict"> paint each Gaussian by the lidar's verdict</label></div></div>
+      <figure class="truth"><img alt=""><figcaption></figcaption></figure></div></div>`;
+  const ov = overlay.querySelector('.fly'), imgs = ov.querySelectorAll('.panes img'), shares = ov.querySelectorAll('.panes .share'), scrub = ov.querySelector('.ctl input[type=range]');
+  const btn = ov.querySelector('.ctl button'), box = ov.querySelector('.verdict'), where = ov.querySelector('.where'), what = ov.querySelector('.what'), truth = ov.querySelector('.truth');
+  // the map: footprints around the path, every photographer of this fragment, the photographers the path joins, the path
+  const svg = ov.querySelector('.minimap'), pts = cams.map(c => c.centre).concat(keys.map(k => k.centre));
+  const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]), tower = building('McGraw Tower'), tc = tower ? centroid(tower.ring) : [0, 0];
+  const x0 = Math.min(...xs, tc[0]) - 25, x1 = Math.max(...xs, tc[0]) + 25, y0 = Math.min(...ys, tc[1]) - 25, y1 = Math.max(...ys, tc[1]) + 25;
+  const mw = 290, s = mw / (x1 - x0), mh = Math.round((y1 - y0) * s), X = x => ((x - x0) * s).toFixed(1), Y = y => ((y1 - y) * s).toFixed(1);
+  svg.setAttribute('viewBox', `0 0 ${mw} ${mh}`); svg.style.width = mw + 'px'; svg.style.height = mh + 'px';
+  const near = scene.buildings.filter(bd => bd.ring.some(([x, y]) => x > x0 && x < x1 && y > y0 && y < y1));
+  const own = scene.photographers.filter(p => p.reconstruction === (mainCloud() || {}).meta?.tag && p.centre[0] > x0 && p.centre[0] < x1 && p.centre[1] > y0 && p.centre[1] < y1);
+  svg.innerHTML = `<rect width="${mw}" height="${mh}" fill="#20262c"/>
+    ${near.map(bd => `<polygon points="${bd.ring.map(([x, y]) => X(x) + ',' + Y(y)).join(' ')}" fill="${bd.name === 'McGraw Tower' ? '#c8a96a' : '#4a525a'}" stroke="#6b747d" stroke-width="0.6"/>`).join('')}
+    ${own.map(p => `<circle cx="${X(p.centre[0])}" cy="${Y(p.centre[1])}" r="1.8" fill="#7d8b99"/>`).join('')}
+    <polyline points="${cams.map(c => X(c.centre[0]) + ',' + Y(c.centre[1])).join(' ')}" fill="none" stroke="#e8e2d0" stroke-width="1.2" stroke-dasharray="3 2"/>
+    ${keys.map((k, i) => `<g><circle cx="${X(k.centre[0])}" cy="${Y(k.centre[1])}" r="6.5" fill="#2a6fdb" stroke="#fff" stroke-width="1"/><text x="${X(k.centre[0])}" y="${(+Y(k.centre[1]) + 3.2).toFixed(1)}" text-anchor="middle" font-size="8.5" font-weight="700" fill="#fff">${i + 1}</text></g>`).join('')}
+    <path class="cone" fill="rgba(224,41,36,.28)" stroke="#e02924" stroke-width="1"/><circle class="cam" r="3.6" fill="#e02924" stroke="#fff" stroke-width="1"/>
+    <text x="6" y="${mh - 6}" font-size="9" fill="#c8c2b4">${tower ? 'McGraw Tower in gold · ' : ''}north up</text>
+    <line x1="${mw - 6 - 20 * s}" x2="${mw - 6}" y1="${mh - 9}" y2="${mh - 9}" stroke="#c8c2b4" stroke-width="1.5"/><text x="${mw - 6 - 10 * s}" y="${mh - 12}" text-anchor="middle" font-size="8.5" fill="#c8c2b4">20 m</text>`;
+  const cone = svg.querySelector('.cone'), cam = svg.querySelector('.cam');
+  const share = s => s.splat ? `${pct(s.splat.free_space.in_free_air, 0)} in empty air · ${pct(s.splat.free_space.buried, 0)} under the ground` : '';
+  let k = 0, hold = 0;
+  const setFrame = i => {
+    k = (i + n) % n; const verdict = box.checked;
+    imgs[0].src = BASE + url(a.views, k, verdict); imgs[1].src = BASE + url(b.views, k, verdict); scrub.value = k;
+    [a, b].forEach((s, j) => { shares[j].textContent = verdict ? share(s) : ''; });
+    const c = cams[k];
+    if (c) {
+      cam.setAttribute('cx', X(c.centre[0])); cam.setAttribute('cy', Y(c.centre[1]));
+      const L = 28, h = c.heading_deg * Math.PI / 180, f = (c.fov_deg || 50) * Math.PI / 360, px = +X(c.centre[0]), py = +Y(c.centre[1]);
+      const tip = d => [(px + L * s * Math.cos(h + d)).toFixed(1), (py - L * s * Math.sin(h + d)).toFixed(1)].join(',');
+      cone.setAttribute('d', `M${px},${py} L${tip(-f)} L${tip(f)} Z`);
+    }
+    const at = keys.findIndex(q => Math.abs(q.frame - k) < 0.75), next = keys.findIndex(q => q.frame > k);
+    if (at >= 0) {
+      where.innerHTML = `<b>At photographer ${at + 1}'s spot.</b> This view is one of the training photographs (right): both splats reproduce it.`;
+      const p = who[at]; truth.hidden = !p;
+      if (p) { truth.querySelector('img').src = BASE + p.photo; truth.querySelector('figcaption').textContent = `the photograph taken here${p.year ? ', ' + p.year : ''}`; }
+    } else {
+      truth.hidden = true;
+      where.innerHTML = `<b>Between photographers ${next} and ${next + 1}.</b> Nobody photographed this exact view${c ? ` (the nearest photograph was taken ${fmt(c.nearest_photographer_m, 0)} m away)` : ''}: the splat has to make it up.`;
+    }
+    what.innerHTML = verdict
+      ? `<span class="sw" style="background:#e02924"></span>in air the lidar measured empty <span class="sw" style="background:#8c40bf"></span>under the bare ground <span class="sw" style="background:#a08c6e"></span>on a lidar surface (own colour)`
+      : `Look at the sky and the ground: the plain splat (left) explains the photographs with paint floating in mid-air; the lidar-taught one (right) was told where the air is empty.`;
+  };
+  scrub.oninput = () => setFrame(+scrub.value); box.onchange = () => setFrame(k);
+  const play = () => { flyTimer = setInterval(() => { if (hold > 0) { hold--; return; } setFrame(k + 1); if (keys.some(q => Math.abs(q.frame - k) < 0.5)) hold = 12; }, 110); btn.textContent = '❚❚'; };
   btn.onclick = () => { if (flyTimer) { clearInterval(flyTimer); flyTimer = null; btn.textContent = '▶'; } else play(); };
-  play();
+  setFrame(0); hold = 12; play();
 }
 function stopFly() { if (flyTimer) { clearInterval(flyTimer); flyTimer = null; } }
 function hideOverlay() { stopFly(); overlay.hidden = true; overlay.innerHTML = ''; }
@@ -447,6 +507,39 @@ const photographerOf = pose => scene.photographers.find(p => p.name === pose.ima
 const LEGEND_LIDAR = [['#28b34a', 'on a lidar surface'], ['#d9b316', '3 m or more from the nearest lidar return'], ['#e02924', 'in air the lidar saw empty'], ['#8c40bf', 'under the bare ground']];
 
 const chapters = [
+  { id: 'colmap', part: 'Beyond COLMAP', title: '0 · Where COLMAP stops', render() {
+      const r = mainCloud().meta, st = scene.placement_study || {}, own = scene.photographers.filter(p => p.reconstruction === r.tag);
+      const tagged = (st.fragments || []).find(f => f.run === r.tag.slice(0, 8) && String(f.fragment) === r.tag.split('-')[1]);
+      const frs = (st.fragments || []).filter(f => f.run !== (r.tag || '').slice(0, 8)), refused = frs.filter(f => f.verdict !== 'usable');
+      const agree = (st.agreement_with_validated_frame || []).filter(a => a.building === 'McGraw Tower').map(a => a.median_distance_m);
+      const years = own.filter(p => p.year).map(p => p.year), S = r.splats || [], plain = S.find(s => !s.lidar_taught), taught = S.find(s => s.lidar_taught);
+      const go = (id, label) => `<button type="button" class="jump" data-go="${id}">${label} →</button>`;
+      const rows = [
+        ['A model in its own frame (no scale, north or up); a map needs GPS or hand-picked control points.',
+         'Placement without GPS, inside public lidar and building footprints.',
+         tagged ? `${tagged.geotags.carried} of ${own.length} photographs carry GPS${tagged.geotags.wrong ? ', and it is 2,000 km off' : ''}` : '', go('void', 'chapters 1–2')],
+        ['Never says when a placement cannot be trusted.',
+         'A certificate: which cue fixed what, or a refusal with the reason.',
+         `${refused.length} of ${frs.length} campus fragments refused, each with a stated reason`, go('refuse', 'chapter 3')],
+        ['Disconnected fragments, each in its own frame.',
+         'One shared world frame.',
+         agree.length ? `the tower in separate fragments coincides within ${fmt(Math.min(...agree), 1)}–${fmt(Math.max(...agree), 1)} m` : '', go('refuse', 'chapter 3')],
+        ['Splats trained on its output float paint in mid-air, unchecked.',
+         'The lidar as referee and as teacher.',
+         plain && taught ? `on lidar surfaces ${pct(plain.free_space.on_surfaces)} → ${pct(taught.free_space.on_surfaces)}; under the ground ${pct(plain.free_space.buried)} → ${pct(taught.free_space.buried)}` : '', go('referee', 'chapters 4–5')],
+        ['One static scene: twenty years blended into one moment.',
+         'Years per point; dated buildings and aerial flights.',
+         years.length ? `${years.length} dated photographs, ${Math.min(...years)}–${Math.max(...years)}; 6 aerial flights, 2002–2023` : '', go('above', 'chapters 6–9')]];
+      body.innerHTML = `<h2>Where COLMAP stops</h2>
+        <p>Everything here starts from COLMAP's cameras and points (pycolmap, SuperPoint and LightGlue). On internet photographs of a real place, five of its limits show; GhostMap builds past each one with public data only.</p>
+        ${rows.map(([lim, add, ev, link], i) => `<div class="limit"><div class="n">${i + 1}</div><div>
+          <p class="lim"><b>COLMAP:</b> ${lim}</p><p><b>GhostMap:</b> ${add}</p><p class="ev">${ev} ${link}</p></div></div>`).join('')}
+        <p class="note">The hack in one line: COLMAP's frame is arbitrary, so search for the one similarity transform that puts the reconstruction inside the lidar campus you see here — and say when no such transform is determined.</p>`;
+      for (const b of body.querySelectorAll('[data-go]')) b.onclick = () => show(b.dataset.go);
+      setView({ points: false, photographers: false }); legend([['#c8a96a', 'buildings: OpenStreetMap footprints raised to the USGS lidar roofs'], ['#4f7a3a', 'trees: one per lidar canopy peak']]);
+      const t = building('McGraw Tower'), c = centroid(t.ring); flyTo([c[0] + 90, c[1] + 140, t.ground], 820, 0.62, -2.05);
+      setYear(2023);
+    } },
   { id: 'void', part: 'Where', title: '1 · Lost in space', render() {
       const c = mainCloud(), r = c.meta, cert = r.placement && r.placement.certificate, st = scene.placement_study || {}, gt = st.geotags || {};
       const own = scene.photographers.filter(p => p.reconstruction === r.tag);
@@ -572,8 +665,8 @@ const chapters = [
         document.getElementById('tchcampus').hidden = mode !== 'campus';
         if (mode === 'fly') {
           setView({ points: false, photographers: false }); legend([]);
-          showFly({ views: plain.views, label: 'plain' }, { views: taught.views, label: 'lidar-taught' });
-          hint.textContent = 'The same camera path through both splats, between the photographers who face the tower. Drag the divider; the left half is the plain splat, the right half the lidar-taught one.';
+          showFly({ views: plain.views, label: 'plain splat', splat: plain }, { views: taught.views, label: 'lidar-taught splat', splat: taught });
+          hint.textContent = 'The same camera path through both splats, between the photographers who face the tower. It pauses at each photographer\'s spot and shows the photograph taken there; tick the box to paint every Gaussian by what the lidar says about it.';
         } else if (mode.startsWith('pose-')) {
           const p = poses[+mode.slice(5)], q = taught.views.poses.find(x => x.photo === p.photo), ph = photographerOf(p);
           setView({ points: false, photographers: false }); legend([]);
@@ -643,12 +736,14 @@ let lastPart = null;
 for (const ch of chapters) {
   if (ch.part !== lastPart) { nav.append(el('span', { className: 'part' }, ch.part)); lastPart = ch.part; }
   nav.append(Object.assign(el('button', { type: 'button' }, ch.title), { onclick: () => show(ch.id) }));
+  nav.lastChild.dataset.chapter = ch.id;   // the recorded tour and the checks find chapters by id
 }
 function show(id) {
-  if (!chapters.some(c => c.id === id)) id = 'void';
+  if (!chapters.some(c => c.id === id)) id = 'colmap';
   const ch = chapters.find(c => c.id === id); current = id;
   for (const b of nav.querySelectorAll('button')) b.setAttribute('aria-current', String(b.textContent === ch.title));
   if (id !== 'void' && placement.mode === 'floating') { placement.mode = 'placed'; poseAt(1, 0); }
+  placement.done = null;   // a snap still running from the previous chapter must not move this chapter's camera
   status(''); hideOverlay(); body.innerHTML = ''; ch.render(); body.scrollTop = 0; history.replaceState(null, '', '#' + id);
 }
 
@@ -680,6 +775,6 @@ renderer.setAnimationLoop(() => { stepFlight(); stepPlacement(); controls.update
 document.getElementById('attribution').textContent = scene.attribution.join(' ');
 document.getElementById('status').textContent = '';
 setYear(2007);
-show((location.hash || '#void').slice(1).replace(/[^a-z]/g, ''));
-window.__tm = { terrains, textures, scene, clouds, view, placement, show };  // for the headless checks and the recorded tour
+show((location.hash || '#colmap').slice(1).replace(/[^a-z]/g, ''));
+window.__tm = { terrains, textures, scene, clouds, view, placement, show, camera, controls, cityParts, specialMeshes, gpuName };  // for the headless checks and the recorded tour
 document.documentElement.dataset.ready = 'true';

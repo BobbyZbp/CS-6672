@@ -77,16 +77,27 @@ def build(output=OUT, gsd=0.3, years=YEARS, lidar_report=LIDAR_REPORT):
     lidar = json.loads(Path(lidar_report).read_text())
     bbox = tuple(lidar['box_utm'])
     cols, rows = int(round((bbox[2] - bbox[0]) / gsd)), int(round((bbox[3] - bbox[1]) / gsd))
-    if max(cols, rows) > MAX_TILE_PX: raise ValueError('Box too large for one WMS request at this ground sample distance')
+    # The service caps one request at MAX_TILE_PX; requests are oversampled by 1.4 before warping, so the box is split
+    # into n x n tiles, each fetched and warped on its own and pasted into the full raster.
+    n = int(np.ceil(1.4 * max(cols, rows) / MAX_TILE_PX))
     report = {'schema_version': 1, 'created_utc': datetime.now(timezone.utc).isoformat(), 'credit': CREDIT, 'crs': 'EPSG:32618',
               'box_utm': list(bbox), 'ground_sample_distance_m': gsd, 'shape': [rows, cols], 'years': {}}
     for year in years:
-        raw = output / 'raw' / f'{year}.jpg'
-        url, digest, wgs_box = fetch_tile(year, bbox, int(cols * 1.4), int(rows * 1.4), raw)  # oversample before warping
-        warped = warp_to_utm(raw, wgs_box, bbox, gsd)
+        warped = np.zeros((rows, cols, 3), np.uint8); requests = []
+        cuts_c = np.linspace(0, cols, n + 1).round().astype(int); cuts_r = np.linspace(0, rows, n + 1).round().astype(int)
+        for i in range(n):
+            for j in range(n):
+                c0, c1, r0, r1 = cuts_c[j], cuts_c[j + 1], cuts_r[i], cuts_r[i + 1]
+                tile_box = (bbox[0] + c0 * gsd, bbox[3] - r1 * gsd, bbox[0] + c1 * gsd, bbox[3] - r0 * gsd)
+                raw = output / 'raw' / (f'{year}.jpg' if n == 1 else f'{year}-{i}{j}.jpg')
+                url, digest, wgs_box = fetch_tile(year, tile_box, int((c1 - c0) * 1.4), int((r1 - r0) * 1.4), raw)  # oversample before warping
+                warped[r0:r1, c0:c1] = warp_to_utm(raw, wgs_box, tile_box, gsd)
+                requests.append({'request': url, 'raw_sha256': digest, 'raw_bytes': raw.stat().st_size})
         Image.fromarray(warped).save(output / f'{year}-utm18n.jpg', quality=92)
         grey = warped.mean(2)
-        report['years'][year] = {'request': url, 'raw_sha256': digest, 'raw_bytes': raw.stat().st_size,
+        report['years'][year] = {'request': requests[0]['request'] if n == 1 else [r['request'] for r in requests],
+                                 'raw_sha256': requests[0]['raw_sha256'] if n == 1 else [r['raw_sha256'] for r in requests],
+                                 'raw_bytes': sum(r['raw_bytes'] for r in requests), 'tiles': n * n,
                                  'mean_grey': float(grey.mean()), 'std_grey': float(grey.std()),
                                  'blank': bool(grey.std() < 5), 'file': f'{year}-utm18n.jpg'}
         print(year, 'std', round(float(grey.std()), 1), flush=True)

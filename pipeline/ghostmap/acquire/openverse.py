@@ -48,7 +48,11 @@ QUERIES = [('McGraw Tower', 'mcgraw-tower'), ('Cornell clock tower', 'mcgraw-tow
            # Time-machine sites (added 2026-10-25): buildings that changed in the photographed years.
            ('Gates Hall Cornell', 'gates'), ('Bill Melinda Gates Hall Cornell', 'gates'),
            ('Klarman Hall Cornell', 'klarman'), ('Goldwin Smith Hall Cornell', 'goldwin-smith'),
-           ('Milstein Hall Cornell', 'milstein')]
+           ('Milstein Hall Cornell', 'milstein'),
+           # More of the tower and library (added 2026-10-26): the splat and the placement improve with every view.
+           ('McGraw Tower Cornell University', 'mcgraw-tower'), ('Cornell chimes', 'mcgraw-tower'), ('Cornell bell tower', 'mcgraw-tower'),
+           ('Libe Slope', 'uris'), ('Libe Slope Cornell', 'uris'), ('Uris Library', 'uris'), ('Ho Plaza Cornell', None),
+           ('Cornell University library tower', 'uris'), ('Cornell University campus Ithaca', None), ('Cornell clocktower', 'mcgraw-tower')]
 LICENCES = {'by': 'CC BY', 'by-sa': 'CC BY-SA', 'cc0': 'CC0', 'pdm': 'Public domain'}
 HISTORIC = re.compile(r'LCCN|postcard|circa|\bc\.\s*1[89]\d\d|(?<!\d)1[89]\d\d(?!\d)|stereograph|lithograph|library of congress|archives?\b|historic|kheel center', re.I)
 PLACE = re.compile(r'cornell|ithaca|arts\s*quad|mcgraw\s*tower|uris\s*library|olin\s*library|libe\s*slope|gates\s*hall|klarman|goldwin\s*smith|milstein', re.I)
@@ -63,12 +67,15 @@ def api(params, cache):
     request = urllib.request.Request(API + '?' + urllib.parse.urlencode(params), headers={'User-Agent': AGENT})
     for attempt in range(5):
         try:
-            with urllib.request.urlopen(request, timeout=40) as response: payload = json.load(response)
+            with urllib.request.urlopen(request, timeout=120) as response: payload = json.load(response)
             path.write_text(json.dumps(payload) + '\n'); time.sleep(2.0)
             return payload
         except urllib.error.HTTPError as error:
-            if error.code not in (429, 500, 502, 503) or attempt == 4: raise
+            if error.code not in (429, 500, 502, 503, 504) or attempt == 4: raise
             time.sleep(30 * (attempt + 1))
+        except (TimeoutError, urllib.error.URLError) as error:   # the anonymous API is often slow; wait and retry
+            if attempt == 4: raise
+            time.sleep(20 * (attempt + 1))
     raise RuntimeError('Openverse retries exhausted')
 
 

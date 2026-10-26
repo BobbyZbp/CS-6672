@@ -11,15 +11,20 @@ Gaussians close to the camera, so the page and the slides show gsplat's own rend
 - **a fly-through** (`views/fly-<kkk>.jpg`): the training photographers facing the landmark, sorted by
   heading around it, with centres, rotations (slerp) and focal lengths interpolated between them; raw
   colours on a sky background, since no photograph exists between them. The same poses and path for
-  every splat, so plain and lidar-taught frames line up.
+  every splat, so plain and lidar-taught frames line up. The same frames again with every Gaussian
+  painted by the lidar's verdict on it (`views/fly-verdict-<kkk>.jpg`: red in air the lidar saw empty,
+  purple under the bare ground, natural colour on surfaces, as `evaluate/splat_geometry.py` classifies),
+  and per frame the camera's centre and heading and the distance to the nearest training photographer,
+  so the page can show where on the path the camera is and how far it is from any photograph.
 - **a walk** for the slides and the video: an eased arc around the landmark at the photographers' median
   distance and eye height, plain and lidar-taught side by side, frame for frame
-  (`artifacts/presentation/splat-walk-plain-vs-lidar-taught.mp4`, its middle frame as a still).
+  (`artifacts/presentation/splat-walk-plain-vs-lidar-taught.mp4`, its middle frame as a still), and the
+  fly-through frame where the lidar's verdict separates the two most, side by side.
 
 Each splat's `views/index.json` lists what was rendered (file names relative to `views/`). Splats live in
 the lidar frame, so every view is a pose in the same metres as the lidar.
 
-Usage: CUDA_HOME=... PYTHONPATH=pipeline python -m ghostmap.dense.splat_views [--run <run>] [--anchor 0] [--fly-frames 60] [--walk-frames 240]
+Usage: CUDA_HOME=... PYTHONPATH=pipeline python -m ghostmap.dense.splat_views [--run <run>] [--anchor 0] [--fly-frames 90] [--walk-frames 240]
 """
 from __future__ import annotations
 
@@ -47,17 +52,30 @@ def load_splat(path, device):
     return {k: ck[k].to(device) for k in PARAMS}
 
 
-def render(splat, viewmat, K, width, height, device, background=SKY):
-    """Float image (H, W, 3) in [0, 1]."""
+def render(splat, viewmat, K, width, height, device, background=SKY, rgb=None):
+    """Float image (H, W, 3) in [0, 1]; `rgb` (N, 3) replaces the splat's own view-dependent colours."""
     import torch
     from gsplat import rasterization
-    colors = torch.cat([splat['sh0'], splat['shN']], 1)
+    colors, degree = (rgb, None) if rgb is not None else (torch.cat([splat['sh0'], splat['shN']], 1), 3)
     bg = background if hasattr(background, 'shape') else torch.tensor(background, device=device)
     with torch.no_grad():
         img, _, _ = rasterization(splat['means'], splat['quats'] / splat['quats'].norm(dim=-1, keepdim=True), torch.exp(splat['scales']),
-                                  torch.sigmoid(splat['opacities']), colors, viewmat[None], K[None], width, height, sh_degree=3, packed=False,
+                                  torch.sigmoid(splat['opacities']), colors, viewmat[None], K[None], width, height, sh_degree=degree, packed=False,
                                   backgrounds=bg.reshape(1, 3).float())
     return img[0].clamp(0, 1)
+
+
+VERDICT_RGB = {'air': (0.88, 0.16, 0.14), 'buried': (0.55, 0.25, 0.75)}
+
+
+def verdict_colours(splat, lidar_dir, device):
+    """Each Gaussian's base colour, replaced by red in air the lidar saw empty and purple under the bare ground."""
+    import torch
+    from ghostmap.evaluate.splat_geometry import classify
+    label = classify(splat['means'].cpu().numpy().astype(np.float64), lidar_dir)
+    rgb = np.clip(splat['sh0'][:, 0, :].cpu().numpy() * 0.28209479177387814 + 0.5, 0, 1)
+    for name, colour in VERDICT_RGB.items(): rgb[label == name] = colour
+    return torch.tensor(rgb, dtype=torch.float32, device=device), {k: int((label == k).sum()) for k in ('surface', 'air', 'buried', 'far')}
 
 
 def fit_colours(img, photo):
@@ -117,14 +135,31 @@ def fly_path(model, centre_xy, holdout, frames, count=7):
         R = slerp([x]).as_matrix()[0]; C = (1 - t) * Cs[i] + t * Cs[i + 1]; f = (1 - t) * fs[i] + t * fs[i + 1]
         V = np.eye(4); V[:3, :3] = R; V[:3, 3] = -R @ C
         out.append((V, f))
-    return out, [im.name for im in keys]
+    return out, [im.name for im in keys], [float(k) * (frames - 1) / (len(keys) - 1) for k in range(len(keys))]
+
+
+def verdict_still(splats_dir, names, frames):
+    """The fly-through frame where the lidar's verdict separates the splats most (share of pixels painted red or purple,
+    first splat minus second), side by side, for the slides (`verdict-plain-vs-lidar-taught.jpg`)."""
+    from PIL import Image
+    def flagged(name, k):
+        x = np.asarray(Image.open(Path(splats_dir) / name / 'views' / f'fly-verdict-{k:03d}.jpg').convert('RGB')).astype(float) / 255
+        return float(np.mean([(np.abs(x - c).max(-1) < 0.12).mean() for c in VERDICT_RGB.values()]) * len(VERDICT_RGB))
+    shares = [(flagged(names[0], k), flagged(names[1], k)) for k in range(frames)]
+    k = int(np.argmax([a - b for a, b in shares]))
+    pair = [Image.open(Path(splats_dir) / n / 'views' / f'fly-verdict-{k:03d}.jpg').convert('RGB') for n in names]
+    out = Image.new('RGB', (pair[0].width * 2 + 12, pair[0].height), (255, 255, 255))
+    out.paste(pair[0], (0, 0)); out.paste(pair[1], (pair[0].width + 12, 0))
+    out.save(STILLS / 'verdict-plain-vs-lidar-taught.jpg', quality=90)
+    return {'frame': k, 'flagged_pixels': {names[0]: round(shares[k][0], 3), names[1]: round(shares[k][1], 3)},
+            'mean_flagged_pixels': {n: round(float(np.mean([s[j] for s in shares])), 3) for j, n in enumerate(names)}}
 
 
 def title(name):
     return name.replace('modern__', '').rsplit('.', 1)[0].replace('_', ' ')
 
 
-def run(run_path, anchor='0', names=SPLATS, fly_frames=60, walk_frames=240, device='cuda'):
+def run(run_path, anchor='0', names=SPLATS, fly_frames=90, walk_frames=240, device='cuda'):
     import imageio.v2 as imageio
     import pycolmap
     import torch
@@ -135,8 +170,18 @@ def run(run_path, anchor='0', names=SPLATS, fly_frames=60, walk_frames=240, devi
     image_dir = run_path / 'splats' / f'undistorted-{anchor}' / 'images'
     holdout = set(sorted(im.name for im in model.images.values())[::12])   # the trainer holds out every twelfth by name
     centre_xy = landmark_centre(anchor_report)
-    path, fly_keys = fly_path(model, centre_xy, holdout, fly_frames)
+    path, fly_keys, key_frames = fly_path(model, centre_xy, holdout, fly_frames)
     fly_h = int(round(WIDTH * 0.75 / 2)) * 2
+    # Where the camera is on every frame, and how far from the nearest photographer the splat was trained on.
+    trained = np.array([im.projection_center() for im in model.images.values() if im.name not in holdout])
+    cameras = []
+    for V, f in path:
+        C = -V[:3, :3].T @ V[:3, 3]; fwd = V[2, :3]
+        cameras.append({'centre': [round(float(v), 2) for v in C], 'heading_deg': round(float(np.degrees(np.arctan2(fwd[1], fwd[0]))), 1),
+                        'fov_deg': round(float(2 * np.degrees(np.arctan(WIDTH / 2 / f))), 1), 'nearest_photographer_m': round(float(np.linalg.norm(trained - C, axis=1).min()), 1)})
+    keys = [{'frame': round(k, 2), 'photo': title(n), 'image': n, 'centre': [round(float(v), 2) for v in next(im for im in model.images.values() if im.name == n).projection_center()]}
+            for k, n in zip(key_frames, fly_keys)]
+    lidar_dir = Path(anchor_report['lidar_report']).parent
     summary = {}
     for name in names:
         splat = load_splat(run_path / 'splats' / name, device)
@@ -157,14 +202,21 @@ def run(run_path, anchor='0', names=SPLATS, fly_frames=60, walk_frames=240, devi
             Image.fromarray(to_u8(photo)).save(STILLS / f'view-{stem}-photo.jpg', quality=90)
             index['poses'].append({'stem': stem, 'photo': title(image.name), 'image': image.name, 'psnr_fitted': psnr, 'is_training': image.name not in holdout,
                                    'render': f'pose-{stem}.jpg', 'photograph': f'photo-{stem}.jpg', 'size': [WIDTH, h]})
+        verdict, counts = verdict_colours(splat, lidar_dir, device)
         for k, (V, f) in enumerate(path):
             K = torch.tensor([[f, 0, WIDTH / 2], [0, f, fly_h / 2], [0, 0, 1]], dtype=torch.float32, device=device)
-            Image.fromarray(to_u8(render(splat, torch.tensor(V, dtype=torch.float32, device=device), K, WIDTH, fly_h, device))).save(views / f'fly-{k:03d}.jpg', quality=85)
-        index['fly'] = {'frames': len(path), 'pattern': 'fly-%03d.jpg', 'size': [WIDTH, fly_h], 'poses_used': [title(n) for n in fly_keys],
+            Vt = torch.tensor(V, dtype=torch.float32, device=device)
+            Image.fromarray(to_u8(render(splat, Vt, K, WIDTH, fly_h, device))).save(views / f'fly-{k:03d}.jpg', quality=85)
+            Image.fromarray(to_u8(render(splat, Vt, K, WIDTH, fly_h, device, rgb=verdict))).save(views / f'fly-verdict-{k:03d}.jpg', quality=85)
+        index['fly'] = {'frames': len(path), 'pattern': 'fly-%03d.jpg', 'verdict_pattern': 'fly-verdict-%03d.jpg', 'size': [WIDTH, fly_h], 'poses_used': [title(n) for n in fly_keys],
+                        'frame': 'the anchor\'s local metres (UTM 18N minus the lidar crop origin)', 'cameras': cameras, 'keys': keys, 'verdict_counts': counts,
+                        'verdict_rule': 'red: more than 2 m above the highest lidar surface within 2.5 m; purple: more than 1 m under the lowest bare ground within 2.5 m; otherwise the Gaussian\'s own base colour',
                         'rule': 'training photographers facing the landmark (heading within 25 degrees, 30-160 m away), the 7 with most registered points, sorted by heading; centres, rotations (slerp) and focal lengths interpolated; raw colours on a sky background'}
         (views / 'index.json').write_text(json.dumps(index, indent=1) + '\n')
         summary[name] = {'poses': [(p['stem'], round(p['psnr_fitted'], 2), p['is_training']) for p in index['poses']], 'fly_frames': len(path)}
         del splat; torch.cuda.empty_cache()
+
+    summary['verdict_still'] = verdict_still(run_path / 'splats', names, len(path))
 
     # The walk: plain and lidar-taught side by side, frame for frame.
     splats = {n: load_splat(run_path / 'splats' / n, device) for n in names}
@@ -197,7 +249,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--run', type=Path, default=ROOT / 'artifacts/artsquad_modern/runs/6406b8eaae260163b303')
     parser.add_argument('--anchor', default='0')
-    parser.add_argument('--fly-frames', type=int, default=60)
+    parser.add_argument('--fly-frames', type=int, default=90)
     parser.add_argument('--walk-frames', type=int, default=240)
     args = parser.parse_args()
     print(json.dumps(run(args.run, args.anchor, fly_frames=args.fly_frames, walk_frames=args.walk_frames), indent=1))

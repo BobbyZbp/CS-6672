@@ -29,7 +29,7 @@ TIMELINE = ROOT / 'config/timeline.json'
 SITES = {'quad': {'lidar': ROOT / 'data/lidar/NY_FingerLakes_1_2020', 'ortho': ROOT / 'data/orthoimagery/quad'},
          'gates-site': {'lidar': ROOT / 'data/lidar/gates-site', 'ortho': ROOT / 'data/orthoimagery/gates-site'}}
 TERRAIN_CELL_M = 1.5
-TEXTURE_PX = 2048
+TEXTURE_PX = 4096   # the aerial images are fetched at 0.16 m; 4096 px keeps that detail on a 640 m site
 THUMB_PX = 640
 CROP_MARGIN_M = 18.0
 
@@ -41,21 +41,19 @@ def thumbnail(source, dest, size=THUMB_PX):
 
 
 def terrain(site, origin, out):
-    from ghostmap.anchor.align import InsideMask
     from ghostmap.anchor.lidar import fill_nearest
     ras = np.load(SITES[site]['lidar'] / 'quad-rasters-utm18n.npz')
     box, cell = tuple(ras['box']), float(ras['cell'])
-    surface, ground = fill_nearest(ras['surface']), ras['ground']
-    buildings = json.loads((ROOT / 'data/footprints/buildings-utm18n.json').read_text())['buildings']
-    mask = InsideMask([b['ring'] for b in buildings], box, cell).mask
-    height = np.where(mask, surface, ground)
+    # bare earth (holes with no ground return filled from the nearest one): buildings and trees are drawn by
+    # the city model (web/city_model.py), not as a draped sheet
+    height = fill_nearest(ras['ground'])
     step = int(round(TERRAIN_CELL_M / cell))
-    h = height[::step, ::step].astype(np.float32); m = mask[::step, ::step].astype(np.uint8)
+    h = height[::step, ::step].astype(np.float32)
     rows, cols = h.shape
-    h.tofile(out / f'{site}-height.f32'); m.tofile(out / f'{site}-buildings.u8')
+    h.tofile(out / f'{site}-height.f32')
     x0, y1 = box[0] - origin[0], box[3] - origin[1]
     # Row 0 is the north edge (raster convention); the viewer builds the grid accordingly.
-    return {'height_url': f'{site}-height.f32', 'buildings_url': f'{site}-buildings.u8', 'rows': rows, 'cols': cols,
+    return {'height_url': f'{site}-height.f32', 'rows': rows, 'cols': cols,
             'cell_m': cell * step, 'x0': float(x0), 'y_top': float(y1), 'x1': float(box[2] - origin[0]), 'y_bottom': float(box[1] - origin[1]),
             'z_offset': float(-origin[2])}
 
@@ -66,7 +64,7 @@ def orthos(site, out, years):
     for y in years:
         if y not in rep['years']: continue
         src = SITES[site]['ortho'] / rep['years'][y]['file']; dest = out / f'{site}-{y}.jpg'
-        if not dest.exists():
+        if not dest.exists() or dest.stat().st_mtime < src.stat().st_mtime:
             with Image.open(src) as im:
                 im = im.convert('RGB'); im.thumbnail((TEXTURE_PX, TEXTURE_PX), Image.Resampling.LANCZOS); im.save(dest, quality=86)
         result[y] = {'url': f'{site}-{y}.jpg', 'blank': rep['years'][y]['blank']}
@@ -84,7 +82,7 @@ def aerial_crops(site, ring_utm, name, out, years):
     for y in years:
         if y not in rep['years']: continue
         dest = out / 'crops' / f'{slug}-{y}.jpg'
-        if not dest.exists():
+        if not dest.exists() or dest.stat().st_mtime < (SITES[site]['ortho'] / rep['years'][y]['file']).stat().st_mtime:
             with Image.open(SITES[site]['ortho'] / rep['years'][y]['file']) as im:
                 im.crop((max(0, c0), max(0, r0), min(im.width, c1), min(im.height, r1))).save(dest, quality=88)
         urls[y] = f'crops/{slug}-{y}.jpg'
@@ -178,9 +176,10 @@ def export_splat(splat_dir, lidar, shift, path, min_opacity=0.05, max_gaussians=
     return int(len(m))
 
 
-def splat_views(src, dest, url_prefix):
+def splat_views(src, dest, url_prefix, shift=(0.0, 0.0, 0.0)):
     """The gsplat renderings of a splat (dense/splat_views.py): its photographer poses with the photograph beside each,
-    and the fly-through frames, copied for the page. None when they have not been rendered."""
+    and the fly-through frames (photo colours and the lidar's verdict) with the camera of every frame moved into the
+    scene's frame by `shift`, copied for the page. None when they have not been rendered."""
     index = Path(src) / 'index.json'
     if not index.exists(): return None
     ix = json.loads(index.read_text())
@@ -196,12 +195,18 @@ def splat_views(src, dest, url_prefix):
         poses.append({'photo': stem, 'image': p.get('image'), 'title': p.get('photo') if p.get('stem') else stem, 'held_out': bool(held), 'psnr': p.get('psnr_fitted', p.get('psnr_here')),
                       'render_url': url_prefix + render, 'photo_url': url_prefix + photograph, 'size': p.get('size')})
     fly = ix.get('fly') or {}
-    pattern = fly.get('pattern', 'fly-%03d.jpg'); frames = 0
+    pattern, verdict = fly.get('pattern', 'fly-%03d.jpg'), fly.get('verdict_pattern'); frames = 0
     for k in range(int(fly.get('frames', 0))):
-        f = Path(src) / (pattern % k)
-        if not f.exists(): break
-        shutil.copy2(f, Path(dest) / f.name); frames += 1
-    return {'poses': poses, 'fly': {'frames': frames, 'url_pattern': url_prefix + pattern, 'size': fly.get('size')} if frames else None}
+        files = [Path(src) / (pattern % k)] + ([Path(src) / (verdict % k)] if verdict else [])
+        if not all(f.exists() for f in files): break
+        for f in files: shutil.copy2(f, Path(dest) / f.name)
+        frames += 1
+    if not frames: return {'poses': poses, 'fly': None}
+    move = lambda c: [round(float(v) + float(s), 2) for v, s in zip(c, shift)]
+    cameras = [dict(c, centre=move(c['centre'])) for c in fly.get('cameras', [])[:frames]]
+    keys = [dict(k, centre=move(k['centre'])) for k in fly.get('keys', [])]
+    return {'poses': poses, 'fly': {'frames': frames, 'url_pattern': url_prefix + pattern, 'verdict_url_pattern': url_prefix + verdict if verdict else None,
+                                    'size': fly.get('size'), 'cameras': cameras, 'keys': keys, 'verdict_counts': fly.get('verdict_counts')}}
 
 
 def certificate_summary(path):
@@ -311,7 +316,7 @@ def build(output=OUT, anchored_runs=None, record_snapshot=None, ground_runs=None
                 psnr = next((x['psnr'] for x in (splat_report.get('psnr') or {}).get('test', []) if Path(x['image']).stem == jpg.stem), None)
                 renders.append({'url': f'splats/{dest.name}', 'photo': jpg.stem, 'psnr': psnr})
             renders.sort(key=lambda r: -(r['psnr'] or 0))   # best-covered held-out view first; every one is listed with its PSNR
-            views = splat_views(geometry.parent / 'views', output / 'splats' / f'{key}-views', f'splats/{key}-views/')
+            views = splat_views(geometry.parent / 'views', output / 'splats' / f'{key}-views', f'splats/{key}-views/', shift)
             splats.append({'name': name, 'lidar_taught': bool(splat_report.get('lidar_prior')), 'prior': splat_report.get('lidar_prior'), 'views': views,
                            'splat_url': f'splats/{key}.splat', 'splat_gaussians': shown,
                            'xyz_url': f'splats/{key}-geometry.f32', 'rgb_url': f'splats/{key}-geometry.u8', 'colour': g['viewer_layer']['colour'],
@@ -399,7 +404,7 @@ def build(output=OUT, anchored_runs=None, record_snapshot=None, ground_runs=None
 
     # Buildings: footprints near either site, with documented dates where known.
     documented = {b['footprint']: b for b in timeline['buildings']}
-    buildings = []
+    buildings = []; per_site = {s: [] for s in sites}
     for b in footprints_all:
         ring = np.asarray(b['ring'])
         site = next((s for s in sites if (lambda bx: bx[0] - 20 < ring[:, 0].mean() - origin[0] < bx[2] + 20 and bx[1] - 20 < ring[:, 1].mean() - origin[1] < bx[3] + 20)(sites[s]['ortho_box_local'])), None)
@@ -416,7 +421,14 @@ def build(output=OUT, anchored_runs=None, record_snapshot=None, ground_runs=None
             if b['name'] in roof: entry['aerial_outline_score'] = {y: v['outline_edge_ratio'] for y, v in roof[b['name']]['years'].items()}
             if b['name'] in ground_first_seen: entry['ground_photographs'] = ground_first_seen[b['name']]
             if b['name'] in ground_record: entry['ground_record'] = ground_record[b['name']]
-        buildings.append(entry)
+        buildings.append(entry); per_site[site].append((b['name'], b['ring']))
+
+    # The city model: walls and roofs from the lidar along every footprint, trees from the lidar (web/city_model.py).
+    # Buildings whose visibility changes (documented changes, buildings a reconstruction covers) keep their own ranges.
+    from ghostmap.web.city_model import build_site
+    special = {b['name'] for b in buildings if b.get('documented') and not b['documented'].get('stable')} | {n for r in reconstructions for n in r.get('covers', [])}
+    for s in sites:
+        sites[s]['city'] = build_site(s, SITES[s]['lidar'], per_site[s], origin, output / 'city', special)
 
     # The placement study (evaluate/georegistration.py, evaluate/identifiability_sweep.py): every campus fragment's
     # certificate against held-out geotags and against the validated frame, the synthetic identifiability table,
