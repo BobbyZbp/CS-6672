@@ -2,8 +2,8 @@
 """Package the presentation website for offline use: one zip that runs on any laptop with Python 3.
 
 The bundle holds the demo page (`timemachine.html` and its script and stylesheet), the slide deck
-(`presentation.html`), the vendored three.js and Gaussian-splat modules with their licences, and every
-asset under `assets/timemachine/` that the scene references. Each file referenced by `scene.json` must
+(`presentation.html`) with its stills under `assets/presentation/`, the vendored three.js and Gaussian-splat
+modules with their licences, and everything under `assets/timemachine/`. Each file referenced by `scene.json` must
 exist, or packaging stops. A small `serve.py` serves the folder on http://127.0.0.1:8080 (ES modules and
 binary assets need an HTTP server; opening the HTML file directly does not work). A manifest records
 every file's size and SHA-256.
@@ -24,6 +24,7 @@ from ghostmap.paths import ROOT
 DIST = ROOT / 'dist'
 OUTPUT = ROOT / 'artifacts/presentation'
 PAGES = ['timemachine.html', 'timemachine.js', 'ghostmap.css', 'presentation.html']
+ASSET_DIRS = ['assets/timemachine', 'assets/presentation']
 VENDOR = ['vendor/three.module.js', 'vendor/OrbitControls.js', 'vendor/LICENSE.three', 'vendor/gaussian-splats-3d.module.js', 'vendor/LICENSE.gaussian-splats-3d']
 
 SERVE = '''#!/usr/bin/env python3
@@ -63,8 +64,8 @@ def referenced(scene, base='assets/timemachine/'):
             for k, x in v.items(): walk(x, k)
         elif isinstance(v, list):
             for x in v: walk(x, key)
-        elif isinstance(v, str) and (key.endswith('_url') or key in ('url', 'photo')) and not v.startswith(('http:', 'https:')):
-            out.add(base + v)
+        elif isinstance(v, str) and not v.startswith(('http:', 'https:')) and (key.endswith('_url') or key == 'url' or (key == 'photo' and '/' in v)):
+            out.add(base + v)   # a 'photo' without a folder is a photograph's identifier, not a file
     walk(scene)
     return out
 
@@ -72,7 +73,8 @@ def referenced(scene, base='assets/timemachine/'):
 def package(dist=DIST, output=OUTPUT):
     dist, output = Path(dist), Path(output); output.mkdir(parents=True, exist_ok=True)
     scene = json.loads((dist / 'assets/timemachine/scene.json').read_text())
-    files = set(PAGES + VENDOR) | {p.relative_to(dist).as_posix() for p in (dist / 'assets/timemachine').rglob('*') if p.is_file()}
+    # the demo's data, and the stills the slide deck shows (dist/assets/presentation, written by qa/record_tour.py)
+    files = set(PAGES + VENDOR) | {p.relative_to(dist).as_posix() for folder in ASSET_DIRS for p in (dist / folder).rglob('*') if p.is_file()}
     missing = sorted(p for p in (referenced(scene) | set(PAGES + VENDOR)) if not (dist / p).exists())
     if missing: raise SystemExit('missing files referenced by the demo: ' + ', '.join(missing[:12]))
     stamp = datetime.now(timezone.utc).strftime('%Y%m%d-%H%M')

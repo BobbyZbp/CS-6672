@@ -73,3 +73,11 @@ the legacy OpenMVS outputs `cpu_mvs_modern_full_v2/`, `cpu_mvs_masked08_v3/`,
 `dist/assets/repair/` for the Surface Lab page); and the pip cache.
 Deleted 2026-10-25 (night): the depth maps and undistorted images of the full-resolution OpenMVS attempt on the tower fragment, `artsquad_modern/runs/6406b8eaae260163b303/dense/tower/` (841 MB; fusion was killed by the memory limit; `report.json` and the tool logs remain). The half-resolution attempt lives beside it in `dense/tower-half/`.
 Deleted 2026-10-26 (approved in the research plan, to make room for a CUDA toolchain): the image copies and feature/match caches of the two superseded Gates Hall mapping attempts (`artsquad_modern/runs/7cce507a4a0abf005269/`, `.../323064cf0ac9718e0e90/`; superseded by the final mapping `6da4ccc327cb12bf14df`) and of the calibration-control run on the 145-photo snapshot (`.../bd1208237efd7b33d52d/`); reports and native models of all three remain. Also the depth maps, undistorted images and OpenMVS scene files of the half-resolution dense workspace (`.../6406b8eaae260163b303/dense/tower-half/`; `dense.ply`, `surface.ply`, the report and the logs remain, and the viewer's copy of the surface lives under `dist/assets/timemachine/mesh/`). About 2.3 GB.
+
+## presentation/ (2026-10-26)
+
+| Path | What it is |
+| --- | --- |
+| `presentation/ghostmap-tour.webm` | Captioned tour of the ten demo chapters, recorded on the GPU (`ghostmap/qa/record_tour.py`); the fallback if the live demo fails. `tour-report.json` beside it. |
+| `presentation/splat-walk-plain-vs-lidar-taught.mp4` | gsplat walk around the tower, plain and lidar-taught side by side (`ghostmap/dense/splat_views.py`). |
+| `presentation/ghostmap-demo-<stamp>.zip` | The offline bundle: demo page, slides, vendored modules, all assets, `serve.py` (`ghostmap/package/presentation_bundle.py`); checked standalone with the page check. |

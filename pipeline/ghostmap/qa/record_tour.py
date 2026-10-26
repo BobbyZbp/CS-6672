@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import math
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -41,6 +42,25 @@ TOUR = [
     ('tower', 10, 'McGraw Tower over twenty years: every point knows the years photographs saw it.', [2004, 2010, 2016, 2025]),
     ('limits', 6, 'What the record cannot show, said out loud.', None),
 ]
+
+
+async def sweep_wipe(page, seconds):
+    """Referee: slide the photograph | splat wipe across and back, so the photograph turns into the splat."""
+    steps = 40
+    for k in range(steps + 1):
+        v = round(100 * (0.5 - 0.5 * math.cos(2 * math.pi * k / steps)))
+        await page.evaluate(f"(() => {{ const w = document.querySelector('.wipe input[type=range]'); if (w) {{ w.value = {v}; w.dispatchEvent(new Event('input')); }} }})()")
+        await page.wait_for_timeout(int(1000 * seconds / (steps + 1)))
+
+
+async def teacher(page, seconds):
+    """Teacher: let the plain | lidar-taught fly-through play, then show one pose as a wipe."""
+    await page.wait_for_timeout(int(1000 * seconds * 0.7))
+    await page.evaluate("(() => { const r = document.querySelector('input[name=tchmode][value=pose-0]'); if (r) { r.checked = true; r.dispatchEvent(new Event('change', { bubbles: true })); } })()")
+    await sweep_wipe(page, seconds * 0.3)
+
+
+ACTIONS = {'referee': sweep_wipe, 'teacher': teacher}
 CAPTION_JS = """(text) => {
   let bar = document.getElementById('tour-caption');
   if (!bar) { bar = document.createElement('div'); bar.id = 'tour-caption';
@@ -76,7 +96,9 @@ async def tour(base_url, stills=STILLS, video_dir=VIDEO, width=1600, height=900,
             # Chapters that load splats say so in #status; wait until it clears (or give up after two minutes).
             try: await page.wait_for_function("!(document.getElementById('status') || {}).textContent", timeout=120000)
             except Exception: report['errors'].append(f'{chapter}: still loading after two minutes')
-            if years:
+            if chapter in ACTIONS:
+                await ACTIONS[chapter](page, dwell)
+            elif years:
                 for y in years:
                     await page.evaluate(f"const s = document.getElementById('slider'); s.value = {y}; s.dispatchEvent(new Event('input'))")
                     await page.wait_for_timeout(int(1000 * dwell / len(years)))

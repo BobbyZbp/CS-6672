@@ -61,11 +61,11 @@ async def check(base_url, output):
                     report.setdefault('live_splat', {})[chapter] = await page.inner_text('#status') or 'loaded'
             text = await page.inner_text('#chapter-body')
             report['chapters'][chapter] = {'characters': len(text), 'year_shown': await page.inner_text('#year'), 'year_set': years[-1]}
-        for deck in DECKS:
-            if not (ROOT / 'dist' / deck).exists(): continue
+        for deck in DECKS:   # every deck the server has (an offline bundle carries only the main one)
             slides = await browser.new_page(viewport={'width': 1600, 'height': 900}); stem = Path(deck).stem
             slides.on('pageerror', lambda e, d=deck: report['errors'].append(f'{d} pageerror: ' + str(e)))
-            await slides.goto(f'{base_url}/{deck}#1')
+            response = await slides.goto(f'{base_url}/{deck}#1')
+            if response is None or response.status >= 400: await slides.close(); continue
             await slides.wait_for_function('document.documentElement.dataset.ready === "true"', timeout=60000)
             report['slides'][deck] = {}
             for n in range(1, await slides.locator('.slide').count() + 1):
