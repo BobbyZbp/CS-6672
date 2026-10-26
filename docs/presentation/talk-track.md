@@ -27,7 +27,7 @@ live (the snap, the splats, the year slider). Every number on the slides is read
 | 3:15 | Slide 5 | the certificate | The scale profile is peaked: the tower top and four roof edges fix the scale to a few percent. The other three yaw quadrants score far below the best one. Removing any single cue barely moves the answer. |
 | 4:00 | Slide 6 → demo `#refuse` | knowing when it can't | The interesting part is the refusals. Every other campus fragment is refused, each with a reason: a square tower cannot fix its yaw, one facade cannot fix its scale, close-ups see no facade. The placements geotags could check were tens to hundreds of metres off, and every one of them had been refused. |
 | 5:15 | demo `#referee` | the plain splat and its lidar classes | Now the photographs as a Gaussian splat, in the lidar frame. Green is on a lidar surface, red is in air the lidar saw empty. Floaters are the classic failure of in-the-wild splats; here we count them against a measurement. |
-| 6:15 | demo `#teacher` | plain/taught toggle | Same photographs, same steps, one extra term: the measured free space is empty. Toggle: the cloud of floaters disappears. Slide 8 has the numbers, including what happens to held-out photographs. |
+| 6:15 | demo `#teacher` | plain/taught at the same pose, then the fly-through | Same photographs, same steps, one extra term: the measured free space is empty. Gaussians on lidar surfaces go from 30 % to 70 %, buried ones from 46 % to 10 %, half the Gaussians, a third of the training time, and the held-out photograph renders the same. Slide 8 has the numbers. |
 | 7:15 | demo `#above` → `#gates` → `#tower` | the year slider | And because everything is in one metric frame, time comes for free: six public aerial flights, Gates Hall rising from a parking lot, and every point of the tower knowing which years photographs saw it. |
 | 8:45 | Slide 10 | limits | What the record cannot show, said out loud: no ground photographs of any site before construction, lidar thin on walls, splats keep only what was photographed. |
 | 9:30 | Slide 11–12 | what is new, reproducible | Kaminsky 2009 aligned to overhead images; we add lidar heights, metric cues and a certificate. Everything is public data and reproducible wherever 3DEP exists. |
@@ -48,6 +48,11 @@ live (the snap, the splats, the year slider). Every number on the slides is read
   lidar box up to 120 m above the ground) and only on Gaussians more than 2 m above the highest lidar surface
   within 2.5 m; held-out photographs (never trained on) are the check that the rendering did not get worse for
   views the training never saw.
+- **Why not push the prior harder?** We tried: five times the weight and removal from 3 m puts 91 % of the
+  Gaussians on lidar surfaces (better than COLMAP's own points, 86 %), but the held-out view the
+  photographers covered drops from 23.8 to 19.9 dB. The prior then carves away real structure that a few
+  metres of placement error put outside the surface: how hard the lidar can teach is set by how well we
+  placed the fragment.
 - **What about change over time? The lidar is from 2020.** Exactly why the time machine shows documented dates
   and aerial flights; the free-space prior would wrongly delete a building that stood only before 2020, so it is
   applied to a fragment of buildings that stood throughout (the tower and the library).
