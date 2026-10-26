@@ -29,12 +29,21 @@ function flyTo(target, distance, elevation = 0.7, azimuth = -2.0, seconds = 1.4)
   const from = { pos: camera.position.clone(), tgt: controls.target.clone() };
   const to = { tgt: new THREE.Vector3(...target) };
   to.pos = new THREE.Vector3(to.tgt.x + distance * Math.cos(azimuth) * Math.cos(elevation), to.tgt.y + distance * Math.sin(azimuth) * Math.cos(elevation), to.tgt.z + distance * Math.sin(elevation));
-  flight = { from, to, t0: performance.now(), ms: seconds * 1000 };
+  flight = { from, to, t0: performance.now(), ms: seconds * 1000, fov: { from: camera.fov, to: 48 } };
+}
+// Stand where a photographer stood, looking where the photograph looks, with its field of view: a splat is only
+// trustworthy near the views it was trained from (and a held-out photographer's view is the honest test).
+function flyToPhotographer(p, seconds = 1.6) {
+  const R = p.rotation, fwd = new THREE.Vector3(...R[2]).normalize(), pos = new THREE.Vector3(...p.centre);
+  const fov = 2 * Math.atan(p.height / 2 / p.focal_px) * 180 / Math.PI;
+  flight = { from: { pos: camera.position.clone(), tgt: controls.target.clone() }, to: { pos, tgt: pos.clone().addScaledVector(fwd, 60) },
+             t0: performance.now(), ms: seconds * 1000, fov: { from: camera.fov, to: Math.min(75, Math.max(20, fov)) } };
 }
 function stepFlight() {
   if (!flight) return;
   const s = Math.min(1, (performance.now() - flight.t0) / flight.ms), e = s < .5 ? 2 * s * s : 1 - Math.pow(-2 * s + 2, 2) / 2;
   camera.position.lerpVectors(flight.from.pos, flight.to.pos, e); controls.target.lerpVectors(flight.from.tgt, flight.to.tgt, e);
+  if (flight.fov) { camera.fov = flight.fov.from + (flight.fov.to - flight.fov.from) * e; camera.updateProjectionMatrix(); }
   if (s >= 1) flight = null;
 }
 
@@ -55,6 +64,14 @@ function presentFrom(b) {
   const d = b.documented; const y = (d.dedicated || d.completed || d.opened || d.occupied || '').slice(0, 4); return y ? +y : null;
 }
 function worksFrom(b) { const d = b.documented; return d.construction_start ? +d.construction_start.slice(0, 4) : null; }
+function nearRing(ring, x, y, d) {  // within d metres of the footprint's outline
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [ax, ay] = ring[j], [bx, by] = ring[i], vx = bx - ax, vy = by - ay, l2 = vx * vx + vy * vy || 1;
+    const s = Math.max(0, Math.min(1, ((x - ax) * vx + (y - ay) * vy) / l2));
+    if (Math.hypot(ax + s * vx - x, ay + s * vy - y) <= d) return true;
+  }
+  return false;
+}
 function inside(ring, x, y) {  // ray casting
   let c = false;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
@@ -89,8 +106,8 @@ for (const [site, s] of Object.entries(scene.sites)) {
   // the buildings a dense surface covers are flattened while that surface is shown, so it stands alone.
   const flats = [];
   for (const b of changed.concat(scene.buildings.filter(b => covered.has(b.name))).filter(b => b.site === site)) {
-    const idx = [];
-    for (let i = 0; i < n; i++) if (inside(b.ring, pos[3 * i], pos[3 * i + 1])) idx.push(i);
+    const idx = [], margin = covered.has(b.name) ? 2.5 : 0;   // the lidar shape of a covered building spills past its footprint
+    for (let i = 0; i < n; i++) if (inside(b.ring, pos[3 * i], pos[3 * i + 1]) || (margin && nearRing(b.ring, pos[3 * i], pos[3 * i + 1], margin))) idx.push(i);
     flats.push({ building: b, idx, original: idx.map(i => pos[3 * i + 2]) });
   }
   // Steep faces are building walls in the lidar surface; they get a flat wall colour instead of the aerial image
@@ -255,12 +272,16 @@ const status = text => { document.getElementById('status').textContent = text; }
 
 // --- Gaussian splats, loaded on first use ------------------------------------------------------------
 function splatEntry(name) { const c = mainCloud(); return c ? c.splats.find(s => s.meta.name === name) : null; }
+// `?splats=N` loads only the N most important Gaussians of each splat (the files are sorted by size times opacity):
+// for browsers that render WebGL on the CPU, such as the headless checks and the recorded tour.
+const SPLAT_CAP = Math.max(0, parseInt(new URLSearchParams(location.search).get('splats') || '0', 10)) || null;
 function loadSplat(entry) {
   if (!entry.loading) entry.loading = (async () => {
     const viewer = new GaussianSplats3D.DropInViewer({ gpuAcceleratedSort: false, sharedMemoryForWorkers: false, integerBasedSort: true, halfPrecisionCovariancesOnGPU: false });
-    const options = { showLoadingUI: false, splatAlphaRemovalThreshold: 5 };
-    if (GaussianSplats3D.SceneFormat) options.format = GaussianSplats3D.SceneFormat.Splat;
-    await viewer.addSplatScene(BASE + entry.meta.splat_url, options);
+    const options = { showLoadingUI: false, splatAlphaRemovalThreshold: 5, format: GaussianSplats3D.SceneFormat.Splat };
+    let url = BASE + entry.meta.splat_url;
+    if (SPLAT_CAP) { const buf = await (await fetch(url)).arrayBuffer(); url = URL.createObjectURL(new Blob([buf.slice(0, 32 * SPLAT_CAP)])); }
+    await viewer.addSplatScene(url, options);
     viewer.visible = false; world.add(viewer); entry.viewer = viewer; return viewer;
   })();
   return entry.loading;
@@ -268,7 +289,7 @@ function loadSplat(entry) {
 async function showSplat(name, chapterId) {
   const e = splatEntry(name); if (!e) return;
   if (!e.viewer) {
-    status('Loading the Gaussian splat (' + fmt(e.meta.splat_gaussians) + ' Gaussians)…');
+    status('Loading the Gaussian splat (' + fmt(SPLAT_CAP ? Math.min(SPLAT_CAP, e.meta.splat_gaussians) : e.meta.splat_gaussians) + ' Gaussians)…');
     try { await loadSplat(e); } catch (err) { console.warn('splat not loaded', err); status('The splat could not be loaded in this browser; the lidar check layer still works.'); return; }
     status('');
   }
@@ -387,12 +408,42 @@ function splatNumbers(s) {
       <div>buried under the bare ground</div><div>${pct(s.free_space.buried)}</div>
       <div>on lidar surfaces (within 2.5 m)</div><div>${pct(s.free_space.on_surfaces)}</div>
       <div>median distance to the nearest lidar return</div><div>${fmt(s.overall.median_m, 2)} m</div>
-      <div>held-out photographs, PSNR</div><div>${s.psnr && s.psnr.test_mean ? fmt(s.psnr.test_mean, 1) + ' dB' : '—'}</div>
+      <div>held-out photographs, PSNR (mean; range)</div><div>${s.psnr && s.psnr.test_mean ? fmt(s.psnr.test_mean, 1) + ' dB; ' + fmt(Math.min(...s.psnr.test.map(x => x.psnr)), 0) + '–' + fmt(Math.max(...s.psnr.test.map(x => x.psnr)), 0) : '—'}</div>
     </div>`;
 }
-function rendersHtml(s, n = 2) {
-  return (s.renders || []).slice(0, n).map(r => `<figure class="render"><img src="${BASE + r.url}" alt="held-out photograph beside the splat's rendering of it"><figcaption>held out: ${r.photo.replace(/^modern__/, '').replace(/^openverse-[0-9a-f-]+_/, '').replace(/_/g, ' ')} — photograph | splat${r.psnr ? ' · ' + fmt(r.psnr, 1) + ' dB' : ''}</figcaption></figure>`).join('');
+// --- the wipe overlay: two images of the same view, a vertical divider to drag ------------------------------
+const overlay = document.getElementById('overlay');
+let flyTimer = null;
+function fitBox(size) {
+  const W = overlay.clientWidth - 24, H = overlay.clientHeight - 64, a = size ? size[0] / size[1] : 1.5;
+  return W / H > a ? [H * a, H] : [W, W / a];
 }
+function showWipe(a, b, size) {   // a, b: {url, label}
+  stopFly(); overlay.hidden = false;
+  const [w, h] = fitBox(size);
+  overlay.innerHTML = `<div class="wipe" style="width:${w}px;height:${h}px"><img class="a" src="${BASE + a.url}" alt=""><img class="b" src="${BASE + b.url}" alt=""><div class="bar"></div>
+    <span class="lab a">${a.label}</span><span class="lab b">${b.label}</span><input type="range" min="0" max="100" value="50" aria-label="drag to compare"></div>`;
+  const ov = overlay.querySelector('.wipe'), range = ov.querySelector('input'), top = ov.querySelector('.b'), bar = ov.querySelector('.bar');
+  range.oninput = () => { top.style.clipPath = `inset(0 0 0 ${range.value}%)`; bar.style.left = range.value + '%'; };
+}
+function showFly(a, b) {   // a, b: {views, label}: the same fly-through of two splats, frame by frame
+  const n = Math.min(a.views.fly.frames, b.views.fly.frames), url = (v, k) => v.fly.url_pattern.replace('%03d', String(k).padStart(3, '0'));
+  for (let k = 0; k < n; k++) { new Image().src = BASE + url(a.views, k); new Image().src = BASE + url(b.views, k); }   // preload
+  showWipe({ url: url(a.views, 0), label: a.label }, { url: url(b.views, 0), label: b.label }, a.views.fly.size);
+  overlay.insertAdjacentHTML('beforeend', `<div class="flybar"><button type="button">❚❚</button><input type="range" min="0" max="${n - 1}" value="0" aria-label="frame"><span>fly-through between the photographers</span></div>`);
+  const imgs = overlay.querySelectorAll('.wipe img'), scrub = overlay.querySelector('.flybar input'), btn = overlay.querySelector('.flybar button');
+  let k = 0;
+  const setFrame = i => { k = (i + n) % n; imgs[0].src = BASE + url(a.views, k); imgs[1].src = BASE + url(b.views, k); scrub.value = k; };
+  scrub.oninput = () => { setFrame(+scrub.value); };
+  const play = () => { flyTimer = setInterval(() => setFrame(k + 1), 110); btn.textContent = '❚❚'; };
+  btn.onclick = () => { if (flyTimer) { clearInterval(flyTimer); flyTimer = null; btn.textContent = '▶'; } else play(); };
+  play();
+}
+function stopFly() { if (flyTimer) { clearInterval(flyTimer); flyTimer = null; } }
+function hideOverlay() { stopFly(); overlay.hidden = true; overlay.innerHTML = ''; }
+const poseLabel = (p, i) => p.held_out ? `held-out photograph${p.psnr ? ' · ' + fmt(p.psnr, 1) + ' dB' : ''}` : `photographer ${i}`;
+const photographerOf = stem => scene.photographers.find(p => p.name.replace(/\.[^.]+$/, '') === stem);
+
 const LEGEND_LIDAR = [['#28b34a', 'on a lidar surface'], ['#d9b316', '3 m or more from the nearest lidar return'], ['#e02924', 'in air the lidar saw empty'], ['#8c40bf', 'under the bare ground']];
 
 const chapters = [
@@ -457,46 +508,88 @@ const chapters = [
       if (!plain) { body.innerHTML = '<h2>The lidar as referee</h2><p>No Gaussian splat has been trained for this fragment yet.</p>'; setView(); setYear(2023); return; }
       const fs = r.placement ? r.placement.sparse_points_free_space : null;
       const pb = Object.entries(plain.per_building).sort((a, b) => b[1].gaussians - a[1].gaussians).slice(0, 4);
+      const poses = (plain.views && plain.views.poses) || [];
       body.innerHTML = `<h2>How it looked, checked against the world</h2>
         <p>A Gaussian splat trained from the same ${fmt(plain.images ? plain.images.train : null)} photographs (${fmt(plain.images ? plain.images.test : null)} held out), directly in the lidar's metres. Because it lives in the lidar frame, every Gaussian can be checked against what the lidar measured.</p>
-        <div class="cues"><label><input type="radio" name="ref" value="splat" checked>the splat</label><label><input type="radio" name="ref" value="layer">the lidar's verdict on every Gaussian</label></div>
+        <div class="cues" id="refmode">
+          ${poses.map((p, i) => `<label><input type="radio" name="refmode" value="pose-${i}" ${i === 0 ? 'checked' : ''}>${poseLabel(p, i)}</label>`).join('')}
+          <label><input type="radio" name="refmode" value="campus" ${poses.length ? '' : 'checked'}>in the lidar campus</label>
+          <label><input type="radio" name="refmode" value="verdict">the lidar's verdict on every Gaussian</label></div>
+        <p class="note" id="refhint"></p>
         ${splatNumbers(plain)}
         <table><tr><th>building</th><th class="num">Gaussians</th><th class="num">median to lidar</th><th class="num">in free air</th><th class="num">covers the lidar building</th></tr>
           ${pb.map(([n, v]) => `<tr><td>${n}</td><td class="num">${fmt(v.gaussians)}</td><td class="num">${fmt(v.median_m, 2)} m</td><td class="num">${pct(v.in_free_air)}</td><td class="num">${pct(v.coverage)}</td></tr>`).join('')}</table>
-        ${fs ? `<p class="note">For scale: COLMAP's own sparse points of this fragment sit on lidar surfaces ${pct(fs.surface)} of the time (${pct(fs.air)} in free air). Airborne lidar sees roofs and ground densely and walls thinly, so the distance is a conservative score for wall Gaussians.</p>` : ''}
-        ${rendersHtml(plain)}`;
-      const mode = () => document.querySelector('input[name=ref]:checked').value;
-      const apply = () => { setView({ points: false, photographers: false, splat: mode() === 'splat' ? plain.name : null, splatLayer: mode() === 'layer' ? plain.name : null });
-                            legend(mode() === 'layer' ? LEGEND_LIDAR : [['#b5532c', 'buildings that changed since 2002']]); setYear(year); if (mode() === 'splat') showSplat(plain.name, 'referee'); };
-      for (const x of document.querySelectorAll('input[name=ref]')) x.onchange = apply;
-      apply();
-      const tower = building('McGraw Tower'), c = centroid(tower.ring); flyTo([c[0], c[1], tower.ground + 18], 190, 0.3, photographersAzimuth(tower));
-      setYear(2023);
+        ${fs ? `<p class="note">For scale: COLMAP's own sparse points of this fragment sit on lidar surfaces ${pct(fs.surface)} of the time (${pct(fs.air)} in free air). Airborne lidar sees roofs and ground densely and walls thinly, so the distance is a conservative score for wall Gaussians.</p>` : ''}`;
+      const tower = building('McGraw Tower'), c = centroid(tower.ring);
+      const apply = () => {
+        const mode = document.querySelector('input[name=refmode]:checked').value, hint = document.getElementById('refhint');
+        if (mode.startsWith('pose-')) {
+          const p = poses[+mode.slice(5)], ph = photographerOf(p.photo);
+          setView({ points: false, photographers: false, splat: null }); legend([]);
+          showWipe({ url: p.photo_url, label: 'the photograph' }, { url: p.render_url, label: 'the splat, from the same pose' }, p.size);
+          if (ph) flyToPhotographer(ph, 0.01);
+          hint.textContent = (p.held_out ? 'A photograph the splat never saw. ' : 'A training photograph. ') + 'Drag across the image to compare; gsplat renders from the photographer\'s pose, colour fitted to the photograph as in the held-out PSNR.';
+        } else {
+          hideOverlay();
+          const verdict = mode === 'verdict';
+          setView({ points: false, photographers: false, splat: verdict ? null : plain.name, splatLayer: verdict ? plain.name : null });
+          legend(verdict ? LEGEND_LIDAR : [['#b5532c', 'buildings that changed since 2002']]); setYear(year);
+          if (!verdict) showSplat(plain.name, 'referee');
+          flyTo([c[0], c[1], tower.ground + 18], 190, 0.35, photographersAzimuth(tower));
+          hint.textContent = verdict ? 'Every opaque Gaussian inside the lidar\'s measured volume, coloured by what the lidar says about where it sits.' : 'The live splat inside the lidar campus. Away from the photographers\' viewpoints a splat of internet photographs is only half constrained: what you see from up here is the reason it needs a referee.';
+        }
+      };
+      for (const x of document.querySelectorAll('input[name=refmode]')) x.onchange = apply;
+      apply(); setYear(2023);
     } },
   { id: 'teacher', part: 'How it looked', title: '5 · The lidar as teacher', render() {
       const r = mainCloud().meta, S = r.splats || [], plain = S.find(s => !s.lidar_taught), taught = S.find(s => s.lidar_taught);
       if (!plain || !taught) { body.innerHTML = '<h2>The lidar as teacher</h2><p>The lidar-taught splat has not been trained yet.</p>'; setView(); setYear(2023); return; }
       const row = (label, f, cls) => `<tr><td>${label}</td><td class="num">${f(plain)}</td><td class="num ${cls || ''}">${f(taught)}</td></tr>`;
+      const poses = (plain.views && taught.views) ? plain.views.poses.filter(p => taught.views.poses.some(q => q.photo === p.photo)) : [];
+      const fly = plain.views && taught.views && plain.views.fly && taught.views.fly;
       body.innerHTML = `<h2>The lidar as teacher</h2>
         <p>Same photographs, same steps, one extra rule from the lidar: <b>the air above the measured surface is empty</b>, and nothing lies under the bare ground. Gaussians that break it are made transparent, and the ones far in the air are removed.</p>
-        <div class="cues"><label><input type="radio" name="tch" value="${taught.name}" checked>lidar-taught</label><label><input type="radio" name="tch" value="${plain.name}">plain</label><label><input type="checkbox" id="tch-layer">show the lidar's verdict</label></div>
+        <div class="cues" id="tchmode">
+          ${fly ? `<label><input type="radio" name="tchmode" value="fly" checked>fly-through</label>` : ''}
+          ${poses.map((p, i) => `<label><input type="radio" name="tchmode" value="pose-${i}" ${!fly && i === 0 ? 'checked' : ''}>${poseLabel(p, i)}</label>`).join('')}
+          <label><input type="radio" name="tchmode" value="campus" ${!fly && !poses.length ? 'checked' : ''}>in the lidar campus</label></div>
+        <div class="cues" id="tchcampus" hidden><label><input type="radio" name="tch" value="${taught.name}" checked>lidar-taught</label><label><input type="radio" name="tch" value="${plain.name}">plain</label><label><input type="checkbox" id="tch-layer">show the lidar's verdict</label></div>
+        <p class="note" id="tchhint"></p>
         <table><tr><th></th><th class="num">plain</th><th class="num">lidar-taught</th></tr>
+          ${row('on lidar surfaces', s => pct(s.free_space.on_surfaces, 1), taught.free_space.on_surfaces > plain.free_space.on_surfaces ? 'ok' : '')}
+          ${row('under the bare ground', s => pct(s.free_space.buried, 1), taught.free_space.buried < plain.free_space.buried ? 'ok' : '')}
           ${row('in air the lidar saw empty', s => pct(s.free_space.in_free_air, 1), taught.free_space.in_free_air < plain.free_space.in_free_air ? 'ok' : 'bad')}
-          ${row('under the bare ground', s => pct(s.free_space.buried, 1))}
-          ${row('on lidar surfaces', s => pct(s.free_space.on_surfaces, 1))}
-          ${row('median distance to the lidar', s => fmt(s.overall.median_m, 2) + ' m')}
+          ${row('median distance to the lidar', s => fmt(s.overall.median_m, 2) + ' m', taught.overall.median_m < plain.overall.median_m ? 'ok' : '')}
           ${row('Gaussians in the measured volume', s => fmt(s.gaussians.in_measured_volume))}
-          ${row('held-out PSNR', s => s.psnr && s.psnr.test_mean ? fmt(s.psnr.test_mean, 1) + ' dB' : '—')}
+          ${row('held-out PSNR (mean of ' + fmt(plain.images ? plain.images.test : null) + ')', s => s.psnr && s.psnr.test_mean ? fmt(s.psnr.test_mean, 1) + ' dB' : '—')}
           ${row('training time', s => s.seconds ? fmt(s.seconds / 60) + ' min' : '—')}</table>
-        <p class="note">${taught.prior ? `Removed during training: ${fmt(taught.prior.pruned)} Gaussians more than ${fmt(taught.prior.prune_above_m)} m into measured free air.` : ''} The far field (sky and the background beyond the lidar crop) is not judged and not shown.</p>
-        <h3>The same held-out photograph</h3>${rendersHtml(plain, 1)}${rendersHtml(taught, 1)}`;
-      const apply = () => { const name = document.querySelector('input[name=tch]:checked').value, layer = document.getElementById('tch-layer').checked;
-                            setView({ points: false, photographers: false, splat: layer ? null : name, splatLayer: layer ? name : null });
-                            legend(layer ? LEGEND_LIDAR : [['#b5532c', 'buildings that changed since 2002']]); setYear(year); if (!layer) showSplat(name, 'teacher'); };
-      for (const x of document.querySelectorAll('input[name=tch], #tch-layer')) x.onchange = apply;
-      apply();
-      const tower = building('McGraw Tower'), c = centroid(tower.ring); flyTo([c[0], c[1], tower.ground + 18], 190, 0.3, photographersAzimuth(tower));
-      setYear(2023);
+        <p class="note">${taught.prior ? `Removed during training: ${fmt(taught.prior.pruned)} Gaussians more than ${fmt(taught.prior.prune_above_m)} m into measured free air.` : ''} The far field (sky and the background beyond the lidar crop) is not judged and not shown.</p>`;
+      const tower = building('McGraw Tower'), c = centroid(tower.ring);
+      const apply = () => {
+        const mode = document.querySelector('input[name=tchmode]:checked').value, hint = document.getElementById('tchhint');
+        document.getElementById('tchcampus').hidden = mode !== 'campus';
+        if (mode === 'fly') {
+          setView({ points: false, photographers: false }); legend([]);
+          showFly({ views: plain.views, label: 'plain' }, { views: taught.views, label: 'lidar-taught' });
+          hint.textContent = 'The same camera path through both splats, between the photographers who face the tower. Drag the divider; the left half is the plain splat, the right half the lidar-taught one.';
+        } else if (mode.startsWith('pose-')) {
+          const p = poses[+mode.slice(5)], q = taught.views.poses.find(x => x.photo === p.photo), ph = photographerOf(p.photo);
+          setView({ points: false, photographers: false }); legend([]);
+          showWipe({ url: p.render_url, label: 'plain' + (p.psnr ? ' · ' + fmt(p.psnr, 1) + ' dB' : '') }, { url: q.render_url, label: 'lidar-taught' + (q.psnr ? ' · ' + fmt(q.psnr, 1) + ' dB' : '') }, p.size);
+          if (ph) flyToPhotographer(ph, 0.01);
+          hint.textContent = (p.held_out ? 'A photograph neither splat saw. ' : 'A training photograph. ') + 'Drag across the image: plain on the left, lidar-taught on the right.';
+        } else {
+          hideOverlay();
+          const name = document.querySelector('input[name=tch]:checked').value, layer = document.getElementById('tch-layer').checked;
+          setView({ points: false, photographers: false, splat: layer ? null : name, splatLayer: layer ? name : null });
+          legend(layer ? LEGEND_LIDAR : [['#b5532c', 'buildings that changed since 2002']]); setYear(year); if (!layer) showSplat(name, 'teacher');
+          flyTo([c[0], c[1], tower.ground + 18], 190, 0.35, photographersAzimuth(tower));
+          hint.textContent = 'Inside the lidar campus; switch between the two splats, or show the lidar\'s verdict on every Gaussian.';
+        }
+      };
+      for (const x of document.querySelectorAll('input[name=tchmode], input[name=tch], #tch-layer')) x.onchange = apply;
+      apply(); setYear(2023);
     } },
   { id: 'above', part: 'When', title: '6 · From above', render() {
       body.innerHTML = `<h2>The campus from above, 2002 to 2023</h2>
@@ -555,7 +648,7 @@ function show(id) {
   const ch = chapters.find(c => c.id === id); current = id;
   for (const b of nav.querySelectorAll('button')) b.setAttribute('aria-current', String(b.textContent === ch.title));
   if (id !== 'void' && placement.mode === 'floating') { placement.mode = 'placed'; poseAt(1, 0); }
-  status(''); body.innerHTML = ''; ch.render(); body.scrollTop = 0; history.replaceState(null, '', '#' + id);
+  status(''); hideOverlay(); body.innerHTML = ''; ch.render(); body.scrollTop = 0; history.replaceState(null, '', '#' + id);
 }
 
 // --- presenter keys: arrows or page keys step through the chapters, F toggles full screen ------------------

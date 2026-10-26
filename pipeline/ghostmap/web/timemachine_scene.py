@@ -154,18 +154,21 @@ def export_mesh(dense_dir, sim, shift, out_dir, tag):
             'vertices': int(len(v)), 'faces': int(len(faces)), 'colour': 'per vertex, from the nearest dense point'}
 
 
-def export_splat(splat_dir, lidar, shift, path, min_opacity=0.05):
+def export_splat(splat_dir, lidar, shift, path, min_opacity=0.05, max_gaussians=600_000, max_scale_m=3.0):
     """A compact `.splat` (32 bytes per Gaussian: position, scale, RGBA, rotation) for the page's splat renderer.
     Only Gaussians inside the lidar's measured volume are kept (the far field, mostly sky, would hang over the
-    campus); colour is the view-independent term; sorted by size times opacity, as splat viewers expect."""
+    campus), and so are Gaussians larger than `max_scale_m` along any axis (the blurred fans a splat grows where no
+    photograph constrains it, which dominate any view away from the photographers); colour is the view-independent
+    term; sorted by opacity and capped at the `max_gaussians` most opaque, so the page loads quickly and `?splats=N`
+    loads a meaningful prefix. The scores use every Gaussian; this only shapes what is drawn."""
     import torch
     from ghostmap.evaluate.splat_geometry import classify
     ck = torch.load(Path(splat_dir) / 'ckpt.pt', map_location='cpu')
     means = ck['means'].numpy().astype(np.float64); opacity = torch.sigmoid(ck['opacities']).numpy()
     scales = np.exp(ck['scales'].numpy()); quats = ck['quats'].numpy(); quats = quats / np.linalg.norm(quats, axis=1, keepdims=True)
     rgb = np.clip(0.5 + 0.28209479177387814 * ck['sh0'][:, 0, :].numpy(), 0, 1)
-    keep = (opacity >= min_opacity) & (classify(means, lidar) != 'far')
-    order = np.argsort(-(scales[keep].prod(1) * opacity[keep]))
+    keep = (opacity >= min_opacity) & (scales.max(1) <= max_scale_m) & (classify(means, lidar) != 'far')
+    order = np.argsort(-opacity[keep])[:max_gaussians]
     m, s, c, o, q = means[keep][order] + shift, scales[keep][order], rgb[keep][order], opacity[keep][order], quats[keep][order]
     record = np.zeros(len(m), dtype=[('pos', '<f4', 3), ('scale', '<f4', 3), ('rgba', 'u1', 4), ('rot', 'u1', 4)])
     record['pos'] = m; record['scale'] = s
@@ -173,6 +176,32 @@ def export_splat(splat_dir, lidar, shift, path, min_opacity=0.05):
     record['rot'] = (q * 128 + 128).round().clip(0, 255)
     record.tofile(path)
     return int(len(m))
+
+
+def splat_views(src, dest, url_prefix):
+    """The gsplat renderings of a splat (dense/splat_views.py): its photographer poses with the photograph beside each,
+    and the fly-through frames, copied for the page. None when they have not been rendered."""
+    index = Path(src) / 'index.json'
+    if not index.exists(): return None
+    ix = json.loads(index.read_text())
+    if Path(dest).exists(): shutil.rmtree(dest)
+    Path(dest).mkdir(parents=True)
+    poses = []
+    for p in ix.get('poses', []):
+        stem = p.get('stem') or p.get('photo')
+        render = p.get('render') or f'pose-{stem}.jpg'; photograph = p.get('photograph') or f'photo-{stem}.jpg'
+        if not ((Path(src) / render).exists() and (Path(src) / photograph).exists()): continue
+        shutil.copy2(Path(src) / render, Path(dest) / render); shutil.copy2(Path(src) / photograph, Path(dest) / photograph)
+        held = p.get('kind') == 'held-out' if 'kind' in p else not p.get('is_training', True)
+        poses.append({'photo': stem, 'title': p.get('photo') if p.get('stem') else stem, 'held_out': bool(held), 'psnr': p.get('psnr_fitted', p.get('psnr_here')),
+                      'render_url': url_prefix + render, 'photo_url': url_prefix + photograph, 'size': p.get('size')})
+    fly = ix.get('fly') or {}
+    pattern = fly.get('pattern', 'fly-%03d.jpg'); frames = 0
+    for k in range(int(fly.get('frames', 0))):
+        f = Path(src) / (pattern % k)
+        if not f.exists(): break
+        shutil.copy2(f, Path(dest) / f.name); frames += 1
+    return {'poses': poses, 'fly': {'frames': frames, 'url_pattern': url_prefix + pattern, 'size': fly.get('size')} if frames else None}
 
 
 def certificate_summary(path):
@@ -275,13 +304,15 @@ def build(output=OUT, anchored_runs=None, record_snapshot=None, ground_runs=None
             xyz_g.tofile(output / 'splats' / f'{key}-geometry.f32'); shutil.copy2(geometry.parent / g['viewer_layer']['rgb_url'], output / 'splats' / f'{key}-geometry.u8')
             shown = export_splat(geometry.parent, lidar_crop, shift, output / 'splats' / f'{key}.splat')
             renders = []
-            for jpg in sorted((geometry.parent / 'renders').glob('*.jpg'))[:6]:
+            for jpg in sorted((geometry.parent / 'renders').glob('*.jpg')):
                 dest = output / 'splats' / f'{key}-render-{jpg.name}'
                 from PIL import Image
                 with Image.open(jpg) as im: im.thumbnail((1200, 600)); im.save(dest, quality=85)
                 psnr = next((x['psnr'] for x in (splat_report.get('psnr') or {}).get('test', []) if Path(x['image']).stem == jpg.stem), None)
                 renders.append({'url': f'splats/{dest.name}', 'photo': jpg.stem, 'psnr': psnr})
-            splats.append({'name': name, 'lidar_taught': bool(splat_report.get('lidar_prior')), 'prior': splat_report.get('lidar_prior'),
+            renders.sort(key=lambda r: -(r['psnr'] or 0))   # best-covered held-out view first; every one is listed with its PSNR
+            views = splat_views(geometry.parent / 'views', output / 'splats' / f'{key}-views', f'splats/{key}-views/')
+            splats.append({'name': name, 'lidar_taught': bool(splat_report.get('lidar_prior')), 'prior': splat_report.get('lidar_prior'), 'views': views,
                            'splat_url': f'splats/{key}.splat', 'splat_gaussians': shown,
                            'xyz_url': f'splats/{key}-geometry.f32', 'rgb_url': f'splats/{key}-geometry.u8', 'colour': g['viewer_layer']['colour'],
                            'gaussians': g['gaussians'], 'free_space': g['free_space'], 'overall': g['overall_distance_to_lidar'],

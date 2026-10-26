@@ -1,44 +1,49 @@
-# GhostMap — Cornell Arts Quad from online photographs
+# GhostMap — an interactive 3D time machine of Cornell
 
-GhostMap reconstructs the **modern Cornell Arts Quad** (several buildings plus
-their observed surroundings) from automatically collected, licensed online
-photographs, using measured geometry only (COLMAP / hloc SfM, OpenMVS). The
-reconstruction is meant to become a reference world for a later historical
-question: localizing archival photographs and recovering demolished structures
-such as Boardman Hall (now the Olin Library site). Historical work is deferred
-until the modern scene is validated.
+**Geographically grounded · time-aware · visually immersive.** GhostMap takes licensed
+internet photographs of the Cornell campus (Wikimedia Commons, Flickr via Openverse),
+reconstructs them with COLMAP, places the reconstructions **without GPS** inside the
+world's own 3D model (public USGS 3DEP lidar and OpenStreetMap footprints), renders them
+as Gaussian splats that the lidar **checks and teaches**, and replays the campus over
+twenty years with dated aerial flights. Public data only; no annotation, no geotags, no
+hand-picked correspondences. Built for the CS 6672 hacker presentation; the research line
+is planned towards a CVPR 2027 workshop paper
+([plan](docs/plans/georegistration-paper-plan.md)).
 
-**Direction (2026-10-25 evening).** The project is now a **twenty-year Cornell
-time machine** for the CS 6672 hacker presentation: one COLMAP model across
-2002-2026 with per-point existence intervals, plus dated public aerial imagery
-and lidar; Gates Hall and Klarman Hall rise, McGraw Tower anchors the timeline
-([plan](docs/plans/cornell-time-machine-plan.md)). Boardman Hall is kept only
-as the limits chapter: its postcards cannot be placed correctly through the
-surviving buildings.
+**Where** — placement with a certificate ([measurements](docs/checkpoints/2026-10-26-georegistration.md)):
 
-**COLMAP extensions built so far** ([results](docs/checkpoints/2026-10-25-colmap-extensions.md)):
+- of 393 campus photographs only 129 carry GPS, and the tower-and-library fragment's 63
+  photographs carry one, which is 2,000 km off: GPS alignment cannot even start;
+- a cue-based estimator (walls, lidar roof edges, the tower top, photographers at eye height,
+  free space along camera rays) places the 63-camera fragment in metres; its certificate
+  reads usable, scale fixed by the tower top (±3.9 %) and four roof edges, and it reproduces
+  the earlier landmark anchor within 1.2 % in scale;
+- on the campus-wide run (339 photographs, GPU) all seven larger fragments are refused,
+  each for a stated reason (a square tower cannot fix its heading, one facade cannot fix its
+  scale, close-ups show no facade); the three placements GPS tags could check were 64 to
+  845 m off, and every one of them was refused.
 
-- EXIF-anchored calibration removes most focal blow-ups but does not merge the
-  fragments (missing views, not calibration, split the scene);
-- the Uris Library and McGraw Tower fragment (63 photographers after adding 77
-  Openverse / Flickr CC photographs) is placed in metres on public-domain USGS
-  lidar; two independent scales agree within 2.0 %;
-- archival photographs are placed through surviving buildings with an
-  identifiability certificate; the measured ground narrows the uncertainty
-  along the viewing ray several-fold, and on a 1914 postcard 16 standing people
-  narrow it to 7 m (around the mirrored position described next);
-- every Boardman pose found so far is a mirror image: no modern photographer
-  stands in the Arts Quad sector (0–110° from the tower) from which all the
-  postcards were taken; no bound on Boardman Hall is claimed.
+**How it looked** — the lidar as referee and teacher:
 
-- fragments without the tower in view are anchored through one building's
-  footprint (walls for yaw and position, lidar roof edges for the scale; the
-  synthetic check recovers a known similarity within 3 %); the Goldwin Smith
-  portico fragment shows the limit: one facade cannot fix its own scale.
+- a Gaussian splat trained in the lidar's metres can be judged Gaussian by Gaussian against
+  what the lidar measured; the plain splat puts 30 % of its Gaussians on lidar surfaces,
+  46 % under the ground and 25 % in air the lidar saw empty;
+- trained with one lidar rule (the air above the measured surface is empty), the same
+  splat puts 70 % on lidar surfaces and 10 % under the ground, halves its median distance
+  to the lidar (5.2 m to 1.9 m), needs half the Gaussians and a third of the time, at the
+  same held-out PSNR (14.4 against 14.2 dB; 24 dB on the best-covered held-out view).
 
-Live demo: `http://127.0.0.1:8080/timemachine.html` (the time machine; the
-earlier COLMAP-extension demo stays at `ghostmap.html`; serve `dist/`, below).
-Slides: `http://127.0.0.1:8080/presentation.html` (arrows, F full screen, N speaker notes); talk track: `docs/presentation/talk-track.md`.
+**When** — twenty years: six New York State aerial flights 2002–2023 draped on the lidar
+terrain, documented construction dates for Gates, Klarman and Milstein Hall, and every
+reconstructed point of the tower fragment carrying the years photographs saw it.
+
+Earlier stages kept as infrastructure: EXIF-anchored calibration, the landmark anchor, the
+archival-postcard certificates (every Boardman Hall pose is a mirror image, so no bound on
+Boardman is claimed) ([results](docs/checkpoints/2026-10-25-colmap-extensions.md)).
+
+Live demo: `http://127.0.0.1:8080/timemachine.html` (serve `dist/`, below; ← → step through
+the ten chapters, F full screen). Slides: `http://127.0.0.1:8080/presentation.html` (arrows,
+F full screen, N speaker notes); talk track: `docs/presentation/talk-track.md`.
 
 ## Repository layout
 

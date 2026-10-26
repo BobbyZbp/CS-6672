@@ -25,6 +25,8 @@ CHAPTERS = {'void': [2023], 'snap': [2023], 'refuse': [2023], 'referee': [2023],
 # Extra settling time after opening a chapter: the snap animation and the camera flight, the splats' loading.
 SETTLE_MS = {'snap': 6500, 'referee': 4000, 'teacher': 4000}
 DECKS = ['presentation.html', 'timemachine-slides.html']
+SPLAT_CAP = 20000   # Gaussians loaded per splat in the headless browser, whose WebGL runs on the CPU
+SHOT_MS = 180000    # a frame with a live splat can take long on CPU-rendered WebGL
 
 
 async def check(base_url, output):
@@ -36,18 +38,27 @@ async def check(base_url, output):
         page = await browser.new_page(viewport={'width': 1440, 'height': 900})
         page.on('pageerror', lambda e: report['errors'].append('pageerror: ' + str(e)))
         page.on('console', lambda m: report['errors'].append('console: ' + m.text) if m.type == 'error' else None)
-        await page.goto(base_url + '/timemachine.html')
-        await page.wait_for_function('document.documentElement.dataset.ready === "true"', timeout=90000)
+        await page.goto(base_url + '/timemachine.html?splats=' + str(SPLAT_CAP), timeout=180000)   # CPU-rendered WebGL: a prefix of each splat
+        await page.wait_for_function('document.documentElement.dataset.ready === "true"', timeout=180000, polling=1000)
         for i, (chapter, years) in enumerate(CHAPTERS.items(), start=1):
             await page.click(f'#chapters button:has-text("{i} ·")')
             await page.wait_for_timeout(1500 + SETTLE_MS.get(chapter, 0))
             if chapter in ('referee', 'teacher'):   # a splat may still be loading: wait for the status line to clear
-                await page.wait_for_function("!document.getElementById('status').textContent.startsWith('Loading')", timeout=180000)
+                await page.wait_for_function("!document.getElementById('status').textContent.startsWith('Loading')", timeout=300000, polling=1000)
                 await page.wait_for_timeout(2500)
             for year in years:
                 await page.evaluate(f"const s = document.getElementById('slider'); s.value = {year}; s.dispatchEvent(new Event('input'))")
                 await page.wait_for_timeout(600)
-                await page.screenshot(path=str(output / f'{chapter}-{year}.png'))
+                await page.screenshot(path=str(output / f'{chapter}-{year}.png'), timeout=SHOT_MS)
+            if chapter in ('referee', 'teacher'):   # also the live splat inside the lidar campus
+                campus = page.locator('input[value=campus]')
+                if await campus.count():
+                    await campus.first.check()
+                    await page.wait_for_timeout(1500)
+                    await page.wait_for_function("!document.getElementById('status').textContent.startsWith('Loading')", timeout=300000, polling=1000)
+                    await page.wait_for_timeout(2500)
+                    await page.screenshot(path=str(output / f'{chapter}-campus.png'), timeout=SHOT_MS)
+                    report.setdefault('live_splat', {})[chapter] = await page.inner_text('#status') or 'loaded'
             text = await page.inner_text('#chapter-body')
             report['chapters'][chapter] = {'characters': len(text), 'year_shown': await page.inner_text('#year'), 'year_set': years[-1]}
         for deck in DECKS:
