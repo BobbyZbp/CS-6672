@@ -1,0 +1,91 @@
+# GhostMap as a research project — GPS-free metric georegistration of crowd-sourced reconstructions, with the time machine as its application
+
+## Context
+
+The time machine page works and is honest, but it looks rough (sparse points, a lidar block world) and it is not a paper. The user wants a big upgrade built around one research question at CVPR-workshop level, targeting a CVPR 2027 workshop (workshops announced after 22 Dec 2026, paper deadlines typically March 2027), with the mid-November class presentation as the first milestone. The three directions (where is it: georegistration; when did it exist: temporal; how did it look: Gaussian splatting) form one system; one of them is the paper's core, the other two use existing methods for the demo. The user leans to georegistration as the core and asked two questions before committing. They are answered first, from today's measurements and a literature pass.
+
+Decisions already taken by the user (2026-10-26): topic = georegistration if the two questions hold up; venue = CVPR 2027 workshop; GPU = yes, free about 4 GB of disk and install CUDA; scope = Cornell first, a second site if time allows.
+
+### Question 1 — is the identifiability / uncertainty angle new enough?
+
+What exists (found today; verify the two marked * before citing):
+- Kaminsky, Snavely, Seitz, Szeliski, *Alignment of 3D point clouds to overhead images*, CVPR Workshops 2009: aligns SfM to an orthographic overhead image by matching points to image edges plus free-space penalties from camera visibility; a 2D search over rotation, scale and translation. No lidar heights, no explicit metric cues, no uncertainty report.
+- Wang, Wilson, Snavely, *Accurate georegistration of point clouds using geographic data*, 3DV 2013 (Cornell): needs Flickr geotags as a start and Google Street View / Google Earth models as the reference.
+- Goebbels & Pohle-Fröhlich 2018 (footprints from CityGML, car video, coarse GPS first); Zhang et al., Remote Sensing 2019 (ground-image SfM to open airborne lidar through building outlines, GPS initialisation).
+- Sarlin et al., *OrienterNet*, CVPR 2023: single image to OpenStreetMap, 3-DoF, learned; no lidar, no fragment, no scale cues beyond the map.
+- Kinoshita & Nishino, *Camera height doesn't change*, ECCV 2024: constant camera height as scale supervision for road-scene depth. The same physical principle as our "photographers stand at eye height on the lidar ground", applied to a different problem; it legitimises the cue and must be cited.
+- Untzelmann, Sattler, Middelberg, Kobbelt 2013* (OSM building outlines used to place SfM fragments in a collaborative city system) — the search did not surface it; verify the exact claim from the paper before citing.
+- Temporal line: Scene Chronology (ECCV 2014), Neural Scene Chronology (CVPR 2023), ChronoGS (Nov 2025), LTGS (Oct 2025) — relevant to the application chapter, not to the core.
+
+Nothing found that (a) georegisters internet SfM fragments to public lidar plus OSM footprints without any GPS, (b) uses explicit metric cues — camera height over the lidar ground, roof edges, a landmark top, parallel walls — and (c) reports per-degree-of-freedom identifiability (which cue fixed what, and when a fragment cannot be fixed) with checks that are independent of the fit. Honest assessment: the novelty is a well-posed combination with a calibrated self-diagnosis, not a new paradigm; the risk is "incremental over Kaminsky 2009". Mitigation built into the plan: make the identifiability analysis a first-class contribution (formal cue-to-DOF table, measured profiles on real fragments, synthetic sensitivity curves), reimplement Kaminsky's edge + free-space objective as a cue and as a baseline, and evaluate against held-out geotags that no method sees.
+
+### Question 2 — do the fragments really have positional ambiguity?
+
+Measured today on the existing fragments (Quad run and the final Gates run):
+- Geotags are absent where they are needed: the tower-and-library fragment has 1 geotagged camera of 63; the Morrill/White, Goldwin Smith portico and Uris-only fragments have 0. The geotag-based baseline (similarity from geotagged cameras) cannot even be run on the Quad. Only the Gates fragments are geotagged (11 of 11, 6 of 8), because one photographer's walk carried GPS.
+- Geotags that exist are partly wrong: of 4 geotagged library photographs, 2 lie about 2,000 km away (rms spread 1.8 million m); 129 of 393 Commons photographs carry GPS at all.
+- The ambiguity is real and fragment-dependent: the tower fragment is unambiguous (yaw runner-up 0.12 vs best 0.25; scale 2σ 3.8 %; two independent scales 2.0 % apart), while the single-facade Goldwin Smith portico is not (walls alone prefer a scale 22–50 % smaller than the roof-edge scale; per-wall scale spread 16 %; yaw runner-up 0.50 vs best 0.60). A method that does not report this would silently place the portico at half size.
+
+So the motivation holds: on the Quad, no baseline that needs GPS applies; where GPS exists it is noisy or wrong; and whether a fragment is placeable depends on its geometry. The plan's first experiment measures this across every fragment of the campus-wide run (table: geotags per fragment, baselines that can run, their errors, our certificate) so the paper's motivation is a measured table, not an anecdote.
+
+## Paper framing (working title)
+
+**Where did the photographer stand? GPS-free metric placement of crowd-sourced reconstructions with public lidar, footprints and camera-height cues — with identifiability certificates.**
+
+Contributions: (1) a cue-based Sim(3) estimator for ground-level SfM fragments against public data only (USGS 3DEP lidar, OSM footprints), (2) an identifiability analysis — which cues fix which degrees of freedom, when a single facade cannot fix scale, with certificates computed from checks independent of the fit, (3) an evaluation on a campus-scale collection against held-out geotags and cross-fragment consistency, with baselines (geotag similarity, Sim(3) ICP to lidar, Kaminsky-style overhead alignment), (4) the application: a dated, metric, public-data 3D time machine (existence intervals, aerial flights, splats).
+
+## Work packages
+
+### WP0 — GPU and the campus-wide reconstruction (first week)
+- Free disk, recorded in `artifacts/README.md`: image copies and feature caches of superseded runs (keep reports and native models), `~/.cache/pip`, the legacy repair assets under `dist/assets/repair/` only if the Surface Lab page is retired (otherwise keep). Target ≥ 10 GB free.
+- Install CUDA torch (driver supports CUDA 12.3; cu121 wheels) into `.venv`; verify SuperPoint/LightGlue on GPU; fall back to CPU if the WSL driver refuses.
+- Rebuild the Openverse supplement with the duplicate screen and run the learned SfM on the complete collection (393 Commons + 82 Openverse) with `sfm/learned.py` (GPU; otherwise `sfm/match_in_batches.py`): one run, many fragments, named by their buildings. Freeze it as the paper's reconstruction.
+
+### WP1 — the estimator, version two (`pipeline/ghostmap/anchor/`)
+Unify `align.py` (landmark) and `footprint.py` (walls, roof edges) into one module with pluggable cues and one search:
+- Cues: gravity from facade normals (`align.facade_up`); walls precision-and-recall (`footprint.on_walls`); roof edges (`footprint.roof_edges`); camera height over the lidar ground (`height_spread`, made a proper likelihood with a stated prior 1.6 ± 0.3 m); landmark top (`align.tallest_cluster`); cameras outside footprints (`align.InsideMask`); **new**: Kaminsky-style free space (rays from cameras to their points must not cross footprint interiors or lidar buildings; reuse `chronology.intervals.in_view`), and Kaminsky-style edge alignment on the orthoimage (`anchor/orthoimagery.py` tiles) as an optional cue.
+- Search: profile over yaw × log-scale with position descent (`footprint.descend`), then joint refinement with the explicit simplex (`footprint.nelder_mead`); the profiles are kept, not just the optimum.
+- Certificates (the report): per-DOF profiles (yaw, scale, position curvature), quadrant and runner-up ratios, per-cue ablation (fit with each cue removed; how much each DOF moves), independent checks (walls-only scale, per-wall spread, camera-height band, neighbour walls), a usable/not verdict with the sentence that says why. Same report shape as today so `chronology/` and `web/` keep working.
+- Multi-fragment consistency: when two fragments contain the same building, report the distance between their anchored copies of it (free ground truth).
+
+### WP2 — evaluation protocol (what the paper's tables come from)
+New `pipeline/ghostmap/evaluate/georegistration.py` writing `artifacts/georegistration/report.json`:
+- Held-out geotags: never read by any fit. Per fragment: number of valid geotags (a geotag farther than 1 km from the campus centre is "wrong" and counted, not used), median and 90th-percentile distance between anchored camera centres and geotags, gross errors (> 25 m). State in the paper that consumer geotags carry 5–15 m noise, so the metrics are gross-error rate and ranking, with precision claims from the synthetic study.
+- Lidar consistency: points within 1 m of walls, cameras in the height band, cameras inside buildings.
+- Baselines: geotag similarity (Umeyama on ≥ 3 valid geotags, with its conditioning), Sim(3) FPFH + RANSAC + ICP against the lidar point cloud (Open3D, CPU), Kaminsky-style edge + free-space against the orthoimage, and our cues one at a time.
+- Synthetic identifiability study: extend `tests/test_artsquad_footprint_anchor.py` into a script sweeping facade count (one, two, parallel pair), roof-edge error, camera-height noise, geotag noise; output curves of scale/yaw error and the certificate's verdict — the paper's identifiability figure.
+
+### WP3 — the application chapters with existing methods
+- Temporal: keep `chronology/intervals.py`; add evidence of absence (a registered dated camera whose frustum covers a footprint that the lidar says is unoccluded, yet no point of that building is seen) as one more dated bound per building; shown in the chapter, not a paper claim.
+- Visual: Gaussian splatting of each anchored fragment (gsplat or nerfstudio splatfacto with per-image appearance embeddings; 8 GB GPU is enough at 1200 px), placed on the lidar terrain through the Sim(3); rendered in the page with a vendored splat viewer (antimatter15-style, under `dist/vendor/`) or, if integration costs more than two days, as pre-rendered per-year turntables. Points stay as the fallback.
+- Page and slides: the time machine chapters stay; a new "placement" chapter shows the certificates (profiles, cue ablations, the portico as the honest failure).
+
+### WP4 — paper and milestones
+- Mid-November class presentation: WP0 + WP1 core + the motivation table + the page with splats if WP3 lands; slides regenerated from the reports.
+- Mid-December: WP2 complete (baselines, synthetic curves), decision on the second site.
+- January: second site if the Cornell numbers are solid (another 3DEP-covered campus with Commons photographs; `anchor/lidar.py`, `anchor/footprints.py`, `anchor/orthoimagery.py` already take a centre and a half-width).
+- February–March 2027: 4–8 page workshop paper; every number traced to a report file (`artifacts/presentation/numbers.json`).
+
+## Critical files
+- Reuse: `pipeline/ghostmap/anchor/align.py` (gravity, landmark, `WallField`, `InsideMask`, `raster_lookup`), `anchor/footprint.py` (walls precision/recall, roof edges, position grid + descent, explicit-simplex refinement), `archival/resect.py` (profile-likelihood pattern), `chronology/intervals.py` (`in_view` for free space), `evaluate/holdouts.py` (held-out localisation pattern), `sfm/learned.py`, `sfm/match_in_batches.py`, `web/timemachine_scene.py`, `qa/timemachine_page.py`.
+- New: `anchor/georegister.py` (unified estimator + certificates), `evaluate/georegistration.py` (protocol, baselines), `evaluate/identifiability_sweep.py` (synthetic curves), `dense/splats.py` (training + Sim(3) placement), a splat layer in `dist/timemachine.js`.
+- Docs: a new plan under `docs/plans/georegistration-paper-plan.md` with a decisions log; the research review updated with the papers above; the time-machine plan marked as the application track.
+
+## Rules carried over
+No codenames anywhere (fragments named by their buildings; runs described in words); the repository stays organised (one subpackage per stage, README rows for every new module, tests for every estimator piece); commits carry only the user's name; failures are reported as results.
+
+## Verification
+- Unit tests: the synthetic identifiability sweep must recover a known similarity within 3 % scale / 0.5° yaw on two-facade halls and must *report* the single-facade case as scale-undetermined (a test asserts the verdict, not a number).
+- `artifacts/georegistration/report.json` must contain, per fragment: geotag count, each baseline's error or "cannot run", our error, the certificate; the paper's tables are generated from it.
+- The page check (`ghostmap/qa/timemachine_page.py`) passes after every rebuild; a new check opens the placement chapter and the splat layer.
+- Cross-fragment consistency on buildings present in two fragments must be ≤ 2 m for frames the certificate calls usable; a violation is a bug in the estimator or a false certificate, and either is a finding.
+
+## Risks and fallbacks
+- CUDA install fails or disk runs out → CPU for everything; splats dropped; the paper does not depend on them.
+- Geotag noise swamps precision → rely on gross-error rate, cross-fragment consistency and the synthetic study; say so.
+- Kaminsky reimplementation takes too long → keep the edge + free-space term as a cue only and cite the method as prior work instead of a baseline.
+- Reviewer "incremental" risk → the identifiability analysis and the public-data-only evaluation are the answer; if the ablations show one cue does all the work, the paper narrows to that cue honestly.
+
+## Decisions log
+
+1. **2026-10-26: the paper's core is GPS-free metric georegistration**, chosen after measuring that the Quad fragments carry 0–1 geotags each (so no GPS baseline can run there), that existing geotags are partly wrong, and that placeability differs by fragment (tower unambiguous; single-facade portico not). Temporal and splatting stay as application chapters with existing methods. Target: a CVPR 2027 workshop (deadlines expected March 2027); the mid-November class presentation is the first milestone.
