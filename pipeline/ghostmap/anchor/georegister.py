@@ -487,7 +487,7 @@ def fit_arrays(points, centres, rotations, building, buildings, rasters, observa
         failure = 'cameras inside buildings'; reasons.append(f"{100 * inside_fraction:.0f} % of the photographers would stand inside a building")
     elif not (scale_band[0] >= 1 - LIMITS['scale_band'] and scale_band[1] <= 1 + LIMITS['scale_band']):
         failure = 'scale undetermined'; reasons.append(f"the objective keeps nine tenths of its range for scales between {scale_band[0]:.2f} and {scale_band[1]:.2f} of the fitted one")
-    elif walls_determined and roof_determined and abs(np.log(roof_only_scale / walls_only_scale)) > np.log(1.15):
+    elif walls_determined and roof_determined and abs(np.log(roof_only_scale / walls_only_scale)) > np.log(1.3):  # the walls-only scale reads about 15 % high (coverage rewards a little stretching)
         failure = 'cues disagree'; reasons.append(f"the walls alone fix the scale at {walls_only_scale:.2f} m per unit and the roof edges alone at {roof_only_scale:.2f}: the footprints and the lidar roof edges contradict each other here")
     elif walls_determined and abs(walls_only_scale / scale - 1) > LIMITS['scale_disagreement']:
         failure = 'scale undetermined'; reasons.append(f"the walls alone prefer a scale {walls_only_scale / scale:.2f} times the fitted one")
