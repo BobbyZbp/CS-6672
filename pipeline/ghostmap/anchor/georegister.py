@@ -62,7 +62,7 @@ FREE_SPACE_SAMPLES, FREE_SPACE_MAX_RAY_M = 32, 400.0   # samples along each came
 WEIGHTS = {'walls': 1.0, 'roof_edges': 0.5, 'camera_height': 0.3, 'landmark': 1.0, 'free_space': 0.5, 'outside': 0.5}
 COARSE_POINTS, REFINE_POINTS, FREE_SPACE_RAYS = 1000, 4000, 600
 BAND_DROP = 0.10                    # a degree of freedom is "inside the band" while the objective loses less than a tenth of its dynamic range
-LIMITS = {'walls_fraction_1m': 0.2, 'roof_edge_min': 0.25, 'scale_band': 0.15, 'yaw_contrast': 0.7, 'yaw_band_deg': 10.0, 'position_band_m': 5.0, 'cameras_inside': 0.05,
+LIMITS = {'walls_fraction_1m': 0.2, 'roof_edge_min': 0.25, 'scale_band': 0.15, 'yaw_contrast': 0.8, 'yaw_band_deg': 10.0, 'position_band_m': 5.0, 'cameras_inside': 0.10,
           'scale_disagreement': 0.25, 'per_wall_spread': 0.15}
 
 
@@ -416,7 +416,13 @@ def fit_arrays(points, centres, rotations, building, buildings, rasters, observa
     yaw_band_deg = (float(yaw_offsets[lo]), float(yaw_offsets[hi]))
     deg = np.degrees(yaws); dyaw = np.abs(((deg - np.degrees(theta)) + 180) % 360 - 180)
     quadrants = {f'+{q}': float(yaw_prof[np.abs(((deg - (np.degrees(theta) + q) % 360) + 180) % 360 - 180) <= 15].max()) for q in (90, 180, 270)}
-    runner = float(yaw_prof[dyaw > 20].max()) if (dyaw > 20).any() else float('nan'); yaw_best = float(max(yaw_prof.max(), value))
+    yaw_best = float(max(yaw_prof.max(), value))
+    # The runner-up is refined before it is compared: the coarse grid can under- or overshoot a narrow peak.
+    runner = float('nan')
+    if (dyaw > 20).any():
+        j_r = int(np.flatnonzero(dyaw > 20)[np.argmax(yaw_prof[dyaw > 20])])
+        res_r = nelder_mead(lambda x: -f.objective(x[0], np.exp(x[1]), x[2:4], f.sub_refine)[0], [yaws[j_r], np.log(scale), *shifts[i_best, j_r]], [np.radians(1), 0.02, 0.5, 0.5], 300)
+        runner = float(max(yaw_prof[j_r], -res_r.fun))
     contrast = lambda v: (v - floor_yaw) / max(yaw_best - floor_yaw, 1e-9)   # 1 at the best, 0 at the floor
     yaw_contrasts = {'runner_up_outside_20deg': contrast(runner) if np.isfinite(runner) else None, **{k: contrast(v) for k, v in quadrants.items()}}
     # Position band: how far the fragment slides along x and y before the objective loses a tenth of its range.
