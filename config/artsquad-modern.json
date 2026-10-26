@@ -11,91 +11,106 @@
       "id": "morrill",
       "name": "Morrill Hall",
       "role": "quad-core",
-      "category": "Morrill Hall (Cornell University)"
+      "category": "Morrill Hall (Cornell University)",
+      "footprint": "Morrill Hall"
     },
     {
       "id": "mcgraw-hall",
       "name": "McGraw Hall",
       "role": "quad-core",
-      "category": "McGraw Hall (Cornell University)"
+      "category": "McGraw Hall (Cornell University)",
+      "footprint": "McGraw Hall"
     },
     {
       "id": "white",
       "name": "White Hall",
       "role": "quad-core",
-      "category": "White Hall (Cornell University)"
+      "category": "White Hall (Cornell University)",
+      "footprint": "White Hall"
     },
     {
       "id": "sibley",
       "name": "Sibley Hall",
       "role": "quad-core",
-      "category": "Sibley Hall (Cornell University)"
+      "category": "Sibley Hall (Cornell University)",
+      "footprint": "Sibley Hall"
     },
     {
       "id": "tjaden",
       "name": "Tjaden Hall",
       "role": "quad-core",
-      "category": "Olive Tjaden Hall (Cornell University)"
+      "category": "Olive Tjaden Hall (Cornell University)",
+      "footprint": "Olive Tjaden Hall"
     },
     {
       "id": "goldwin-smith",
       "name": "Goldwin Smith Hall",
       "role": "quad-core",
-      "category": "Goldwin Smith Hall (Cornell University)"
+      "category": "Goldwin Smith Hall (Cornell University)",
+      "footprint": "Goldwin Smith Hall"
     },
     {
       "id": "lincoln",
       "name": "Lincoln Hall",
       "role": "quad-core",
-      "category": "Lincoln Hall (Cornell University)"
+      "category": "Lincoln Hall (Cornell University)",
+      "footprint": "Lincoln Hall"
     },
     {
       "id": "uris",
       "name": "Uris Library",
       "role": "south-anchor",
-      "category": "Uris Library (Cornell University)"
+      "category": "Uris Library (Cornell University)",
+      "footprint": "Uris Library"
     },
     {
       "id": "mcgraw-tower",
       "name": "McGraw Tower",
       "role": "south-anchor",
-      "category": "McGraw Tower (Cornell University)"
+      "category": "McGraw Tower (Cornell University)",
+      "footprint": "McGraw Tower"
     },
     {
       "id": "stimson",
       "name": "Stimson Hall",
       "role": "context",
-      "category": "Stimson Hall (Cornell University)"
+      "category": "Stimson Hall (Cornell University)",
+      "footprint": "Stimson Hall"
     },
     {
       "id": "rand",
       "name": "Rand Hall",
       "role": "context",
-      "category": "Rand Hall (Cornell University)"
+      "category": "Rand Hall (Cornell University)",
+      "footprint": "Rand Hall"
     },
     {
       "id": "milstein",
       "name": "Milstein Hall",
       "role": "context",
-      "category": "Milstein Hall"
+      "category": "Milstein Hall",
+      "footprint": "Milstein Hall"
     },
     {
       "id": "klarman",
       "name": "Klarman Hall",
       "role": "context",
-      "category": "Klarman Hall"
+      "category": "Klarman Hall",
+      "footprint": "Klarman Hall"
     },
     {
       "id": "olin",
       "name": "Olin Library",
       "role": "context",
-      "category": "Olin Library (Cornell University)"
+      "category": "Olin Library (Cornell University)",
+      "footprint": "Olin Library"
     },
     {
       "id": "gates",
       "name": "Gates Hall",
       "role": "context",
-      "category": "Bill & Melinda Gates Hall"
+      "category": "Bill & Melinda Gates Hall",
+      "footprint": "Bill and Melinda Gates Hall"
     }
   ],
   "context_searches": [
@@ -150,5 +165,8 @@
     "klarman",
     "milstein",
     "goldwin-smith"
-  ]
+  ],
+  "notes": {
+    "footprint": "Each target names its OpenStreetMap footprint (data/footprints/buildings-utm18n.json) explicitly; substring matching is ambiguous (McGraw Hall vs McGraw Tower, Olin Library vs Olin Hall, Uris Library vs Uris Hall)."
+  }
 }
