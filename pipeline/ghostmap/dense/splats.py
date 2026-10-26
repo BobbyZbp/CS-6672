@@ -204,7 +204,9 @@ def train(run, anchor, name, steps=15000, sh_degree=3, device='cuda', seed=0, li
         side = np.concatenate([v['image'].cpu().numpy(), pred.cpu().numpy()], 1)
         Image.fromarray((side * 255).astype(np.uint8)).save(out / 'renders' / (Path(v['name']).stem + '.jpg'), quality=90)
     train_psnr = [psnr_of(v, view_index[v['name']])[0] for v in train_views[:8]]
-    torch.save({k: v.detach().cpu() for k, v in params.items()}, out / 'ckpt.pt')
+    # The per-photograph colour maps and backgrounds are saved too (renders at training poses need no refit).
+    torch.save({**{k: v.detach().cpu() for k, v in params.items()}, 'affine': affine.detach().cpu(), 'background': background.detach().cpu(),
+                'image_names': [v['name'] for v in views]}, out / 'ckpt.pt')
     write_ply(params, out / 'splat.ply')
     report = {'schema_version': 2, 'created_utc': datetime.now(timezone.utc).isoformat(), 'run': str(run), 'anchor': str(anchor), 'name': name,
               'frame': 'local metres of the anchor (UTM 18N minus the lidar crop origin)', 'images': {'train': len(train_views), 'test': len(test)},

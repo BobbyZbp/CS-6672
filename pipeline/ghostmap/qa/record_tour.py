@@ -8,10 +8,12 @@ records the whole tour as a WebM video with a caption bar. Each chapter's settle
 saved as a still under `dist/assets/presentation/` for `dist/presentation.html`. Page errors and
 console errors are collected; a chapter whose text is empty fails the run.
 
-Headless WebGL is SwiftShader (software), so splats render slowly: the waits are generous and the
-video plays at the speed the page drew, not real time on a laptop GPU.
+Headless Chromium only has software WebGL (SwiftShader), which cannot draw the splats at all within a
+screenshot's timeout; under WSL a headed window on the WSLg display reaches the real GPU (ANGLE on
+D3D12), so the tour runs headed by default (a browser window appears while it records) and records
+the WebGL renderer it got. `--software` forces headless SwiftShader.
 
-Usage: PLAYWRIGHT_BROWSERS_PATH=.cache/playwright PYTHONPATH=pipeline python -m ghostmap.qa.record_tour [--base-url http://127.0.0.1:8080]
+Usage: PLAYWRIGHT_BROWSERS_PATH=.cache/playwright PYTHONPATH=pipeline python -m ghostmap.qa.record_tour [--base-url http://127.0.0.1:8080] [--software]
 """
 from __future__ import annotations
 
@@ -48,18 +50,25 @@ CAPTION_JS = """(text) => {
 }"""
 
 
-async def tour(base_url, stills=STILLS, video_dir=VIDEO, width=1600, height=900):
+RENDERER_JS = """() => { const gl = document.createElement('canvas').getContext('webgl2'); if (!gl) return null;
+  const e = gl.getExtension('WEBGL_debug_renderer_info'); return e ? gl.getParameter(e.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER); }"""
+
+
+async def tour(base_url, stills=STILLS, video_dir=VIDEO, width=1600, height=900, software=False):
     from playwright.async_api import async_playwright
     stills.mkdir(parents=True, exist_ok=True); video_dir.mkdir(parents=True, exist_ok=True)
     raw = video_dir / 'raw'; shutil.rmtree(raw, ignore_errors=True); raw.mkdir()
     report = {'base_url': base_url, 'errors': [], 'chapters': {}, 'created_utc': datetime.now(timezone.utc).isoformat()}
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True, args=['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'])
+        args = ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] if software else ['--no-sandbox', '--use-angle=gl', '--ignore-gpu-blocklist']
+        browser = await p.chromium.launch(headless=software, args=args)
         context = await browser.new_context(viewport={'width': width, 'height': height}, record_video_dir=str(raw), record_video_size={'width': width, 'height': height})
         page = await context.new_page()
         page.on('pageerror', lambda e: report['errors'].append('pageerror: ' + str(e)))
         page.on('console', lambda m: report['errors'].append('console: ' + m.text) if m.type == 'error' else None)
+        page.set_default_timeout(120000)
         await page.goto(base_url + '/timemachine.html#void')
+        report['webgl_renderer'] = await page.evaluate(RENDERER_JS)
         await page.wait_for_function('document.documentElement.dataset.ready === "true"', timeout=120000)
         for n, (chapter, dwell, caption, years) in enumerate(TOUR, start=1):
             await page.evaluate(CAPTION_JS, caption)
@@ -74,7 +83,8 @@ async def tour(base_url, stills=STILLS, video_dir=VIDEO, width=1600, height=900)
             else:
                 await page.wait_for_timeout(1000 * dwell)
             await page.evaluate(CAPTION_JS, '')
-            await page.screenshot(path=str(stills / f'{chapter}.png'))
+            try: await page.screenshot(path=str(stills / f'{chapter}.png'), timeout=180000)
+            except Exception as e: report['errors'].append(f'{chapter}: screenshot failed ({type(e).__name__})')
             text = await page.inner_text('#chapter-body')
             report['chapters'][chapter] = {'characters': len(text), 'still': f'assets/presentation/{chapter}.png'}
         await context.close(); await browser.close()
@@ -90,9 +100,10 @@ async def tour(base_url, stills=STILLS, video_dir=VIDEO, width=1600, height=900)
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--base-url', default='http://127.0.0.1:8080')
+    parser.add_argument('--software', action='store_true', help='headless software WebGL (no splats in reasonable time)')
     args = parser.parse_args()
-    report = asyncio.run(tour(args.base_url.rstrip('/')))
-    print(json.dumps({k: report[k] for k in ('passed', 'errors', 'video') if k in report}, indent=1))
+    report = asyncio.run(tour(args.base_url.rstrip('/'), software=args.software))
+    print(json.dumps({k: report[k] for k in ('passed', 'errors', 'video', 'webgl_renderer') if k in report}, indent=1))
     raise SystemExit(0 if report['passed'] else 1)
 
 

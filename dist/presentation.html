@@ -167,7 +167,10 @@
       <p class="muted" style="font-size:.7em" data-fill="noise-floor">The fragment's own sparse points set the noise floor.</p>
       <p class="muted" style="font-size:.7em">The first in-the-wild reconstruction score anyone can reproduce wherever 3DEP lidar exists.</p>
     </div>
-    <div><img class="fig" src="assets/presentation/referee.png" alt="Splat Gaussians coloured by their lidar class"><div class="cap">Live demo, chapter 4: green on a lidar surface, red in measured free air, purple under the ground.</div></div>
+    <div>
+      <div class="pair"><img src="assets/presentation/view-6333253-photo.jpg" alt="A held-out photograph of McGraw Tower and Uris Library"><img src="assets/presentation/view-6333253-tower-and-library.jpg" alt="The plain splat rendered at that photograph's pose"></div>
+      <div class="cap">A photograph the splat never saw (left) and the plain splat rendered at its pose by gsplat (right), colour fitted to the photograph. In the live demo, chapter 4 colours every Gaussian by the lidar's verdict.</div>
+    </div>
   </div>
   <aside class="notes">Floaters are the classic failure of in-the-wild splats; for the first time we can count them against a measurement instead of eyeballing renders.</aside>
 </section>
@@ -182,8 +185,10 @@
       <div class="finding" data-fill="teacher-sentence">The floaters disappear.</div>
     </div>
     <div>
-      <div class="pair" id="teacher-renders"></div>
-      <div class="cap" data-fill="teacher-render-cap">A held-out photograph (never trained on): photograph and rendering, plain (top) and lidar-taught (bottom).</div>
+      <img class="fig" src="assets/presentation/walk-plain-vs-lidar-taught.jpg" alt="Plain and lidar-taught splats from the same new viewpoint">
+      <div class="cap">The same new viewpoint between the photographers, rendered by gsplat: plain splat (left), lidar-taught (right). Between photographs every view is new, which is where floaters show.</div>
+      <div class="pair" style="margin-top:.5em"><img src="assets/presentation/view-6333253-tower-and-library.jpg" alt="plain splat at a held-out pose"><img src="assets/presentation/view-6333253-tower-and-library-lidar-taught.jpg" alt="lidar-taught splat at the same held-out pose"></div>
+      <div class="cap" data-fill="teacher-render-cap">At a held-out photograph's pose: plain (left), lidar-taught (right).</div>
     </div>
   </div>
   <aside class="notes">Show the plain/taught toggle in chapter 5 of the demo.</aside>
@@ -361,9 +366,7 @@ try {
     const pick = (plain.renders || []).find(x => (taught.renders || []).some(y => y.photo === x.photo));
     if (pick) {
       const t = taught.renders.find(y => y.photo === pick.photo);
-      document.getElementById('teacher-renders').innerHTML = `<img src="assets/timemachine/${pick.url}" alt="plain splat"><img src="assets/timemachine/${t.url}" alt="lidar-taught splat">`;
-      document.getElementById('teacher-renders').style.gridTemplateColumns = '1fr';
-      set('teacher-render-cap', `Held-out photograph (never trained on), photograph beside rendering: plain splat ${pick.psnr ? fmt(pick.psnr, 1) + ' dB' : ''} (top), lidar-taught ${t.psnr ? fmt(t.psnr, 1) + ' dB' : ''} (bottom).`);
+      set('teacher-render-cap', `At a held-out photograph's pose (never trained on): plain ${pick.psnr ? fmt(pick.psnr, 1) + ' dB' : ''} (left), lidar-taught ${t.psnr ? fmt(t.psnr, 1) + ' dB' : ''} (right).`);
     }
   }
 } catch (e) { console.warn('scene numbers unavailable', e); }
