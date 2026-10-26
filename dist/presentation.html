@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GhostMap slides</title>
+<style>
+  :root { --bg: #f6f4ef; --ink: #1d221e; --muted: #5d655d; --accent: #b5532c; --ok: #2f7d4f; --bad: #b4372f; --amber: #b07a10; --line: #d8d4c9; --chip: #ece8de; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #111; }
+  body { font: 22px/1.42 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink); }
+  .slide { display: none; position: absolute; inset: 0; margin: auto; width: min(100vw, 177.8vh); height: min(56.25vw, 100vh); background: var(--bg); padding: 3.8% 5% 4.5%; overflow: hidden; }
+  .slide.on { display: flex; flex-direction: column; }
+  h1 { font-size: 2.4em; margin: 0 0 .15em; line-height: 1.05; letter-spacing: -.01em; }
+  h2 { font-size: 1.5em; margin: 0 0 .45em; line-height: 1.15; }
+  .kicker { color: var(--accent); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; font-size: .66em; margin-bottom: .35em; }
+  p { margin: .3em 0; } ul { margin: .25em 0; padding-left: 1.1em; } li { margin: .22em 0; }
+  .muted { color: var(--muted); } .ok { color: var(--ok); font-weight: 650; } .bad { color: var(--bad); font-weight: 650; } .warn { color: var(--amber); font-weight: 650; }
+  .cols { display: grid; grid-template-columns: 1fr 1.15fr; gap: 3.5%; flex: 1; min-height: 0; align-items: start; }
+  .cols.even { grid-template-columns: 1fr 1fr; }
+  .fig { width: 100%; max-height: 64vh; object-fit: contain; border-radius: 8px; border: 1px solid var(--line); background: #dfe6ea; display: block; }
+  .cap { font-size: .55em; color: var(--muted); margin-top: .3em; }
+  .big { font-size: 2.6em; font-weight: 750; line-height: 1; font-variant-numeric: tabular-nums; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5em 1.2em; margin: .5em 0 .7em; }
+  .stats div { border-left: 4px solid var(--accent); padding: .1em .5em; } .stats b { display: block; font-size: 1.6em; line-height: 1.1; font-variant-numeric: tabular-nums; } .stats span { font-size: .62em; color: var(--muted); }
+  table { border-collapse: collapse; font-size: .66em; width: 100%; }
+  th, td { border-bottom: 1px solid var(--line); padding: .28em .45em; text-align: left; vertical-align: top; }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+  .finding { border-left: 6px solid var(--accent); padding: .35em .8em; background: var(--chip); border-radius: 6px; margin: .5em 0; }
+  .story { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.2em; margin-top: .8em; }
+  .story div { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: .6em .8em; }
+  .story b { color: var(--accent); }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: .6em; }
+  .pair img { width: 100%; border-radius: 6px; border: 1px solid var(--line); }
+  .hero { flex: 1; min-height: 0; margin-top: .8em; object-fit: cover; object-position: 50% 45%; }
+  .slide.wide table { font-size: .82em; }
+  .foot { position: absolute; bottom: 2.2%; right: 3.5%; font-size: .5em; color: var(--muted); }
+  .num { position: absolute; bottom: 2.2%; left: 3.5%; font-size: .5em; color: var(--muted); }
+  aside.notes { display: none; }
+  body.notes aside.notes { display: block; position: absolute; left: 0; right: 0; bottom: 0; background: #fff8e6; border-top: 2px solid var(--amber); font-size: .55em; padding: .5em 5%; max-height: 32%; overflow: auto; }
+  svg text { font-family: system-ui, sans-serif; }
+  code { font-size: .85em; background: var(--chip); padding: 0 .25em; border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<section class="slide">
+  <div class="kicker">CS 6672 · hacker presentation</div>
+  <h1>GhostMap</h1>
+  <p style="font-size:1.25em;font-weight:600;margin-top:.2em">Cornell, rebuilt from internet photographs inside the world's own 3D model.</p>
+  <p class="muted">Geographically grounded · Time-aware · Visually immersive</p>
+  <div class="story">
+    <div><b>Where.</b> COLMAP fragments placed in metres on public lidar, with no GPS, and a certificate that says when the evidence is not enough.</div>
+    <div><b>How it looked.</b> Gaussian splats from the same photographs, judged by the lidar and taught by it.</div>
+    <div><b>When.</b> Twenty years of aerial flights, documented dates and dated photographs in one frame.</div>
+  </div>
+  <img class="fig hero" src="assets/presentation/teacher.png" alt="The lidar-taught splat of McGraw Tower and Uris Library on the lidar campus">
+  <p class="muted" style="font-size:.62em;margin-top:.5em">Public data only: USGS 3DEP lidar, New York State orthoimagery, OpenStreetMap, Wikimedia Commons and Flickr (via Openverse) under their licences. No annotation, no geotags, no hand-picked correspondences.</p>
+  <aside class="notes">Open with the one-line idea: the US already has a public 3D model of itself (lidar). Internet-photo reconstructions have always lived in a vacuum. We put them inside it — and then use it as a referee and a teacher.</aside>
+</section>
+
+<section class="slide">
+  <div class="kicker">The idea</div>
+  <h2>The world already has a 3D model. Internet reconstructions ignore it.</h2>
+  <div class="cols">
+    <div>
+      <ul>
+        <li><b>USGS 3DEP</b> airborne lidar covers most of the United States, public domain: roofs, ground and trees in metres.</li>
+        <li><b>COLMAP</b> on internet photographs gives a fragment in its own frame: unknown scale, unknown up, unknown north.</li>
+        <li>GPS would fix that, but <span data-fill="gps-sentence">most photographs carry none</span>.</li>
+        <li>So we ask three questions inside one metric frame: <b>where</b> is the fragment, <b>how</b> did the place look, <b>when</b> did it change?</li>
+      </ul>
+      <div class="finding">The lidar is not just a backdrop: it places the reconstruction, scores it, and trains it.</div>
+    </div>
+    <div><img class="fig" src="assets/presentation/above.png" alt="The campus from above, aerial image draped on lidar terrain"><div class="cap">The Arts Quad and the Gates Hall site: 2020 lidar terrain draped with the New York State aerial flight of the selected year.</div></div>
+  </div>
+  <aside class="notes">Numbers on this slide come from the data: how many photographs, how many have GPS, how many of those are plausible.</aside>
+</section>
+
+<section class="slide">
+  <div class="kicker">Where · 1</div>
+  <h2>Lost in space</h2>
+  <div class="cols">
+    <div>
+      <div class="stats">
+        <div><b data-fill="frag-cams">—</b><span>photographs registered</span></div>
+        <div><b data-fill="frag-points">—</b><span>3D points</span></div>
+        <div><b data-fill="frag-tags">—</b><span>with a plausible geotag</span></div>
+      </div>
+      <p>The largest fragment of the Arts Quad: McGraw Tower and Uris Library from <span data-fill="frag-photographers">many</span> photographers between <span data-fill="frag-years">2003 and 2025</span>.</p>
+      <p>COLMAP's frame is arbitrary. The fragment is shown here at its native size and orientation, floating over the campus it belongs to.</p>
+      <p class="muted">Stock COLMAP on our collection: many disconnected fragments, focal lengths that blow up, no scale.</p>
+    </div>
+    <div><img class="fig" src="assets/presentation/void.png" alt="The fragment floating in its native frame"><div class="cap">Live demo, chapter 1.</div></div>
+  </div>
+  <aside class="notes">Click "Snap to the world" in the demo here.</aside>
+</section>
+
+<section class="slide">
+  <div class="kicker">Where · 2</div>
+  <h2>Snap to the world, without GPS</h2>
+  <div class="cols">
+    <div>
+      <p>One similarity (scale, rotation, translation) from cues the public data can check:</p>
+      <ul style="font-size:.9em">
+        <li><b>Gravity</b> from facade normals (walls are vertical).</li>
+        <li><b>Walls</b>: points on OpenStreetMap footprint walls, precision and recall, so nothing shrinks onto one wall line.</li>
+        <li><b>Roof edges</b>: the facade top meets the lidar roof edge of its wall.</li>
+        <li><b>Camera height</b>: photographers stand at eye height on the lidar ground.</li>
+        <li><b>Landmark</b>: a tower's axis on its footprint, its top at the lidar top.</li>
+        <li><b>Free space</b>: no ray from a camera to its points passes through a building.</li>
+      </ul>
+      <div class="finding" data-fill="cert-sentence">The certificate says which cue fixed the scale.</div>
+    </div>
+    <div><img class="fig" src="assets/presentation/snap.png" alt="The fragment snapped into the lidar campus with its certificate"><div class="cap">Live demo, chapter 2: the snap animation and the certificate.</div></div>
+  </div>
+  <aside class="notes">Stress: no geotags, no manual correspondences. The landmark method reproduced: same placement within about a percent in scale and a degree in rotation.</aside>
+</section>
+
+<section class="slide">
+  <div class="kicker">Where · 3</div>
+  <h2>A certificate, not just an answer</h2>
+  <div class="cols even">
+    <div>
+      <div id="profile"></div>
+      <p class="cap">The fit's objective over scale (the best yaw and position at each scale), all cues and each cue alone. A peaked curve means the scale is determined; a flat one means it is not.</p>
+    </div>
+    <div>
+      <table id="cert-table"></table>
+      <p class="muted" style="font-size:.62em;margin-top:.6em">Cue ablation: refit from the optimum with one cue removed; how far scale, yaw and position move.</p>
+      <table id="ablation-table"></table>
+    </div>
+  </div>
+  <aside class="notes">The yaw of a square tower is ambiguous by 90 degrees; here the library walls break the symmetry: the other quadrants score far below the best.</aside>
+</section>
+
+<section class="slide">
+  <div class="kicker">Where · 4</div>
+  <h2>Knowing when it can't</h2>
+  <div class="cols even">
+    <div>
+      <p style="font-size:.8em">Every fragment of the campus-wide run with eight or more photographs, refused for a stated reason:</p>
+      <table id="campus-table"></table>
+      <div class="finding" style="font-size:.8em" data-fill="campus-sentence">No fragment was certified and then found wrong.</div>
+    </div>
+    <div>
+      <p style="font-size:.8em">Synthetic hall with a known answer: what the facades in view can fix.</p>
+      <table id="synthetic-table"></table>
+      <p class="cap">Exact lidar roof edges, all cues. One facade cannot fix its own scale; two parallel facades cannot fix where along them the fragment sits.</p>
+    </div>
+  </div>
+  <aside class="notes">This is the failure taxonomy: no facade seen (close-ups), scale undetermined (one facade), yaw ambiguous (a square tower), cues disagree, cameras inside buildings.</aside>
+</section>
+
+<section class="slide">
+  <div class="kicker">How it looked · 1</div>
+  <h2>The lidar as referee</h2>
+  <div class="cols">
+    <div>
+      <p>A Gaussian splat trained from the same photographs, in the lidar frame. Every Gaussian is judged against the lidar:</p>
+      <div class="stats">
+        <div><b data-fill="plain-surface">—</b><span>on lidar surfaces</span></div>
+        <div><b class="bad" data-fill="plain-air">—</b><span>in air the lidar saw empty</span></div>
+        <div><b data-fill="plain-buried">—</b><span>under the bare ground</span></div>
+      </div>
+      <p style="font-size:.85em" data-fill="plain-buildings">Per building: …</p>
+      <p class="muted" style="font-size:.7em" data-fill="noise-floor">The fragment's own sparse points set the noise floor.</p>
+      <p class="muted" style="font-size:.7em">The first in-the-wild reconstruction score anyone can reproduce wherever 3DEP lidar exists.</p>
+    </div>
+    <div><img class="fig" src="assets/presentation/referee.png" alt="Splat Gaussians coloured by their lidar class"><div class="cap">Live demo, chapter 4: green on a lidar surface, red in measured free air, purple under the ground.</div></div>
+  </div>
+  <aside class="notes">Floaters are the classic failure of in-the-wild splats; for the first time we can count them against a measurement instead of eyeballing renders.</aside>
+</section>
+
+<section class="slide">
+  <div class="kicker">How it looked · 2</div>
+  <h2>The lidar as teacher</h2>
+  <div class="cols">
+    <div>
+      <p>Same photographs, same steps; one extra term: the lidar's measured free space is empty. Gaussians in it fade, and those far in the air are removed.</p>
+      <table id="teacher-table"></table>
+      <div class="finding" data-fill="teacher-sentence">The floaters disappear.</div>
+    </div>
+    <div>
+      <div class="pair" id="teacher-renders"></div>
+      <div class="cap" data-fill="teacher-render-cap">A held-out photograph (never trained on): photograph and rendering, plain (top) and lidar-taught (bottom).</div>
+    </div>
+  </div>
+  <aside class="notes">Show the plain/taught toggle in chapter 5 of the demo.</aside>
+</section>
+
+<section class="slide">
+  <div class="kicker">When · 1</div>
+  <h2>Twenty years in one frame</h2>
+  <div class="cols">
+    <div>
+      <ul>
+        <li><b>From above</b>: six public aerial flights (2002–2023) on the 2020 lidar terrain; buildings flattened before their documented construction.</li>
+        <li><b>Gates Hall</b>: a parking lot until 2012; site works in 2012; finished roof from the 2015 flight.</li>
+        <li><b>Klarman Hall</b>: the courtyard behind Goldwin Smith Hall until 2012; under construction in 2015.</li>
+        <li><b>McGraw Tower</b>: every point carries the years photographs saw it (<span data-fill="tower-years">2003–2025</span>).</li>
+      </ul>
+      <p class="muted" style="font-size:.7em">Documented dates decide when a building appears; the aerial edge score is shown as a diagnostic, never as the decision.</p>
+    </div>
+    <div><img class="fig" src="assets/presentation/gates.png" alt="Gates Hall in the time machine"><div class="cap">Live demo, chapters 6 to 9: the year slider.</div></div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Honesty</div>
+  <h2>What the record cannot show</h2>
+  <ul>
+    <li><b>No licensed ground-level photograph of any site before construction exists online</b>: the "before" is aerial only.</li>
+    <li><b>One facade cannot fix its own scale</b>, and close-ups of an entrance see no facade at all: those fragments are refused, not placed.</li>
+    <li><b>Airborne lidar sees roofs and ground densely, walls thinly</b>: distances on walls are conservative; the free-space test uses a 2.5 m horizontal tolerance.</li>
+    <li><b>Splats keep what the photographs saw</b>: the far side of the tower and roofs nobody photographed stay empty.</li>
+    <li><b>Boardman Hall</b> (demolished 1959): its postcards register only as mirror images; no licensed modern photograph looks from the side they were taken.</li>
+  </ul>
+</section>
+
+<section class="slide wide">
+  <div class="kicker">Context</div>
+  <h2>What is new here</h2>
+  <table>
+    <tr><th>Work</th><th>What it does</th><th>What GhostMap adds</th></tr>
+    <tr><td>Kaminsky, Snavely, Seitz, Szeliski, CVPR Workshops 2009</td><td>SfM to an overhead image: points on edges, free space</td><td>lidar heights, explicit metric cues, a certificate per degree of freedom</td></tr>
+    <tr><td>Wang, Wilson, Snavely, 3DV 2013</td><td>georegistration from Flickr geotags and Google Earth models</td><td>no geotags; public lidar and OpenStreetMap only</td></tr>
+    <tr><td>Sarlin et al., OrienterNet, CVPR 2023</td><td>one image to OpenStreetMap, learned, 3 degrees of freedom</td><td>whole fragments, 7 degrees of freedom, scale from the world</td></tr>
+    <tr><td>Kinoshita, Nishino, ECCV 2024</td><td>constant camera height as metric supervision for depth</td><td>the same principle as a georegistration cue</td></tr>
+    <tr><td>Scene Chronology 2014; Neural Scene Chronology 2023</td><td>time-varying models from internet photographs</td><td>dated change in a metric public-data frame</td></tr>
+    <tr><td>In-the-wild Gaussian splatting</td><td>appearance-robust splats, judged by renderings</td><td>splats judged and taught by measured geometry</td></tr>
+  </table>
+</section>
+
+<section class="slide">
+  <div class="kicker">Reproducible</div>
+  <h2>Public data in, every number traceable out</h2>
+  <div class="cols even">
+    <div>
+      <ul style="font-size:.9em">
+        <li>Stages under <code>pipeline/ghostmap/</code>: acquire → prepare → sfm → anchor → dense/splats → evaluate → web; each writes a JSON report the page and these slides read.</li>
+        <li>COLMAP (pycolmap), SuperPoint + LightGlue, NetVLAD; gsplat; on one laptop GPU (RTX 3070 Ti), the CUDA compiler installed without root.</li>
+        <li>Unit tests for every estimator piece, synthetic halls with known answers, browser checks of every chapter.</li>
+      </ul>
+    </div>
+    <div>
+      <p class="big" style="font-size:1.4em">github.com/BobbyZbp/CS-6672</p>
+      <p class="muted">Live demo: <code>timemachine.html</code> · Offline: <code>python3 serve.py</code> from the bundle.</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Thank you</div>
+  <h1 style="font-size:2em">Where · How it looked · When</h1>
+  <p style="font-size:1.1em">Internet photographs, placed by the world's own 3D model, judged by it, taught by it.</p>
+  <p class="muted" style="margin-top:auto">Questions — and the live demo.</p>
+</section>
+
+<script type="module">
+const slides = [...document.querySelectorAll('.slide')];
+slides.forEach((s, k) => s.insertAdjacentHTML('beforeend', `<div class="num">${k + 1} / ${slides.length}</div>`));
+let i = Math.max(0, Math.min(slides.length - 1, (parseInt(location.hash.slice(1)) || 1) - 1));
+function go(n) { i = Math.max(0, Math.min(slides.length - 1, n)); slides.forEach((s, k) => s.classList.toggle('on', k === i)); history.replaceState(null, '', '#' + (i + 1)); }
+addEventListener('keydown', e => {
+  if (['ArrowRight', 'PageDown', ' '].includes(e.key)) go(i + 1);
+  if (['ArrowLeft', 'PageUp'].includes(e.key)) go(i - 1);
+  if (e.key === 'f' || e.key === 'F') document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+  if (e.key === 'n' || e.key === 'N') document.body.classList.toggle('notes');
+});
+addEventListener('click', e => { if (e.target.closest('a, button, input')) return; go(e.clientX > innerWidth / 2 ? i + 1 : i - 1); });
+for (const img of document.querySelectorAll('img.fig')) img.onerror = () => { img.style.display = 'none'; };
+go(i);
+
+// Every number below comes from the scene the demo reads (dist/assets/timemachine/scene.json).
+const fmt = (x, d = 0) => (x === null || x === undefined || Number.isNaN(x)) ? '—' : Number(x).toLocaleString('en-US', { maximumFractionDigits: d });
+const pct = (x, d = 0) => (x === null || x === undefined) ? '—' : fmt(100 * x, d) + ' %';
+const set = (k, v) => document.querySelectorAll(`[data-fill="${k}"]`).forEach(e => { e.innerHTML = v; });
+try {
+  const scene = await (await fetch('assets/timemachine/scene.json', { cache: 'no-store' })).json();
+  const study = scene.placement_study || {};
+  const r = scene.reconstructions.find(x => x.placement && x.placement.certificate) || scene.reconstructions[0];
+  const own = scene.photographers.filter(p => p.reconstruction === r.tag), dated = own.filter(p => p.year);
+  const years = dated.length ? [Math.min(...dated.map(p => p.year)), Math.max(...dated.map(p => p.year))] : null;
+  if (study.geotags) set('gps-sentence', `of ${fmt(study.geotags.photographs)} licensed Commons photographs only ${fmt(study.geotags.with_gps)} carry GPS, and ${fmt(study.geotags.with_gps - study.geotags.plausible)} of those are not even on the campus`);
+  set('frag-cams', fmt(own.length)); set('frag-points', fmt(r.points));
+  const tagged = (study.fragments || []).find(f => f.run === r.tag.slice(0, 8) && String(f.fragment) === r.tag.split('-')[1]);
+  set('frag-tags', tagged ? fmt(tagged.geotags.plausible) : '0');
+  set('frag-photographers', fmt(new Set(own.map(p => p.artist)).size));
+  if (years) { set('frag-years', `${years[0]} and ${years[1]}`); set('tower-years', `${years[0]}–${years[1]}`); }
+
+  const c = r.placement && r.placement.certificate;
+  if (c) {
+    set('cert-sentence', `Certificate: <b class="${c.verdict === 'usable' ? 'ok' : 'bad'}">${c.verdict}</b>; scale fixed by ${c.scale_fixed_by.join(' and ') || 'the cues jointly'}${c.scale_uncertainty_relative ? ` (±${pct(c.scale_uncertainty_relative, 1)})` : ''}.`);
+    const yc = c.yaw_contrast || {};
+    document.getElementById('cert-table').innerHTML = `
+      <tr><th>Certificate</th><th></th></tr>
+      <tr><td>verdict</td><td class="${c.verdict === 'usable' ? 'ok' : 'bad'}">${c.verdict}${c.failure_mode ? ' — ' + c.failure_mode : ''}</td></tr>
+      <tr><td>scale fixed by</td><td>${c.scale_fixed_by.join('; ') || '—'}</td></tr>
+      <tr><td>scale uncertainty</td><td class="n">${c.scale_uncertainty_relative ? '±' + pct(c.scale_uncertainty_relative, 1) : '—'}</td></tr>
+      <tr><td>other yaw quadrants (share of the best score)</td><td class="n">${['+90', '+180', '+270'].map(q => yc[q] === undefined ? '—' : fmt(yc[q], 2)).join(' · ')}</td></tr>
+      <tr><td>points within 1 m of a footprint wall</td><td class="n">${pct(c.points_within_1m_of_walls)}</td></tr>
+      <tr><td>landmark</td><td>${c.landmark || '—'}</td></tr>`;
+    document.getElementById('ablation-table').innerHTML = '<tr><th>without</th><th class="n">scale ×</th><th class="n">yaw °</th><th class="n">position m</th></tr>' +
+      Object.entries(c.cue_ablation || {}).map(([k, v]) => `<tr><td>${k.replace(/_/g, ' ')}</td><td class="n">${fmt(v.scale_ratio, 3)}</td><td class="n">${fmt(v.yaw_shift_deg, 1)}</td><td class="n">${fmt(v.position_shift_m, 1)}</td></tr>`).join('');
+    // scale profile chart
+    const P = c.profiles || {}, g = P.scale_grid_m_per_unit || [];
+    if (g.length) {
+      const W = 560, H = 300, L = 46, B = 34, series = [['all', 'all cues', '#1d221e', 3], ['only_walls', 'walls alone', '#2f7d4f', 2], ['only_roof_edges', 'roof edges alone', '#b07a10', 2], ['only_landmark', 'landmark alone', '#b5532c', 2], ['only_camera_height', 'camera height alone', '#5577aa', 2]].filter(s => P[s[0]]);
+      const xs = g.map(v => Math.log(v)), x0 = Math.min(...xs), x1 = Math.max(...xs);
+      const X = v => L + (W - L - 10) * (Math.log(v) - x0) / (x1 - x0);
+      const paths = series.map(([k, label, col, w]) => {
+        const ys = P[k], lo = Math.min(...ys), hi = Math.max(...ys) || 1;
+        const Y = y => 10 + (H - B - 20) * (1 - (y - lo) / ((hi - lo) || 1));
+        return `<path d="${ys.map((y, j) => `${j ? 'L' : 'M'}${X(g[j]).toFixed(1)},${Y(y).toFixed(1)}`).join('')}" fill="none" stroke="${col}" stroke-width="${w}"/>`;
+      }).join('');
+      const fitted = c.scale_m_per_unit;
+      const legendY = (j) => 18 + 18 * j;
+      document.getElementById('profile').innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Objective over scale">
+        <rect x="${L}" y="10" width="${W - L - 10}" height="${H - B - 20}" fill="#fff" stroke="#d8d4c9"/>${paths}
+        ${fitted ? `<line x1="${X(fitted)}" x2="${X(fitted)}" y1="10" y2="${H - B - 10}" stroke="#b4372f" stroke-dasharray="4 3"/><text x="${X(fitted) + 4}" y="${H - B - 14}" font-size="12" fill="#b4372f">fitted ${fmt(fitted, 1)} m per unit</text>` : ''}
+        <text x="${L}" y="${H - 8}" font-size="12" fill="#5d655d">scale (log), ${fmt(g[0], 1)} to ${fmt(g[g.length - 1], 1)} m per model unit</text>
+        <text x="12" y="${(H - B) / 2}" font-size="12" fill="#5d655d" transform="rotate(-90 12 ${(H - B) / 2})">objective (each curve scaled)</text>
+        ${series.map(([k, label, col], j) => `<line x1="${W - 170}" x2="${W - 150}" y1="${legendY(j)}" y2="${legendY(j)}" stroke="${col}" stroke-width="3"/><text x="${W - 145}" y="${legendY(j) + 4}" font-size="12">${label}</text>`).join('')}
+      </svg>`;
+    }
+  }
+
+  const campus = (study.fragments || []).filter(f => f.run !== r.tag.slice(0, 8));
+  if (campus.length) {
+    document.getElementById('campus-table').innerHTML = '<tr><th>fragment (its photographs name)</th><th class="n">photos</th><th>verdict</th><th class="n">geotag check</th></tr>' +
+      campus.map(f => `<tr><td>${f.building || '—'}</td><td class="n">${f.cameras}</td><td class="${f.verdict === 'usable' ? 'ok' : 'bad'}">${f.failure_mode || f.verdict}</td><td class="n">${f.ours_vs_geotags_m ? fmt(f.ours_vs_geotags_m.median) + ' m off' : 'no geotags'}</td></tr>`).join('');
+    const scored = campus.filter(f => f.ours_vs_geotags_m), wrongRefused = scored.filter(f => f.verdict !== 'usable' && f.ours_vs_geotags_m.median > 25);
+    set('campus-sentence', `${campus.length} fragments, ${campus.filter(f => f.verdict === 'usable').length} certified. Of the ${scored.length} that geotags could score, ${wrongRefused.length} were tens to hundreds of metres off — and all ${wrongRefused.length} were refused. No fragment was certified and then found wrong.`);
+  }
+  const ident = (study.identifiability || []).filter(x => x.roof_edge_error_m === 0 && x.cues === 'all cues' && (x.camera_height_noise_m || 0) === 0);
+  const seen = new Set();
+  document.getElementById('synthetic-table').innerHTML = '<tr><th>facades in view</th><th class="n">scale</th><th class="n">yaw</th><th>certificate</th></tr>' +
+    ident.filter(x => !seen.has(x.facades) && seen.add(x.facades)).map(x => `<tr><td>${x.facades}</td><td class="n">×${fmt(x.scale_ratio, 3)}</td><td class="n">${fmt(x.yaw_error_deg, 1)}°</td><td class="${x.verdict === 'usable' ? 'ok' : 'warn'}">${x.failure_mode || x.verdict}</td></tr>`).join('');
+
+  const sp = r.placement && r.placement.sparse_points_free_space;
+  if (sp) set('noise-floor', `Noise floor: the fragment's own COLMAP points are ${pct(sp.surface)} on lidar surfaces, ${pct(sp.air)} in free air, ${pct(sp.buried)} buried (anchoring and lidar tolerance).`);
+  const [plain, taught] = [(r.splats || []).find(s => !s.lidar_taught), (r.splats || []).find(s => s.lidar_taught)];
+  if (plain) {
+    set('plain-surface', pct(plain.free_space.on_surfaces)); set('plain-air', pct(plain.free_space.in_free_air)); set('plain-buried', pct(plain.free_space.buried));
+    const pb = plain.per_building || {};
+    set('plain-buildings', ['Uris Library', 'McGraw Tower'].filter(n => pb[n]).map(n => `${n}: median ${fmt(pb[n].median_m, 2)} m to the nearest lidar return, ${pct(pb[n].within_1m)} within 1 m${pb[n].coverage !== null && pb[n].coverage !== undefined ? `, covers ${pct(pb[n].coverage)} of the lidar building` : ''}`).join('; ') + '.');
+  }
+  if (plain && taught) {
+    const row = (label, a, b, f, better) => `<tr><td>${label}</td><td class="n">${f(a)}</td><td class="n ${better(a, b) ? 'ok' : ''}">${f(b)}</td></tr>`;
+    document.getElementById('teacher-table').innerHTML = '<tr><th></th><th class="n">plain</th><th class="n">lidar-taught</th></tr>' +
+      row('Gaussians', plain.gaussians.total, taught.gaussians.total, v => fmt(v), (a, b) => b < a) +
+      row('in measured free air', plain.free_space.in_free_air, taught.free_space.in_free_air, v => pct(v, 1), (a, b) => b < a) +
+      row('under the ground', plain.free_space.buried, taught.free_space.buried, v => pct(v, 1), (a, b) => b < a) +
+      row('on lidar surfaces', plain.free_space.on_surfaces, taught.free_space.on_surfaces, v => pct(v, 1), (a, b) => b > a) +
+      row('within 1 m of a lidar return', plain.overall.within_1m, taught.overall.within_1m, v => pct(v, 1), (a, b) => b > a) +
+      row('held-out PSNR (dB)', plain.psnr && plain.psnr.test_mean, taught.psnr && taught.psnr.test_mean, v => fmt(v, 1), (a, b) => b > a);
+    const air = [plain.free_space.in_free_air, taught.free_space.in_free_air];
+    const dP = (taught.psnr && plain.psnr) ? taught.psnr.test_mean - plain.psnr.test_mean : null;
+    set('teacher-sentence', `Gaussians in measured free air: ${pct(air[0], 1)} → <b>${pct(air[1], 1)}</b>${dP !== null ? `; held-out PSNR ${dP >= 0 ? 'up' : 'down'} ${fmt(Math.abs(dP), 1)} dB` : ''}.`);
+    const pick = (plain.renders || []).find(x => (taught.renders || []).some(y => y.photo === x.photo));
+    if (pick) {
+      const t = taught.renders.find(y => y.photo === pick.photo);
+      document.getElementById('teacher-renders').innerHTML = `<img src="assets/timemachine/${pick.url}" alt="plain splat"><img src="assets/timemachine/${t.url}" alt="lidar-taught splat">`;
+      document.getElementById('teacher-renders').style.gridTemplateColumns = '1fr';
+      set('teacher-render-cap', `Held-out photograph (never trained on), photograph beside rendering: plain splat ${pick.psnr ? fmt(pick.psnr, 1) + ' dB' : ''} (top), lidar-taught ${t.psnr ? fmt(t.psnr, 1) + ' dB' : ''} (bottom).`);
+    }
+  }
+} catch (e) { console.warn('scene numbers unavailable', e); }
+document.documentElement.dataset.ready = 'true';
+</script>
+</body>
+</html>
