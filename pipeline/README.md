@@ -41,6 +41,7 @@ as a subprocess through its entry-point name.
 | | `sfm/calibration_variant.py` | `run_artsquad_calibration_variant.py` | Same-snapshot remap: fixed radial, fixed intrinsics, or EXIF-anchored (cameras with an EXIF focal prior held constant). |
 | | `sfm/inspect_run.py` | `inspect_artsquad_run.py` | Recompute component reports from saved native models. |
 | evaluate | `evaluate/holdouts.py` | `validate_artsquad_holdouts.py` | Localize held-out test images against a frozen component. |
+| | `evaluate/georegistration.py` | `-m ghostmap.evaluate.georegistration` | Held-out geotags versus anchored cameras, the geotag-similarity baseline (leave-one-out), cross-fragment agreement, the certificate as a predictor; `artifacts/georegistration/`. |
 | | `evaluate/bridges.py` | `analyze_artsquad_bridges.py` | Inter-component edges, triangulation angles, calibration-strain warnings. |
 | dense | `dense/openmvs_cpu.py` | `run_cpu_mvs.py` | COLMAP undistortion -> OpenMVS CPU densify / mesh / texture. |
 | | `dense/texture_from_cameras.py` | `texture_from_cameras.py` | Texture the unchanged mesh from calibrated source cameras. |
@@ -60,6 +61,7 @@ as a subprocess through its entry-point name.
 | | `anchor/footprints.py` | `-m ghostmap.anchor.footprints` | OSM building footprints (ODbL) in UTM 18N. |
 | | `anchor/align.py` | `-m ghostmap.anchor.align` | Similarity from a COLMAP fragment to lidar: facade gravity, tower landmark, photographer scale, one yaw; independent scale check. |
 | | `anchor/footprint.py` | `-m ghostmap.anchor.footprint` | Anchor a fragment without the tower through one building's footprint: walls for yaw and position, lidar roof edges for the scale; walls-only scale, yaw quadrants and photographer heights as checks. |
+| | `anchor/georegister.py` | `-m ghostmap.anchor.georegister` | The unified estimator: cue-based similarity (walls, roof edges, camera height, landmark, free space, cameras outside) with a certificate (bands, quadrants, per-cue ablations, cue-subset profiles, a named failure mode). The paper's core. |
 | | `anchor/orthoimagery.py` | `-m ghostmap.anchor.orthoimagery` | Dated New York State orthoimagery (2002–2023) warped onto the lidar grid in UTM 18N, per site. |
 | chronology | `chronology/intervals.py` | `-m ghostmap.chronology.intervals` | Existence intervals per reconstructed point from the capture years of the photographs that observed it; per-building summaries. |
 | | `chronology/aerial.py` | `-m ghostmap.chronology.aerial` | Own-outline edge score of each changed building in each aerial year (a diagnostic; documented dates drive the timeline). |
