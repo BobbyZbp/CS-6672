@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Record a captioned tour of the GhostMap demo page, and a still of every chapter for the slides.
 
-The fallback for the live demo: a headless Chromium walks through the chapters (0 to 10) of
+The fallback for the live demo: a headless Chromium walks through the chapters (0 to 11) of
 `dist/timemachine.html` (served at --base-url) in presentation order, waits for each chapter's data
 (the snap animation, the splats), moves the year slider where the chapter is about time, and
 records the whole tour as a WebM video with a caption bar. Each chapter's settled view is also
@@ -42,6 +42,7 @@ TOUR = [
     ('klarman', 8, 'Klarman Hall fills the courtyard behind Goldwin Smith Hall.', [2012, 2015, 2018]),
     ('tower', 10, 'McGraw Tower over twenty years: every point knows the years photographs saw it.', [2004, 2010, 2016, 2025]),
     ('limits', 6, 'What the record cannot show, said out loud.', None),
+    ('photo', 30, 'A photograph it has never seen: placed in seconds without GPS, then painted back onto the lidar city from where it was taken.', None),
 ]
 
 
@@ -63,7 +64,19 @@ async def teacher(page, seconds):
     await sweep_wipe(page, seconds * 0.25)
 
 
-ACTIONS = {'referee': sweep_wipe, 'teacher': teacher}
+async def new_photo(page, seconds):
+    """A new photograph: placed, seen from the side, from where the photographer stood (photograph, then the bare
+    city), then the fragment's photographs painted back one by one."""
+    await page.click('.pick[data-i="0"]'); await page.wait_for_timeout(int(1000 * seconds * 0.2))
+    await page.click('#stand'); await page.wait_for_timeout(int(1000 * seconds * 0.15))
+    for v in list(range(100, -1, -5)) + list(range(0, 101, 5)):
+        await page.evaluate(f"(() => {{ const r = document.getElementById('blend'); r.value = {v}; r.dispatchEvent(new Event('input')); }})()")
+        await page.wait_for_timeout(int(1000 * seconds * 0.25 / 42))
+    await page.click('#side'); await page.wait_for_timeout(int(1000 * seconds * 0.1))
+    await page.click('#paint-all'); await page.wait_for_timeout(int(1000 * seconds * 0.3))
+
+
+ACTIONS = {'referee': sweep_wipe, 'teacher': teacher, 'photo': new_photo}
 CAPTION_JS = """(text) => {
   let bar = document.getElementById('tour-caption');
   if (!bar) { bar = document.createElement('div'); bar.id = 'tour-caption';

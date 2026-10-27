@@ -88,9 +88,10 @@
     <tr><td class="n">3</td><td>Disconnected fragments, each in its own frame.</td><td>One shared world frame</td><td data-fill="lim-agree">—</td></tr>
     <tr><td class="n">4</td><td>Splats trained on its output float paint in mid-air, unchecked.</td><td>The lidar as referee and as teacher</td><td data-fill="lim-splat">—</td></tr>
     <tr><td class="n">5</td><td>One static scene: twenty years blended into one moment.</td><td>Years per point; dated buildings and aerial flights</td><td data-fill="lim-time">—</td></tr>
+    <tr><td class="n">6</td><td>Registers a new photograph only into that same frame of its own.</td><td>A new photograph placed on the campus in seconds, with a certificate, painted back onto the lidar city</td><td data-fill="lim-new">—</td></tr>
   </table>
   <div class="finding">The hack in one line: COLMAP's frame is arbitrary, so search for the one similarity transform that puts the reconstruction inside the world's own 3D model, and say when no such transform is determined.</div>
-  <aside class="notes">This is the slide that answers "why is this a COLMAP project". Everything starts from COLMAP's cameras and points; each row is a limit we hit on real internet photographs and the chapter of the demo that shows our answer. Live demo chapter 0 has the same five cards with links.</aside>
+  <aside class="notes">This is the slide that answers "why is this a COLMAP project". Everything starts from COLMAP's cameras and points; each row is a limit we hit on real internet photographs and the chapter of the demo that shows our answer. Live demo chapter 0 has the same six cards with links.</aside>
 </section>
 
 <section class="slide">
@@ -240,6 +241,21 @@
   </ul>
 </section>
 
+<section class="slide">
+  <div class="kicker">A new photograph</div>
+  <h2>A photograph it has never seen</h2>
+  <div class="cols">
+    <div>
+      <p>Drop a photograph of the tower: the most similar of the fragment's photographs are found, matched, and RANSAC says where the photographer stood and which way they looked, in seconds and <b>without GPS</b>. COLMAP could only register it into its own frame.</p>
+      <p>Then it is painted back onto the lidar city from that pose. If the placement is right, its walls land on the lidar's walls.</p>
+      <div class="finding" data-fill="locate-sentence">Placed, or refused with the reason.</div>
+      <p class="muted" style="font-size:.66em">A long lens on a distant tower fixes the direction but not the distance: then the certificate says so, and the page draws where along the line of sight the photographer may have stood instead of painting from the wrong place.</p>
+    </div>
+    <div><img class="fig" src="assets/presentation/photo.png" alt="A new photograph placed in the lidar campus and painted back onto it"><div class="cap">Live demo, chapter 11.</div></div>
+  </div>
+  <aside class="notes">Drop one of your own phone photographs of the tower (from Ho Plaza or Libe Slope) onto chapter 11, or pick one from the tray. Click "stand where the photographer stood", then drag the slider from photograph to city: the silhouettes stay put. End with "paint the photographs back".</aside>
+</section>
+
 <section class="slide wide">
   <div class="kicker">Context</div>
   <h2>What is new here</h2>
@@ -319,7 +335,11 @@ try {
   if (agreeTower.length) set('lim-agree', `wherever the tower pins another fragment, its tower points coincide within ${fmt(Math.min(...agreeTower), 1)}–${fmt(Math.max(...agreeTower), 1)} m`);
   const [pl, ta] = [(r.splats || []).find(s => !s.lidar_taught), (r.splats || []).find(s => s.lidar_taught)];
   if (pl && ta) set('lim-splat', `on lidar surfaces ${pct(pl.free_space.on_surfaces)} → ${pct(ta.free_space.on_surfaces)}; under the ground ${pct(pl.free_space.buried)} → ${pct(ta.free_space.buried)}`);
+  if (r.located && r.located.leave_one_out) set('lim-new', `taken out and placed again: median ${fmt(r.located.leave_one_out.placed_position_error_m.median, 1)} m from the reconstruction's own pose`);
   if (years) set('lim-time', `${fmt(dated.length)} dated photographs, ${years[0]}–${years[1]}; 6 aerial flights, 2002–2023`);
+
+  const loo = r.located && r.located.leave_one_out;
+  if (loo) set('locate-sentence', `Taking each photograph out of the reconstruction and placing it again from scratch: of ${loo.with_a_plausible_reference_pose}, <b>${loo.placed} placed, median ${fmt(loo.placed_position_error_m.median, 1)} m</b> from where the reconstruction had them; ${loo.placed_distance_uncertain} with the distance stated as open; ${loo.refused} refused. All 120 street-level frames from the Arts Quad side, which the internet's photographers never covered, are refused.`);
 
   const c = r.placement && r.placement.certificate;
   if (c) {

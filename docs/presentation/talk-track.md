@@ -6,8 +6,14 @@ live (the snap, the splats, the year slider). Every number on the slides is read
 
 ## Before the talk (pre-flight, 10 minutes)
 
-1. `cd ~/CS6672 && python3 -m http.server 8080 --directory dist` (or `python3 serve.py` inside the offline
-   bundle `artifacts/presentation/ghostmap-demo-*.zip`).
+1. `cd ~/CS6672 && PYTHONPATH=pipeline .venv/bin/python -m ghostmap.web.demo_server` (serves `dist/` on port 8080
+   and places dropped photographs on the GPU; it warms up for about half a minute). Without it,
+   `python3 -m http.server 8080 --directory dist` or `python3 serve.py` inside the offline bundle
+   `artifacts/presentation/ghostmap-demo-*.zip` serve everything except live placement.
+   The week before: take three to five phone photographs of McGraw Tower from Ho Plaza or Libe Slope (where the
+   internet's photographers stood). Drop them live, or place them beforehand so they sit in chapter 11's tray:
+   `PYTHONPATH=pipeline .venv/bin/python -m ghostmap.anchor.locate --run artifacts/artsquad_modern/runs/ce2e2544cf854945f0c7 photo.jpg`
+   and rebuild the scene.
 2. Open two tabs in Chrome or Edge with hardware acceleration on (check `chrome://gpu`: WebGL 2 hardware accelerated):
    - `http://127.0.0.1:8080/presentation.html` (slides; `F` full screen, arrows, `N` speaker notes)
    - `http://127.0.0.1:8080/timemachine.html#colmap` (demo; opens on chapter 0, where COLMAP stops)
@@ -30,9 +36,10 @@ live (the snap, the splats, the year slider). Every number on the slides is read
 | 5:15 | demo `#referee` | the plain splat and its lidar classes | Now the photographs as a Gaussian splat, in the lidar frame. Green is on a lidar surface, red is in air the lidar saw empty. Floaters are the classic failure of in-the-wild splats; here we count them against a measurement. |
 | 6:15 | demo `#teacher` | the fly-through, then plain/taught at the same pose | Same photographs, same steps, one extra term: the measured free space is empty. The fly-through walks a camera path no photographer took: the map shows where it is, and at each photographer's spot the real photograph appears. Between them the splat has to invent the view. Tick "paint by the lidar's verdict": red is paint in air the lidar measured empty, purple is under the ground. Slide 9 has the numbers. |
 | 7:15 | demo `#above` → `#gates` → `#tower` | the year slider | And because everything is in one metric frame, time comes for free: six public aerial flights, Gates Hall rising from a parking lot, and every point of the tower knowing which years photographs saw it. |
-| 8:45 | Slide 11 | limits | What the record cannot show, said out loud: no ground photographs of any site before construction, lidar thin on walls, splats keep only what was photographed. |
-| 9:30 | Slide 12–13 | what is new, reproducible | Kaminsky 2009 aligned to overhead images; we add lidar heights, metric cues and a certificate. Everything is public data and reproducible wherever 3DEP exists. |
-| 10:15 | Slide 14 | thanks | Questions, and the demo stays open. |
+| 8:15 | Slide 11 | limits | What the record cannot show, said out loud: no ground photographs of any site before construction, lidar thin on walls, splats keep only what was photographed. |
+| 8:45 | Slide 12 → demo `#photo` | a photograph it has never seen | Drop a photograph nobody reconstructed. In three seconds it stands on the campus: where the photographer stood, which way they looked, no GPS. Now it is painted back onto the lidar city from that pose; stand where the photographer stood and slide from photograph to city: the silhouettes stay put. A long-lens shot from the Arts Quad gets "direction placed, distance open", and a photograph taken from the tower itself is refused. Then paint all 88 back. |
+| 9:45 | Slide 13–14 | what is new, reproducible | Kaminsky 2009 aligned to overhead images; we add lidar heights, metric cues and a certificate. Everything is public data and reproducible wherever 3DEP exists. |
+| 10:30 | Slide 15 | thanks | Questions, and the demo stays open. |
 
 ## Likely questions
 

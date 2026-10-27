@@ -11,7 +11,7 @@ is planned towards a CVPR 2027 workshop paper
 ([plan](docs/plans/georegistration-paper-plan.md)).
 
 **Why this is a COLMAP project.** Everything starts from COLMAP's cameras and points (pycolmap with
-SuperPoint and LightGlue). On internet photographs of a real place five of its limits show, and each part
+SuperPoint and LightGlue). On internet photographs of a real place six of its limits show, and each part
 of GhostMap is built past one of them:
 
 | COLMAP on internet photographs | GhostMap adds |
@@ -21,6 +21,7 @@ of GhostMap is built past one of them:
 | disconnected fragments, each in its own frame | one shared world frame |
 | splats trained on its output float paint in mid-air, unchecked | the lidar as referee and as teacher |
 | one static scene: twenty years blended into one moment | years per point; dated buildings and aerial flights |
+| registers a new photograph only into that same frame of its own | a new photograph placed on the campus in seconds, with a certificate, and painted back onto the lidar city |
 
 **Where** — placement with a certificate ([measurements](docs/checkpoints/2026-10-26-georegistration.md)):
 
@@ -58,8 +59,15 @@ Earlier stages kept as infrastructure: EXIF-anchored calibration, the landmark a
 archival-postcard certificates (every Boardman Hall pose is a mirror image, so no bound on
 Boardman is claimed) ([results](docs/checkpoints/2026-10-25-colmap-extensions.md)).
 
+**A photograph it has never seen** — drop a photograph of the tower onto chapter 11 and it is placed on the
+campus in about three seconds, without GPS, with a certificate, then painted back onto the lidar city from where
+it was taken. Taking each of the fragment's photographs out and placing it again: 53 of 76 placed, median 0.7 m
+from the reconstruction's own pose (none beyond 25 m); 21 with the distance stated as open (a long lens on a
+distant tower fixes the direction only); 2 refused. Run the page with
+`PYTHONPATH=pipeline .venv/bin/python -m ghostmap.web.demo_server` for live placement.
+
 Live demo: `http://127.0.0.1:8080/timemachine.html` (serve `dist/`, below; ← → step through
-the chapters, from 0 "Where COLMAP stops" to 10, F full screen). Slides: `http://127.0.0.1:8080/presentation.html` (arrows,
+the chapters, from 0 "Where COLMAP stops" to 11 "A photograph it has never seen", F full screen). Slides: `http://127.0.0.1:8080/presentation.html` (arrows,
 F full screen, N speaker notes); talk track: `docs/presentation/talk-track.md`.
 
 ## Repository layout

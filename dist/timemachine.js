@@ -146,6 +146,78 @@ for (const [site, s] of Object.entries(scene.sites)) {
   for (const m of [crowns, trunks]) { m.castShadow = true; m.receiveShadow = true; m.computeBoundingSphere(); world.add(m); cityParts.trees.push(m); }
 }
 
+// --- a photograph painted back onto the city from where it was taken ------------------------------------------------
+// Every surface of the lidar city is projected into the photograph from the photographer's pose; it takes the
+// photograph's colour only where it is the nearest surface along that ray (a depth map rendered from the pose) and
+// faces the camera. If the placement is right, the photograph's walls land on the lidar's walls.
+const PROJ_LAYER = 1, PROJ_NEAR = 2, PROJ_FAR = 2500;
+const projector = { camera: new THREE.PerspectiveCamera(50, 1, PROJ_NEAR, PROJ_FAR), target: new THREE.WebGLRenderTarget(2048, 2048), on: 0, pose: null };
+projector.target.depthTexture = new THREE.DepthTexture(2048, 2048); projector.target.depthTexture.type = THREE.UnsignedIntType;
+projector.camera.layers.set(PROJ_LAYER);
+const projUniforms = { uProjTex: { value: null }, uProjDepth: { value: projector.target.depthTexture }, uProjMat: { value: new THREE.Matrix4() },
+                       uProjPos: { value: new THREE.Vector3() }, uProjOn: { value: 0 }, uProjNearFar: { value: new THREE.Vector2(PROJ_NEAR, PROJ_FAR) } };
+function projectable(mat) {
+  mat.onBeforeCompile = shader => {
+    Object.assign(shader.uniforms, projUniforms);
+    shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\nuniform mat4 uProjMat; varying vec4 vProj; varying vec3 vPW; varying vec3 vPN;')
+      .replace('#include <project_vertex>', `#include <project_vertex>
+        vec4 pw = vec4(transformed, 1.0);
+        #ifdef USE_INSTANCING
+          pw = instanceMatrix * pw;
+        #endif
+        pw = modelMatrix * pw; vPW = pw.xyz; vProj = uProjMat * pw; vPN = normalize(mat3(modelMatrix) * objectNormal);`);
+    shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>
+      uniform sampler2D uProjTex; uniform sampler2D uProjDepth; uniform vec3 uProjPos; uniform float uProjOn; uniform vec2 uProjNearFar;
+      varying vec4 vProj; varying vec3 vPW; varying vec3 vPN;
+      float projLinear(float z) { float n = uProjNearFar.x, f = uProjNearFar.y; return 2.0 * n * f / (f + n - (2.0 * z - 1.0) * (f - n)); }`)
+      .replace('#include <opaque_fragment>', `#include <opaque_fragment>
+      if (uProjOn > 0.001 && vProj.w > 0.0) {
+        vec3 ndc = vProj.xyz / vProj.w; vec2 puv = ndc.xy * 0.5 + 0.5;
+        if (puv.x > 0.0 && puv.x < 1.0 && puv.y > 0.0 && puv.y < 1.0 && ndc.z < 1.0) {
+          float seen = projLinear(texture2D(uProjDepth, puv).x), here = projLinear(ndc.z * 0.5 + 0.5);
+          float facing = dot(normalize(vPN), normalize(uProjPos - vPW));
+          if (here <= seen + 0.6 + 0.004 * here && facing > 0.02) {
+            float edge = smoothstep(0.0, 0.02, min(min(puv.x, 1.0 - puv.x), min(puv.y, 1.0 - puv.y)));
+            gl_FragColor.rgb = mix(gl_FragColor.rgb, texture2D(uProjTex, puv).rgb, uProjOn * edge * smoothstep(0.02, 0.2, facing));
+          }
+        }
+      }`);
+  };
+  mat.customProgramCacheKey = () => 'projectable'; mat.needsUpdate = true;
+}
+const depthOnly = new THREE.MeshBasicMaterial({ colorWrite: false });
+function projectFrom(p, url) {   // p: {centre, rotation (camera from world, rows), focal_px, width, height}
+  const R = p.rotation, C = new THREE.Vector3(...p.centre), cam = projector.camera;
+  cam.position.copy(C); cam.up.set(...R[1]).negate(); cam.lookAt(C.clone().add(new THREE.Vector3(...R[2])));
+  cam.fov = 2 * Math.atan(p.height / 2 / p.focal_px) * 180 / Math.PI; cam.aspect = p.width / p.height; cam.updateProjectionMatrix(); cam.updateMatrixWorld();
+  projUniforms.uProjMat.value.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse); projUniforms.uProjPos.value.copy(C);
+  projUniforms.uProjTex.value = texture(url); projector.pose = p;
+  const keep = [world.overrideMaterial, world.background, world.fog];
+  world.overrideMaterial = depthOnly; world.background = null; world.fog = null;
+  renderer.setRenderTarget(projector.target); renderer.clear(); renderer.render(world, cam); renderer.setRenderTarget(null);
+  [world.overrideMaterial, world.background, world.fog] = keep;
+}
+function projectionOn(v) { projector.on = v; }
+for (const m of [...Object.values(terrains).map(t => t.mesh), ...cityParts.roofs, ...cityParts.walls, ...cityParts.trees, ...Object.values(specialMeshes).flat()]) {
+  m.layers.enable(PROJ_LAYER); projectable(m.material);
+}
+// The photographer of a placed photograph: a camera frustum, and the segment it may stand on when the distance is open.
+const placedGroup = new THREE.Group(); world.add(placedGroup);
+function showPlaced(p) {
+  placedGroup.clear(); placedGroup.visible = true; if (!p || !p.centre) return;
+  const R = p.rotation, C = new THREE.Vector3(...p.centre), fwd = new THREE.Vector3(...R[2]), right = new THREE.Vector3(...R[0]), down = new THREE.Vector3(...R[1]);
+  const d = 14, hw = d * p.width / 2 / p.focal_px, hh = d * p.height / 2 / p.focal_px;
+  const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => C.clone().addScaledVector(fwd, d).addScaledVector(right, a * hw).addScaledVector(down, b * hh));
+  const pts = corners.flatMap(c => [C, c]).concat(corners.flatMap((c, i) => [c, corners[(i + 1) % 4]]));
+  placedGroup.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xe02924 })));
+  const s = new THREE.Mesh(new THREE.SphereGeometry(2.2, 14, 10), new THREE.MeshBasicMaterial({ color: 0xe02924 })); s.position.copy(C); placedGroup.add(s);
+  if (p.segment && p.segment.length === 2 && (p.distance_uncertainty_m || 0) > 25) {
+    const [a, b] = p.segment.map(v => new THREE.Vector3(...v));
+    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([a, b]), new THREE.LineDashedMaterial({ color: 0xe02924, dashSize: 4, gapSize: 3 }));
+    line.computeLineDistances(); placedGroup.add(line);
+  }
+}
+
 // --- outlines of the buildings that changed, and the construction-site frame while they were built ---------------
 const outlines = new THREE.Group(), volumes = new THREE.Group(); world.add(outlines, volumes);
 for (const b of scene.buildings) {
@@ -533,9 +605,12 @@ const chapters = [
          plain && taught ? `on lidar surfaces ${pct(plain.free_space.on_surfaces)} → ${pct(taught.free_space.on_surfaces)}; under the ground ${pct(plain.free_space.buried)} → ${pct(taught.free_space.buried)}` : '', go('referee', 'chapters 4–5')],
         ['One static scene: twenty years blended into one moment.',
          'Years per point; dated buildings and aerial flights.',
-         years.length ? `${years.length} dated photographs, ${Math.min(...years)}–${Math.max(...years)}; 6 aerial flights, 2002–2023` : '', go('above', 'chapters 6–9')]];
+         years.length ? `${years.length} dated photographs, ${Math.min(...years)}–${Math.max(...years)}; 6 aerial flights, 2002–2023` : '', go('above', 'chapters 6–9')],
+        ['Registers a new photograph only into that same frame of its own.',
+         'A new photograph placed on the campus in seconds, with its own certificate, and painted back onto the lidar city.',
+         r.located && r.located.leave_one_out ? `taken out and placed again: median ${fmt(r.located.leave_one_out.placed_position_error_m.median, 1)} m from the reconstruction's own pose` : '', go('photo', 'chapter 11')]];
       body.innerHTML = `<h2>Where COLMAP stops</h2>
-        <p>Everything here starts from COLMAP's cameras and points (pycolmap, SuperPoint and LightGlue). On internet photographs of a real place, five of its limits show; GhostMap builds past each one with public data only.</p>
+        <p>Everything here starts from COLMAP's cameras and points (pycolmap, SuperPoint and LightGlue). On internet photographs of a real place, six of its limits show; GhostMap builds past each one with public data only.</p>
         ${rows.map(([lim, add, ev, link], i) => `<div class="limit"><div class="n">${i + 1}</div><div>
           <p class="lim"><b>COLMAP:</b> ${lim}</p><p><b>GhostMap:</b> ${add}</p><p class="ev">${ev} ${link}</p></div></div>`).join('')}
         <p class="note">The hack in one line: COLMAP's frame is arbitrary, so search for the one similarity transform that puts the reconstruction inside the lidar campus you see here — and say when no such transform is determined.</p>`;
@@ -738,7 +813,85 @@ const chapters = [
         </ul>`;
       setView(); legend([]); setYear(year);
     } },
+  { id: 'photo', part: 'A new photograph', title: '11 · A photograph it has never seen', render() {
+      const r = mainCloud().meta, L = r.located || { photos: [] }, loo = L.leave_one_out, tower = building('McGraw Tower'), tc = centroid(tower.ring);
+      const badge = v => v === 'placed' ? '<span class="state present">placed</span>' : v === 'refused' ? '<span class="state before">refused</span>' : '<span class="state works">direction placed, distance open</span>';
+      body.innerHTML = `<h2>A photograph it has never seen</h2>
+        <p>COLMAP can register a new photograph, but only into its own frame. Here it lands on the campus: the most similar of the fragment's ${fmt(scene.photographers.filter(q => q.reconstruction === r.tag).length)} photographs are found (NetVLAD), matched (SuperPoint, LightGlue), and RANSAC says where the photographer stood and which way they looked, <b>without GPS</b>. Then the photograph is projected onto the lidar city from that pose: if the placement is right, its walls land on the lidar's walls.</p>
+        <div class="tray">${L.photos.map((q, i) => `<button type="button" class="pick" data-i="${i}"><img src="${BASE + q.photo}" alt=""><span>${badge(q.verdict)}</span><span>${q.left_out ? 'taken out, placed again' : 'never in the reconstruction'}</span></button>`).join('')}</div>
+        <label class="drop" id="drop">Drop a photograph of McGraw Tower or Uris Library here, or <input type="file" accept="image/*" id="drop-file"></label>
+        <div id="located"></div>
+        <p><button type="button" id="paint-all">▶ paint the ${fmt(scene.photographers.filter(q => q.reconstruction === r.tag).length)} photographs back, one by one</button></p>
+        ${loo ? `<p class="note">Tested by taking each photograph out of the reconstruction and placing it again from scratch: of ${loo.with_a_plausible_reference_pose} with a trustworthy reference pose, ${loo.placed} were placed (median ${fmt(loo.placed_position_error_m.median, 1)} m from where the reconstruction had them, none beyond ${fmt(Math.ceil(loo.placed_position_error_m.max / 5) * 5)} m), ${loo.placed_distance_uncertain} placed with the distance stated as open, ${loo.refused} refused. Photographs from the Arts Quad side, which the internet's photographers never covered, are refused: all 120 street-level frames from there.</p>` : ''}`;
+      setView({ points: false, photographers: false }); legend([['#e02924', 'the photographer, as placed; dashed: where along the line of sight they may stand']]);
+      flyTo([tc[0], tc[1], tower.ground + 15], 230, 0.42, photographersAzimuth(tower)); setYear(2023);
+      const panel = document.getElementById('located');
+      const select = q => {
+        stopPaint(); showPlaced(q.centre ? q : null);
+        const d = q.centre ? Math.hypot(q.centre[0] - tc[0], q.centre[1] - tc[1]) : null;
+        panel.innerHTML = `<div class="placed-card"><img src="${BASE + q.photo}" alt=""><div>
+          <p>${badge(q.verdict)} <span class="note">${q.seconds ? 'in ' + fmt(q.seconds, 1) + ' s' : ''}</span></p>
+          <p class="note">${q.left_out ? `In the reconstruction, but taken out of it first and placed from scratch: it lands ${fmt(q.reconstruction_pose_error_m, 1)} m from where the reconstruction had it.` : q.live ? 'Dropped in just now.' : 'A photograph the reconstruction never used.'}</p>
+          ${q.reasons.length ? `<p>${q.reasons.join('; ')}.</p>` : ''}${q.notes.length ? `<p class="note">${q.notes.join('; ')}.</p>` : ''}
+          ${q.centre && q.verdict === 'placed' ? `<div class="stat"><div>from McGraw Tower</div><div>${fmt(d)} m</div><div>above the lidar ground</div><div>${fmt(q.height_over_ground_m, 1)} m</div>
+            <div>facing</div><div>${compass(q.heading_deg)}</div><div>matched points that agree</div><div>${fmt(q.inliers)}</div></div>
+            <p><button type="button" id="stand">stand where the photographer stood</button> <button type="button" id="side">see it from the side</button></p>
+            <label class="note">city <input type="range" id="blend" min="0" max="100" value="100"> photograph</label>` : ''}
+          <p class="note">${q.title.replace(/^File:/, '')}${q.artist ? ' · ' + q.artist.replace(/<[^>]+>/g, '') : ''}${q.license ? ' · ' + q.license : ''}</p></div></div>`;
+        if (!q.centre || q.verdict === 'refused') { projectionOn(0); return; }
+        if (q.verdict !== 'placed') {   // the direction is placed, the distance is not: painted from the wrong distance it would land on the wrong walls
+          projectionOn(0); panel.querySelector('.placed-card div').insertAdjacentHTML('beforeend', '<p class="note">Not painted onto the city: from the wrong distance the photograph would land on the wrong walls. The dashed line on the map is where along its line of sight the photographer may have stood.</p>');
+          const C = q.segment && q.segment.length === 2 ? q.segment.map(v => new THREE.Vector3(...v)) : [new THREE.Vector3(...q.centre)];
+          const mid = C.reduce((a, v) => a.add(v), new THREE.Vector3()).multiplyScalar(1 / C.length);
+          flyTo([(mid.x + tc[0]) / 2, (mid.y + tc[1]) / 2, tower.ground + 5], 420, 0.9, -2.0); return;
+        }
+        projectFrom(q, q.photo); projectionOn(1);
+        const side = () => { const R = q.rotation, C = new THREE.Vector3(...q.centre), f = new THREE.Vector3(...R[2]); f.z = 0; f.normalize();
+          const look = C.clone().addScaledVector(f, Math.min(80, d * 0.6)); look.z = tower.ground + 12;
+          const from = C.clone().addScaledVector(f, -40).add(new THREE.Vector3(-f.y, f.x, 0).multiplyScalar(45)); from.z = C.z + 35;
+          flight = { from: { pos: camera.position.clone(), tgt: controls.target.clone() }, to: { pos: from, tgt: look }, t0: performance.now(), ms: 1400, fov: { from: camera.fov, to: 48 } }; };
+        document.getElementById('stand').onclick = () => { placedGroup.visible = false; flyToPhotographer(q); };   // inside its own frustum the outline is in the way
+        document.getElementById('side').onclick = () => { placedGroup.visible = true; side(); };
+        document.getElementById('blend').oninput = e => projectionOn(+e.target.value / 100);
+        side();
+      };
+      for (const b of body.querySelectorAll('.pick')) b.onclick = () => select(L.photos[+b.dataset.i]);
+      // Live placement through the demo server (web/demo_server.py); a page served by a plain file server says so.
+      const place = async file => {
+        panel.innerHTML = `<p class="note">placing ${file.name}…</p>`;
+        try {
+          const res = await fetch('api/locate', { method: 'POST', headers: { 'X-Filename': encodeURIComponent(file.name) }, body: file });
+          if (!res.ok) { const j = await res.json().catch(() => null);
+            throw new Error(res.status === 404 || res.status === 501 ? 'live placement needs the demo server: PYTHONPATH=pipeline python -m ghostmap.web.demo_server' : (j && j.error) || 'the server answered ' + res.status); }
+          select(await res.json());
+        } catch (e) { panel.innerHTML = `<p class="note">${e.message}</p>`; }
+      };
+      const drop = document.getElementById('drop');
+      drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); }; drop.ondragleave = () => drop.classList.remove('over');
+      drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); if (e.dataTransfer.files[0]) place(e.dataTransfer.files[0]); };
+      document.getElementById('drop-file').onchange = e => { if (e.target.files[0]) place(e.target.files[0]); };
+      document.getElementById('paint-all').onclick = () => paintAll(r, tower);
+    } },
 ];
+// The fragment's photographs, painted back onto the city from their own poses, one after another.
+let paintTimer = null;
+function stopPaint() { if (paintTimer) { clearTimeout(paintTimer); paintTimer = null; } }
+function paintAll(r, tower) {
+  stopPaint(); showPlaced(null);
+  const c = centroid(tower.ring), own = scene.photographers.filter(p => p.reconstruction === r.tag && p.photo_large);
+  own.sort((a, b) => Math.atan2(a.centre[1] - c[1], a.centre[0] - c[0]) - Math.atan2(b.centre[1] - c[1], b.centre[0] - c[0]));
+  for (const p of own.slice(0, 6)) texture(p.photo_large);
+  flyTo([c[0], c[1], tower.ground + 15], 200, 0.4, photographersAzimuth(tower));
+  let i = 0;
+  const step = () => {
+    const p = own[i % own.length]; texture(own[(i + 3) % own.length].photo_large);   // load a few ahead
+    projectFrom(p, p.photo_large); projectionOn(1); showPlaced(p);
+    status(`photograph ${i % own.length + 1} of ${own.length}${p.year ? ' · ' + p.year : ''}${p.artist ? ' · ' + p.artist.replace(/<[^>]+>/g, '') : ''}`);
+    i++; paintTimer = setTimeout(step, 1600);
+  };
+  step();
+}
+const compass = deg => { const b = (90 - deg + 360) % 360; return ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'][Math.round(b / 45) % 8]; };
 let current = null;
 let lastPart = null;
 for (const ch of chapters) {
@@ -752,6 +905,7 @@ function show(id) {
   for (const b of nav.querySelectorAll('button')) b.setAttribute('aria-current', String(b.textContent === ch.title));
   if (id !== 'void' && placement.mode === 'floating') { placement.mode = 'placed'; poseAt(1, 0); }
   placement.done = null;   // a snap still running from the previous chapter must not move this chapter's camera
+  stopPaint(); projectionOn(0); showPlaced(null);   // a photograph painted on the city belongs to its chapter
   status(''); hideOverlay(); body.innerHTML = ''; ch.render(); body.scrollTop = 0; history.replaceState(null, '', '#' + id);
 }
 
@@ -779,10 +933,14 @@ canvas.addEventListener('click', e => {
 // --- loop -----------------------------------------------------------------------------------------
 function resize() { const { clientWidth: w, clientHeight: h } = canvas.parentElement; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
 new ResizeObserver(resize).observe(canvas.parentElement); resize();
-renderer.setAnimationLoop(() => { stepFlight(); stepPlacement(); controls.update(); renderer.render(world, camera); });
+renderer.setAnimationLoop(() => {
+  stepFlight(); stepPlacement(); controls.update();
+  projUniforms.uProjOn.value += (projector.on - projUniforms.uProjOn.value) * 0.15;
+  renderer.render(world, camera);
+});
 document.getElementById('attribution').textContent = scene.attribution.join(' ');
 document.getElementById('status').textContent = '';
 setYear(2007);
 show((location.hash || '#colmap').slice(1).replace(/[^a-z]/g, ''));
-window.__tm = { terrains, textures, scene, clouds, view, placement, show, camera, controls, cityParts, specialMeshes, gpuName };  // for the headless checks and the recorded tour
+window.__tm = { terrains, textures, scene, clouds, view, placement, show, camera, controls, cityParts, specialMeshes, gpuName, projector, projUniforms, projectFrom, projectionOn, flyToPhotographer };  // for the headless checks and the recorded tour
 document.documentElement.dataset.ready = 'true';

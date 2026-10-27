@@ -31,6 +31,7 @@ SITES = {'quad': {'lidar': ROOT / 'data/lidar/NY_FingerLakes_1_2020', 'ortho': R
 TERRAIN_CELL_M = 1.5
 TEXTURE_PX = 4096   # the aerial images are fetched at 0.16 m; 4096 px keeps that detail on a 640 m site
 THUMB_PX = 640
+PROJECT_PX = 1600
 CROP_MARGIN_M = 18.0
 
 
@@ -209,6 +210,46 @@ def splat_views(src, dest, url_prefix, shift=(0.0, 0.0, 0.0)):
                                     'size': fly.get('size'), 'cameras': cameras, 'keys': keys, 'verdict_counts': fly.get('verdict_counts')}}
 
 
+def located_entry(r, shift, url, source_size, shown_size, rec=None):
+    """What the page shows of one placed photograph (an anchor/locate.py report), its pose moved into the scene frame
+    and its focal length scaled to the copy the page shows."""
+    rec = rec or {}; pose = r.get('pose') or {}; (W, H), (w, h) = source_size, shown_size
+    move = lambda c: [round(float(v) + float(s), 2) for v, s in zip(c, shift)]
+    entry = {'photo': url, 'title': rec.get('title', Path(r['photo']).stem), 'artist': rec.get('artist'), 'license': rec.get('license'),
+             'source_url': rec.get('source_url'), 'verdict': r['certificate']['verdict'], 'reasons': r['certificate']['reasons'], 'notes': r['certificate'].get('notes', []),
+             'seconds': round(sum((r.get('seconds') or {}).values()), 1), 'width': w, 'height': h,
+             'left_out': bool(r.get('left_out_of_reconstruction')), 'reconstruction_pose_error_m': r.get('reconstruction_pose_error_m')}
+    if pose:
+        entry.update({'centre': move(pose['centre_local_m']), 'rotation': pose['cam_from_world_rotation'], 'focal_px': pose['focal_px'] * w / W,
+                      'height_over_ground_m': pose['height_over_lidar_ground_m'], 'heading_deg': pose['heading_deg'], 'inliers': pose['inliers'],
+                      'distance_uncertainty_m': pose.get('valley_m'), 'segment': [move(s['centre_local_m']) for s in pose.get('segment') or []]})
+    return entry
+
+
+def located_photos(run, comp, shift, records, output):
+    """Photographs the fragment never used, placed afterwards by anchor/locate.py (`<run>/locate/<stem>/report.json`),
+    with their certificates, poses moved into the scene frame, and the leave-one-out record of the same rule."""
+    folder = Path(run) / 'locate'
+    if not folder.exists(): return None
+    photos = []
+    for rep_path in sorted(folder.glob('*/report.json')):
+        if rep_path.parent.name in ('work', 'leave-one-out'): continue
+        r = json.loads(rep_path.read_text())
+        if str(r.get('anchor')) != str(comp): continue
+        src = Path(r['photo']); dest = output / 'located' / (rep_path.parent.name + '.jpg'); dest.parent.mkdir(exist_ok=True)
+        with Image.open(src) as im: W, H = im.size
+        thumbnail(src, dest, PROJECT_PX)
+        with Image.open(dest) as im: w, h = im.size
+        entry = located_entry(r, shift, f'located/{dest.name}', (W, H), (w, h), records.get(src.name.replace('query__', ''), {}))
+        entry['name'] = rep_path.parent.name
+        photos.append(entry)
+    order = {'placed': 0, 'placed, distance uncertain': 1, 'refused': 2}
+    photos.sort(key=lambda e: (order.get(e['verdict'], 3), not e['left_out'], e['name']))
+    loo = folder / 'leave-one-out' / 'report.json'
+    return {'photos': photos, 'leave_one_out': json.loads(loo.read_text())['summary'] if loo.exists() else None,
+            'rule': 'anchor/locate.py: NetVLAD retrieval, SuperPoint + LightGlue to the fragment, RANSAC pose from several focal priors; placed, placed with the distance uncertain, or refused'}
+
+
 def certificate_summary(path):
     """What the page shows of a fragment's certificate (anchor/georegister.py report)."""
     r = json.loads(Path(path).read_text()); c = r['certificate']; m = r['metrics']
@@ -230,7 +271,7 @@ def build(output=OUT, anchored_runs=None, record_snapshot=None, ground_runs=None
     output = Path(output)
     # Outputs written per reconstruction are cleared first, so a page built from another run carries none of the
     # previous run's points, splats, surfaces or photographs (the offline bundle packs the whole folder).
-    for stale in ('splats', 'mesh', 'photos'): shutil.rmtree(output / stale, ignore_errors=True)
+    for stale in ('splats', 'mesh', 'photos', 'photos-large', 'located'): shutil.rmtree(output / stale, ignore_errors=True)
     for stale in output.glob('points-*'): stale.unlink()
     (output / 'photos').mkdir(parents=True, exist_ok=True); (output / 'crops').mkdir(exist_ok=True)
     timeline = json.loads(TIMELINE.read_text()); years = timeline['aerial_years']
@@ -284,10 +325,12 @@ def build(output=OUT, anchored_runs=None, record_snapshot=None, ground_runs=None
             year = (ev.get('earliest') or '')[:4]
             thumb = 'photos/' + image.name
             thumbnail(Path(run) / 'images' / image.name, output / thumb)
+            large = 'photos-large/' + image.name   # projected onto the city from its pose: needs more pixels than a thumbnail
+            (output / 'photos-large').mkdir(exist_ok=True); thumbnail(Path(run) / 'images' / image.name, output / large, PROJECT_PX)
             cam = ref.model.cameras[image.camera_id]; C = np.asarray(image.projection_center()) + shift
             photographers.append({'name': image.name, 'title': rec.get('title', image.name), 'year': int(year) if year.isdigit() else None,
                                   'date': ev.get('earliest'), 'license': rec.get('license'), 'license_url': rec.get('license_url'),
-                                  'artist': rec.get('artist'), 'source_url': rec.get('source_url'), 'photo': thumb,
+                                  'artist': rec.get('artist'), 'source_url': rec.get('source_url'), 'photo': thumb, 'photo_large': large,
                                   'width': cam.width, 'height': cam.height, 'focal_px': float(cam.params[0]),
                                   'centre': C.round(2).tolist(), 'rotation': np.round(image.cam_from_world().rotation.matrix(), 6).tolist(),
                                   'reconstruction': tag})
@@ -362,7 +405,8 @@ def build(output=OUT, anchored_runs=None, record_snapshot=None, ground_runs=None
                      'translation': (np.array(S['translation_utm18n']) - ref.origin + shift).tolist(),
                      'sparse_points_free_space': {k: float(np.mean(free == k)) for k in ('surface', 'air', 'buried', 'far')},
                      'certificate': certificate_summary(cert_path) if cert_path.exists() else None}
-        reconstructions.append({'tag': tag, 'run': str(run), 'anchor_report': str(report), 'intervals_report': str(intervals_path) if intervals else None, 'mesh': mesh, 'splats': splats, 'splat_ablations': ablations, 'placement': placement,
+        located = located_photos(run, comp, shift, records, output)
+        reconstructions.append({'tag': tag, 'run': str(run), 'anchor_report': str(report), 'located': located, 'intervals_report': str(intervals_path) if intervals else None, 'mesh': mesh, 'splats': splats, 'splat_ablations': ablations, 'placement': placement,
                                 'points': len(ids), 'dated_photographs': intervals['dated_photographs'] if intervals else None,
                                 'xyz_url': f'points-{tag}.f32', 'rgb_url': f'points-{tag}.u8', 'first_url': f'points-{tag}-first.i16', 'last_url': f'points-{tag}-last.i16',
                                 'scale_status': ref.report['scale_status'], 'anchored_through': ref.report.get('landmark_building'),

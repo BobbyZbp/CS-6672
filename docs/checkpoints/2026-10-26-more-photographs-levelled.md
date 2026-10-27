@@ -78,3 +78,16 @@ Gaussians and stalled), the lidar-taught one before that change; the first step'
   height.
 - The page and the deck open with "Where COLMAP stops": five limits of COLMAP on internet photographs,
   what GhostMap adds past each, the measured evidence, a link to the chapter that shows it.
+
+## A photograph it has never seen (evening)
+
+- `anchor/locate.py` places a new photograph in the certified frame in about 3 s on the GPU (`web/demo_server.py`
+  keeps the networks loaded); the page paints it back onto the lidar city from that pose (chapter 11).
+- Leave-one-out over the fragment, scored where the reconstruction's own pose is plausible (76 of 88): placed 53,
+  median 0.68 m, 90th percentile 5.6 m, worst 20 m; distance stated as open 21 (true pose a median 3.3 m from
+  the stated segment, worst 81 m); refused 2, both about 115 m wrong
+  (`runs/ce2e2544…/locate/leave-one-out/report.json`).
+- Held out of the reconstruction: 6 tower and library photographs; 4 placed with the distance open (long lenses
+  from the Arts Quad), 2 refused. Mapillary: all 120 Arts Quad frames refused.
+- Tried and dropped: sight lines through lidar buildings as a check (did not separate good from bad poses);
+  holding the photographer at eye height to fix the distance (leave-one-out median 1 m → 7 m).

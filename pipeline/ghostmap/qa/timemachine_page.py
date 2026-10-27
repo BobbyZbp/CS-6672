@@ -21,7 +21,7 @@ from ghostmap.paths import ROOT
 # Chapter (in page order) -> years viewed in it: aerial flights around each documented change.
 CHAPTERS = {'colmap': [2023], 'void': [2023], 'snap': [2023], 'refuse': [2023], 'referee': [2023], 'teacher': [2023],
             'above': [2002, 2012, 2023], 'gates': [2007, 2013, 2016], 'klarman': [2012, 2015, 2018],
-            'tower': [2009, 2025], 'limits': [2023]}
+            'tower': [2009, 2025], 'limits': [2023], 'photo': [2023]}
 # Extra settling time after opening a chapter: the snap animation and the camera flight, the splats' loading.
 SETTLE_MS = {'snap': 6500, 'referee': 4000, 'teacher': 4000}
 DECKS = ['presentation.html', 'timemachine-slides.html']
@@ -59,6 +59,10 @@ async def check(base_url, output):
                     await page.wait_for_timeout(2500)
                     await page.screenshot(path=str(output / f'{chapter}-campus.png'), timeout=SHOT_MS)
                     report.setdefault('live_splat', {})[chapter] = await page.inner_text('#status') or 'loaded'
+            if chapter == 'photo':   # place the first prepared photograph: it must be painted onto the city
+                await page.click('.pick[data-i="0"]'); await page.wait_for_timeout(3000)
+                report['photo_projection'] = await page.evaluate('window.__tm.projector.on')
+                await page.screenshot(path=str(output / 'photo-placed.png'), timeout=SHOT_MS)
             text = await page.inner_text('#chapter-body')
             report['chapters'][chapter] = {'characters': len(text), 'year_shown': await page.inner_text('#year'), 'year_set': years[-1]}
         await page.close()   # its CPU-rendered WebGL would keep the CPU busy and starve the slide screenshots
@@ -76,7 +80,7 @@ async def check(base_url, output):
                 await slides.screenshot(path=str(output / f'{stem}-{n:02d}.png'), timeout=SHOT_MS)
             await slides.close()
         await browser.close()
-    report['passed'] = (not report['errors'] and all(c['characters'] > 150 and c['year_shown'] == str(c['year_set']) for c in report['chapters'].values())
+    report['passed'] = (not report['errors'] and report.get('photo_projection') == 1 and all(c['characters'] > 150 and c['year_shown'] == str(c['year_set']) for c in report['chapters'].values())
                         and all(len(s) >= 8 and all(x['characters'] > 80 for x in s.values()) for s in report['slides'].values()))
     (output / 'report.json').write_text(json.dumps(report, indent=1) + '\n')
     return report
