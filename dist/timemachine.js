@@ -453,6 +453,14 @@ function profileChart(cert) {
   </svg><figcaption>${series.filter(([k]) => P[k]).map(([, l, c]) => `<span class="sw" style="background:${c}"></span>${l}`).join(' ')}<br>How well each cue explains the fragment at each scale (each curve scaled to its own range). The tower top and the roof edges peak at the fitted scale; the walls alone would accept a fragment stretched along its facades.</figcaption></figure>`;
 }
 const pct = (x, d = 0) => x === null || x === undefined ? '—' : fmt(100 * x, d) + ' %';
+const dist = m => m >= 1000 ? fmt(m / 1000, 1) + ' km' : fmt(m) + ' m';
+// A fragment's GPS, as the evaluation found it (evaluate/georegistration.py): the tags it carries, how far the wrong ones
+// lie from where the placement puts their cameras, and how many photographs came as web copies without any metadata.
+function gpsSentence(g, n) {
+  const off = g.wrong_off_m || [], none = g.without_metadata;
+  return `GPS on ${fmt(g.carried)} of ${fmt(n)} photographs${off.length ? `, ${off.length === 1 ? 'and it is' : 'and they are'} ${off.map(dist).join(', ')} off` : ''}` +
+    (none ? `; ${fmt(none)} are Flickr copies with no metadata at all` : '');
+}
 function verdictBadge(v, mode) { return v === 'usable' ? '<span class="state present">usable</span>' : `<span class="state before">not usable${mode ? ' — ' + mode : ''}</span>`; }
 
 // --- chapters -------------------------------------------------------------------------------------
@@ -615,7 +623,7 @@ const chapters = [
       const rows = [
         ['A model in its own frame (no scale, north or up); a map needs GPS or hand-picked control points.',
          'Placement without GPS, inside public lidar and building footprints.',
-         tagged ? `${tagged.geotags.carried} of ${own.length} photographs carry GPS${tagged.geotags.wrong ? ', and it is 2,000 km off' : ''}` : '', go('void', 'chapters 1–2')],
+         tagged ? gpsSentence(tagged.geotags, own.length) : '', go('void', 'chapters 1–2')],
         ['Never says when a placement cannot be trusted.',
          'A certificate: which cue fixed what, or a refusal with the reason.',
          `${refused.length} of ${frs.length} campus fragments refused, each with a stated reason`, go('refuse', 'chapter 3')],
@@ -647,9 +655,10 @@ const chapters = [
       const tagged = (st.fragments || []).find(f => f.run === r.tag.slice(0, 8) && String(f.fragment) === r.tag.split('-')[1]);
       body.innerHTML = `<h2>What COLMAP gives you: a model in a void</h2>
         <p>${fmt(own.length)} licensed internet photographs of McGraw Tower and Uris Library, reconstructed by COLMAP (SuperPoint and LightGlue features). The result floats in its own coordinate frame: <b>no scale, no north, no up</b>.</p>
-        <div class="stat"><div>photographs in the collection</div><div>${fmt(gt.photographs)}</div><div>with a GPS tag at all</div><div>${fmt(gt.with_gps)}</div>
-          <div>GPS tags among this fragment's ${fmt(own.length)} photographs</div><div>${tagged ? tagged.geotags.carried + (tagged.geotags.wrong ? ', and it is 2,000 km off' : '') : '—'}</div></div>
-        <p>The usual fix, aligning to the photographs' GPS, cannot even start. But the world already has a 3D model: public USGS airborne lidar covers most of the United States, and OpenStreetMap knows every building's footprint.</p>
+        <div class="stat"><div>Wikimedia Commons photographs in the collection</div><div>${fmt(gt.photographs)}</div><div>with a GPS tag at all</div><div>${fmt(gt.with_gps)}</div>
+          <div>GPS tags among this fragment's ${fmt(own.length)} photographs</div><div>${tagged ? fmt(tagged.geotags.carried) + ((tagged.geotags.wrong_off_m || []).length ? ', ' + tagged.geotags.wrong_off_m.map(dist).join(', ') + ' off' : '') : '—'}</div>
+          ${tagged && tagged.geotags.without_metadata ? `<div>Flickr copies among them, with no metadata at all</div><div>${fmt(tagged.geotags.without_metadata)}</div>` : ''}</div>
+        <p>The usual fix, aligning to the photographs' GPS, needs at least three good tags and cannot even start. But the world already has a 3D model: public USGS airborne lidar covers most of the United States, and OpenStreetMap maps the buildings' footprints.</p>
         <p><button type="button" id="go-snap">Place it in the world →</button></p>`;
       document.getElementById('go-snap').onclick = () => show('snap');
       setView({ terrain: false, outlines: false, volumes: false, dark: true, allPhotographers: true });

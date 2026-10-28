@@ -508,7 +508,7 @@ def build(output=OUT, anchored_runs=None, record_snapshot=None, ground_runs=None
     scene = {'schema_version': 2, 'title': 'GhostMap', 'generated_utc': datetime.now(timezone.utc).isoformat(), 'placement_study': study,
              'frame': {'crs': 'EPSG:32618 minus origin', 'origin_utm18n': origin.tolist(), 'up': 'z, metres'},
              'years': years, 'sites': sites, 'buildings': buildings, 'reconstructions': reconstructions, 'photographers': photographers,
-             'roof_rule': next(iter({v['rule'] for v in roof.values()}), None),
+             'roof_rule': {v['site']: v['rule'] for v in roof.values()},   # each site's aerial test has its own threshold
              'attribution': [timeline['aerial_source'], 'Lidar: USGS 3DEP NY_FingerLakes_1_2020, public domain.',
                              'Building footprints: (c) OpenStreetMap contributors, ODbL.', 'Photographs: Wikimedia Commons and Flickr (via Openverse); licence and author per photo.']}
     (output / 'scene.json').write_text(json.dumps(scene, allow_nan=False) + '\n')

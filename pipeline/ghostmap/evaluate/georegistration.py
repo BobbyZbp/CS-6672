@@ -54,6 +54,12 @@ def geotags(manifest=MANIFEST):
     return out
 
 
+def with_metadata(manifest=MANIFEST):
+    """Working-image names whose own EXIF was read (the Commons originals). The Flickr photographs come through
+    Openverse as resized web copies, which carry no EXIF at all, so whether they had GPS is unknown."""
+    return {r['filename'] for r in json.loads(Path(manifest).read_text())['images']}
+
+
 def plausible(xy):
     return np.linalg.norm(xy - CAMPUS_CENTRE_UTM) <= PLAUSIBLE_RADIUS_M
 
@@ -84,7 +90,7 @@ def geotag_baseline(native_xy, tagged_index, tags):
             'geotags_used': int(len(tagged_index)), 'geotag_rms_spread_m': spread, 'scale_m_per_unit': float(s)}
 
 
-def fragment_rows(run, tags, buildings):
+def fragment_rows(run, tags, buildings, read=None):
     import pycolmap
     from ghostmap.anchor.align import WallField
     from ghostmap.anchor.georegister import gravity
@@ -115,7 +121,10 @@ def fragment_rows(run, tags, buildings):
         row = {'run': str(run), 'fragment': report_path.parent.name, 'building': rep.get('building') or rep.get('landmark_building'),
                'method': 'cue-based (georegister.py)' if rep.get('schema_version') == 2 else rep.get('method', '')[:60],
                'cameras': len(names), 'points': anchored.num_points3D(),
-               'geotags': {'carried': len(tagged), 'plausible': len(plaus), 'wrong': len(tagged) - len(plaus)},
+               'geotags': {'carried': len(tagged), 'plausible': len(plaus), 'wrong': len(tagged) - len(plaus),
+                           # how far each implausible tag lies from where this placement puts its camera
+                           'wrong_off_m': sorted(float(np.linalg.norm(centres_utm[i, :2] - tags[names[i]])) for i in tagged if i not in plaus),
+                           'without_metadata': None if read is None else sum(1 for n in names if n not in read)},
                'verdict': verdict, 'failure_mode': cert.get('failure_mode'), 'scale_fixed_by': cert.get('scale_fixed_by'),
                'scale_status': rep.get('scale_status'),
                'ours_vs_geotags_m': ({'median': float(np.median(errors)), 'p90': float(np.percentile(errors, 90)), 'max': float(errors.max()),
@@ -157,8 +166,8 @@ def cross_fragment(rows):
 def evaluate(runs, output=OUTPUT):
     from ghostmap.anchor.align import FOOTPRINTS
     buildings = json.loads(FOOTPRINTS.read_text())['buildings']
-    tags = geotags()
-    rows = [r for run in runs for r in fragment_rows(run, tags, buildings)]
+    tags, read = geotags(), with_metadata()
+    rows = [r for run in runs for r in fragment_rows(run, tags, buildings, read)]
     agreement = cross_fragment(rows)
     for r in rows: r.pop('_near', None); r.pop('anchored_points_utm', None)
     usable = [r['ours_vs_geotags_m']['median'] for r in rows if r['verdict'] == 'usable' and r['ours_vs_geotags_m']]

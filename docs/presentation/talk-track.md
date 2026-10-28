@@ -51,8 +51,16 @@ live (the snap, the splats, the year slider). Every number on the slides is read
   within 2°. The photographers' heights over the lidar ground showed a leftover tilt; levelling by two thirds of it
   (3.7°) scored best on all cues together, levelling by all of it made the walls fit worse. The certificate states
   all of this (slide 6).
-- **Why not just use GPS?** Look at slide 2: few photographs carry it, the tower fragment has essentially none,
-  and some tags are thousands of kilometres off. Where geotags exist we use them only as held-out truth.
+- **Why not just use GPS?** A third of the Commons photographs carry it (129 of 393), and most of those are on
+  campus. But the tower fragment's 88 photographs carry one tag, 1.7 km from where the photograph was taken, and 63
+  of them are Flickr copies that arrive with no metadata at all (Flickr may know a location for some; we did not ask
+  it). A similarity from GPS needs at least three good, well-spread tags per fragment, and consumer GPS is metres to
+  tens of metres off: at Gates Hall, the one fragment with six tags, it places a held-out camera about 11 m off. One
+  Commons tag in the collection is 4,200 km off. Where geotags exist we use them only as held-out truth; your own
+  phone photographs (location on) are the first independent check of the placement.
+- **Has nobody done this before?** Aligning a reconstruction to overhead images without GPS goes back to Kaminsky et
+  al. (CVPR workshops 2009); Wang, Wilson and Snavely (3DV 2013) refined geotag-based placement. What is new here is
+  public lidar heights and footprints as the reference, explicit metric cues, and a certificate that refuses.
 - **Is the lidar a fair referee for walls?** Airborne lidar sees roofs and ground densely and walls thinly, so
   the free-space test allows 2.5 m horizontally and the nearest-return distance on walls is conservative. The
   fragment's own COLMAP points give the noise floor (shown on slide 8).

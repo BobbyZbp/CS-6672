@@ -25,8 +25,9 @@ of GhostMap is built past one of them:
 
 **Where** — placement with a certificate ([measurements](docs/checkpoints/2026-10-26-georegistration.md)):
 
-- of 393 campus photographs only 129 carry GPS, and the tower-and-library fragment's 88
-  photographs carry one, which is 2,000 km off: GPS alignment cannot even start;
+- of 393 Wikimedia Commons photographs of the campus 129 carry GPS; the tower-and-library fragment's 88
+  photographs carry one tag, 1.7 km from where the photograph was taken, and 63 of them are Flickr copies with no
+  metadata at all: GPS alignment cannot even start;
 - a cue-based estimator (walls, lidar roof edges, the tower top, photographers at eye height,
   free space along camera rays) places the 88-camera fragment (with 178 Flickr photographs
   added) in metres; its certificate reads usable, scale fixed three independent ways (the

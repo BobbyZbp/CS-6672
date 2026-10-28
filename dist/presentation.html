@@ -331,7 +331,10 @@ try {
   if (years) { set('frag-years', `${years[0]} and ${years[1]}`); set('tower-years', `${years[0]}–${years[1]}`); }
 
   // Where COLMAP stops: the evidence column
-  if (tagged) set('lim-gps', `${fmt(tagged.geotags.carried)} of ${fmt(own.length)} photographs carry GPS${tagged.geotags.wrong ? ', and it is 2,000 km off' : ''}`);
+  const dist = m => m >= 1000 ? fmt(m / 1000, 1) + ' km' : fmt(m) + ' m';
+  if (tagged) { const g = tagged.geotags, off = g.wrong_off_m || [];   // as evaluate/georegistration.py found them; the same sentence as the page's
+    set('lim-gps', `GPS on ${fmt(g.carried)} of ${fmt(own.length)} photographs${off.length ? `, ${off.length === 1 ? 'and it is' : 'and they are'} ${off.map(dist).join(', ')} off` : ''}` +
+      (g.without_metadata ? `; ${fmt(g.without_metadata)} are Flickr copies with no metadata at all` : '')); }
   const others = (study.fragments || []).filter(f => f.run !== r.tag.slice(0, 8));
   if (others.length) set('lim-refuse', `${others.filter(f => f.verdict !== 'usable').length} of ${others.length} campus fragments refused, each with a stated reason`);
   const agreeTower = (study.agreement_with_validated_frame || []).filter(x => x.building === 'McGraw Tower').map(x => x.median_distance_m);
