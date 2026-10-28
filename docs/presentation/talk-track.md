@@ -18,7 +18,10 @@ live (the snap, the splats, the year slider). Every number on the slides is read
    - `http://127.0.0.1:8080/presentation.html` (slides; `F` full screen, arrows, `N` speaker notes)
    - `http://127.0.0.1:8080/timemachine.html#colmap` (demo; opens on chapter 0, where COLMAP stops)
 3. Warm the demo: click chapters 4 and 5 once so both splats are downloaded and sorted (a few seconds each),
-   then return to chapter 0. Close everything else that uses the GPU.
+   drop one photograph on chapter 11 (it should say "in 1–2 s"; the server re-runs its warm-up whenever it has been
+   idle for five minutes, so the first drop on stage is not the slow one), then return to chapter 0. Close everything
+   else that uses the GPU. On a 1280×720 projector the page shows the chapters as numbers only (titles on hover);
+   the arrow keys step through them either way.
 4. Fallbacks ready: the tour video `artifacts/presentation/ghostmap-tour.webm` (plays in any browser) and the
    chapter stills on the slides themselves.
 
@@ -28,7 +31,7 @@ live (the snap, the splats, the year slider). Every number on the slides is read
 | --- | --- | --- | --- |
 | 0:00 | Slide 1 | title | The United States already has a public 3D model of itself. Internet-photo reconstructions have always ignored it. We put Cornell's internet photographs inside it, and then let it judge them and teach them. |
 | 0:45 | Slide 2 | the idea | Lidar is public domain and covers most of the country. COLMAP gives a fragment with no scale, no up, no north; GPS would help, but look how few photographs carry it, and how many of those are wrong. |
-| 1:15 | Slide 3 (or demo `#colmap`) | where COLMAP stops | Why this is a COLMAP hack: everything starts from COLMAP's cameras and points, and on internet photographs of a real place five of its limits show. No scale or north without GPS; no warning when a placement cannot be trusted; fragments in separate frames; splats with paint in mid-air; one static scene. Each row is a chapter of the demo. |
+| 1:15 | Slide 3 (or demo `#colmap`) | where COLMAP stops | Why this is a COLMAP hack: everything starts from COLMAP's cameras and points, and on internet photographs of a real place six of its limits show. No scale or north without GPS; no warning when a placement cannot be trusted; fragments in separate frames; splats with paint in mid-air; one static scene; a new photograph registered only into COLMAP's own frame. Each row is a chapter of the demo. |
 | 2:00 | Slide 4 → demo `#void` | the fragment floating | This is the biggest fragment of the Arts Quad, in COLMAP's own frame. Rotate it: it is a tower and a library, but nothing says how big or which way is up. |
 | 2:15 | demo `#snap` | the snap animation | No geotags, no clicked correspondences: gravity from the facades, the walls of the footprints, the lidar roof edges, photographers at eye height, the tower top. It lands. And it comes with a certificate. |
 | 3:15 | Slide 6 | the certificate | The scale profile is peaked: the tower top and four roof edges fix the scale to a few percent. The other three yaw quadrants score far below the best one. Removing any single cue barely moves the answer. |
@@ -37,7 +40,7 @@ live (the snap, the splats, the year slider). Every number on the slides is read
 | 6:15 | demo `#teacher` | the fly-through, then plain/taught at the same pose | Same photographs, same steps, one extra term: the measured free space is empty. The fly-through walks a camera path no photographer took: the map shows where it is, and at each photographer's spot the real photograph appears. Between them the splat has to invent the view. Tick "paint by the lidar's verdict": red is paint in air the lidar measured empty, purple is under the ground. Slide 9 has the numbers. |
 | 7:15 | demo `#above` → `#gates` → `#tower` | the year slider | And because everything is in one metric frame, time comes for free: six public aerial flights, Gates Hall rising from a parking lot, and every point of the tower knowing which years photographs saw it. |
 | 8:15 | Slide 11 | limits | What the record cannot show, said out loud: no ground photographs of any site before construction, lidar thin on walls, splats keep only what was photographed. |
-| 8:45 | Slide 12 → demo `#photo` | a photograph it has never seen | Drop a photograph nobody reconstructed. In three seconds it stands on the campus: where the photographer stood, which way they looked, no GPS. Now it is painted back onto the lidar city from that pose; stand where the photographer stood and slide from photograph to city: the silhouettes stay put. A long-lens shot from the Arts Quad gets "direction placed, distance open", and a photograph taken from the tower itself is refused. Then paint all 88 back. |
+| 8:45 | Slide 12 → demo `#photo` | a photograph it has never seen | Drop a photograph nobody reconstructed. In a second or two it stands on the campus: where the photographer stood, which way they looked, no GPS. Now it is painted back onto the lidar city from that pose; stand where the photographer stood and slide from photograph to city: the silhouettes stay put. A long-lens shot from the Arts Quad gets "direction placed, distance open", and a photograph taken from the tower itself is refused. Then paint all 88 back. |
 | 9:45 | Slide 13–14 | what is new, reproducible | Kaminsky 2009 aligned to overhead images; we add lidar heights, metric cues and a certificate. Everything is public data and reproducible wherever 3DEP exists. |
 | 10:30 | Slide 15 | thanks | Questions, and the demo stays open. |
 

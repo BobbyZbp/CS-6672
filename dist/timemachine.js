@@ -44,14 +44,17 @@ function flyTo(target, distance, elevation = 0.7, azimuth = -2.0, seconds = 1.4)
   const from = { pos: camera.position.clone(), tgt: controls.target.clone() };
   const to = { tgt: new THREE.Vector3(...target) };
   to.pos = new THREE.Vector3(to.tgt.x + distance * Math.cos(azimuth) * Math.cos(elevation), to.tgt.y + distance * Math.sin(azimuth) * Math.cos(elevation), to.tgt.z + distance * Math.sin(elevation));
-  flight = { from, to, t0: performance.now(), ms: seconds * 1000, fov: { from: camera.fov, to: 48 } };
+  lookUp(false); flight = { from, to, t0: performance.now(), ms: seconds * 1000, fov: { from: camera.fov, to: 48 } };
 }
+// Orbiting stays above the horizon; a photographer looking up at the tower needs the camera below its target, and the
+// clamp would otherwise lift the camera tens of metres off the photographer's spot.
+function lookUp(on) { controls.maxPolarAngle = on ? Math.PI - 0.02 : Math.PI / 2 - 0.02; }
 // Stand where a photographer stood, looking where the photograph looks, with its field of view: a splat is only
 // trustworthy near the views it was trained from (and a held-out photographer's view is the honest test).
 function flyToPhotographer(p, seconds = 1.6) {
   const R = p.rotation, fwd = new THREE.Vector3(...R[2]).normalize(), pos = new THREE.Vector3(...p.centre);
   const fov = 2 * Math.atan(p.height / 2 / p.focal_px) * 180 / Math.PI;
-  flight = { from: { pos: camera.position.clone(), tgt: controls.target.clone() }, to: { pos, tgt: pos.clone().addScaledVector(fwd, 60) },
+  lookUp(true); flight = { from: { pos: camera.position.clone(), tgt: controls.target.clone() }, to: { pos, tgt: pos.clone().addScaledVector(fwd, 60) },
              t0: performance.now(), ms: seconds * 1000, fov: { from: camera.fov, to: Math.min(75, Math.max(20, fov)) } };
 }
 function stepFlight() {
@@ -161,11 +164,12 @@ function projectable(mat) {
     Object.assign(shader.uniforms, projUniforms);
     shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\nuniform mat4 uProjMat; varying vec4 vProj; varying vec3 vPW; varying vec3 vPN;')
       .replace('#include <project_vertex>', `#include <project_vertex>
-        vec4 pw = vec4(transformed, 1.0);
+        vec4 pw = vec4(transformed, 1.0); vec3 pn = objectNormal;
         #ifdef USE_INSTANCING
-          pw = instanceMatrix * pw;
+          pw = instanceMatrix * pw; mat3 pim = mat3(instanceMatrix);   // each tree is turned and scaled on its own
+          pn = pim * (pn / vec3(dot(pim[0], pim[0]), dot(pim[1], pim[1]), dot(pim[2], pim[2])));
         #endif
-        pw = modelMatrix * pw; vPW = pw.xyz; vProj = uProjMat * pw; vPN = normalize(mat3(modelMatrix) * objectNormal);`);
+        pw = modelMatrix * pw; vPW = pw.xyz; vProj = uProjMat * pw; vPN = normalize(mat3(modelMatrix) * pn);`);
     shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>
       uniform sampler2D uProjTex; uniform sampler2D uProjDepth; uniform vec3 uProjPos; uniform float uProjOn; uniform vec2 uProjNearFar;
       varying vec4 vProj; varying vec3 vPW; varying vec3 vPN;
@@ -216,6 +220,24 @@ function showPlaced(p) {
     const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([a, b]), new THREE.LineDashedMaterial({ color: 0xe02924, dashSize: 4, gapSize: 3 }));
     line.computeLineDistances(); placedGroup.add(line);
   }
+}
+// Standing where a photographer stood, the photograph covers only its own field of view: a viewfinder draws that frame
+// on the screen (the frustum's corners projected every frame) and dims the city around it.
+const viewfinder = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+viewfinder.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;display:none';
+viewfinder.innerHTML = '<path fill="rgba(12,14,16,.5)" fill-rule="evenodd"/><polygon fill="none" stroke="#fff" stroke-width="2"/>';
+canvas.after(viewfinder);
+let standing = null;   // the pose whose frame is drawn
+function drawViewfinder() {
+  if (!standing) { viewfinder.style.display = 'none'; return; }
+  const p = standing, R = p.rotation, C = new THREE.Vector3(...p.centre), fwd = new THREE.Vector3(...R[2]), right = new THREE.Vector3(...R[0]), down = new THREE.Vector3(...R[1]);
+  const w = canvas.clientWidth, h = canvas.clientHeight, hw = 50 * p.width / 2 / p.focal_px, hh = 50 * p.height / 2 / p.focal_px;
+  const xy = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => C.clone().addScaledVector(fwd, 50).addScaledVector(right, a * hw).addScaledVector(down, b * hh).project(camera));
+  if (xy.some(v => v.z > 1)) { viewfinder.style.display = 'none'; return; }   // a corner behind the camera
+  const pts = xy.map(v => [((v.x + 1) / 2 * w).toFixed(1), ((1 - v.y) / 2 * h).toFixed(1)]);
+  viewfinder.setAttribute('viewBox', `0 0 ${w} ${h}`); viewfinder.style.display = '';
+  viewfinder.firstChild.setAttribute('d', `M0 0H${w}V${h}H0Z M${pts.map(q => q.join(' ')).join(' L')}Z`);
+  viewfinder.lastChild.setAttribute('points', pts.map(q => q.join(',')).join(' '));
 }
 
 // --- outlines of the buildings that changed, and the construction-site frame while they were built ---------------
@@ -823,11 +845,12 @@ const chapters = [
         <div id="located"></div>
         <p><button type="button" id="paint-all">▶ paint the ${fmt(scene.photographers.filter(q => q.reconstruction === r.tag).length)} photographs back, one by one</button></p>
         ${loo ? `<p class="note">Tested by taking each photograph out of the reconstruction and placing it again from scratch: of ${loo.with_a_plausible_reference_pose} with a trustworthy reference pose, ${loo.placed} were placed (median ${fmt(loo.placed_position_error_m.median, 1)} m from where the reconstruction had them, none beyond ${fmt(Math.ceil(loo.placed_position_error_m.max / 5) * 5)} m), ${loo.placed_distance_uncertain} placed with the distance stated as open, ${loo.refused} refused. Photographs from the Arts Quad side, which the internet's photographers never covered, are refused: all 120 street-level frames from there.</p>` : ''}`;
-      setView({ points: false, photographers: false }); legend([['#e02924', 'the photographer, as placed; dashed: where along the line of sight they may stand']]);
+      const placedLegend = () => legend([['#e02924', 'the photographer, as placed; dashed: where along the line of sight they may stand']]);
+      setView({ points: false, photographers: false }); placedLegend();
       flyTo([tc[0], tc[1], tower.ground + 15], 230, 0.42, photographersAzimuth(tower)); setYear(2023);
       const panel = document.getElementById('located');
       const select = q => {
-        stopPaint(); showPlaced(q.centre ? q : null);
+        stopPaint(); showPlaced(q.centre ? q : null); standing = null; placedLegend();
         const d = q.centre ? Math.hypot(q.centre[0] - tc[0], q.centre[1] - tc[1]) : null;
         panel.innerHTML = `<div class="placed-card"><img src="${BASE + q.photo}" alt=""><div>
           <p>${badge(q.verdict)} <span class="note">${q.seconds ? 'in ' + fmt(q.seconds, 1) + ' s' : ''}</span></p>
@@ -849,9 +872,10 @@ const chapters = [
         const side = () => { const R = q.rotation, C = new THREE.Vector3(...q.centre), f = new THREE.Vector3(...R[2]); f.z = 0; f.normalize();
           const look = C.clone().addScaledVector(f, Math.min(80, d * 0.6)); look.z = tower.ground + 12;
           const from = C.clone().addScaledVector(f, -40).add(new THREE.Vector3(-f.y, f.x, 0).multiplyScalar(45)); from.z = C.z + 35;
-          flight = { from: { pos: camera.position.clone(), tgt: controls.target.clone() }, to: { pos: from, tgt: look }, t0: performance.now(), ms: 1400, fov: { from: camera.fov, to: 48 } }; };
-        document.getElementById('stand').onclick = () => { placedGroup.visible = false; flyToPhotographer(q); };   // inside its own frustum the outline is in the way
-        document.getElementById('side').onclick = () => { placedGroup.visible = true; side(); };
+          lookUp(false); flight = { from: { pos: camera.position.clone(), tgt: controls.target.clone() }, to: { pos: from, tgt: look }, t0: performance.now(), ms: 1400, fov: { from: camera.fov, to: 48 } }; };
+        document.getElementById('stand').onclick = () => { placedGroup.visible = false; standing = q; flyToPhotographer(q);   // inside its own frustum the outline is in the way
+          legend([['#3a3d40', 'dimmed: the lidar city; inside the white frame: the photograph, painted onto it from where it was taken']]); };
+        document.getElementById('side').onclick = () => { placedGroup.visible = true; standing = null; placedLegend(); side(); };
         document.getElementById('blend').oninput = e => projectionOn(+e.target.value / 100);
         side();
       };
@@ -877,7 +901,7 @@ const chapters = [
 let paintTimer = null;
 function stopPaint() { if (paintTimer) { clearTimeout(paintTimer); paintTimer = null; } }
 function paintAll(r, tower) {
-  stopPaint(); showPlaced(null);
+  stopPaint(); showPlaced(null); standing = null;
   const c = centroid(tower.ring), own = scene.photographers.filter(p => p.reconstruction === r.tag && p.photo_large);
   own.sort((a, b) => Math.atan2(a.centre[1] - c[1], a.centre[0] - c[0]) - Math.atan2(b.centre[1] - c[1], b.centre[0] - c[0]));
   for (const p of own.slice(0, 6)) texture(p.photo_large);
@@ -896,16 +920,18 @@ let current = null;
 let lastPart = null;
 for (const ch of chapters) {
   if (ch.part !== lastPart) { nav.append(el('span', { className: 'part' }, ch.part)); lastPart = ch.part; }
-  nav.append(Object.assign(el('button', { type: 'button' }, ch.title), { onclick: () => show(ch.id) }));
-  nav.lastChild.dataset.chapter = ch.id;   // the recorded tour and the checks find chapters by id
+  const [n, ...name] = ch.title.split(' · '), b = el('button', { type: 'button', title: ch.title });
+  b.innerHTML = `<span class="n">${n}</span><span class="t"> · ${name.join(' · ')}</span>`;   // a short screen shows the numbers only
+  nav.append(Object.assign(b, { onclick: () => show(ch.id) }));
+  b.dataset.chapter = ch.id;   // the recorded tour and the checks find chapters by id
 }
 function show(id) {
   if (!chapters.some(c => c.id === id)) id = 'colmap';
   const ch = chapters.find(c => c.id === id); current = id;
-  for (const b of nav.querySelectorAll('button')) b.setAttribute('aria-current', String(b.textContent === ch.title));
+  for (const b of nav.querySelectorAll('button')) b.setAttribute('aria-current', String(b.dataset.chapter === id));
   if (id !== 'void' && placement.mode === 'floating') { placement.mode = 'placed'; poseAt(1, 0); }
   placement.done = null;   // a snap still running from the previous chapter must not move this chapter's camera
-  stopPaint(); projectionOn(0); showPlaced(null);   // a photograph painted on the city belongs to its chapter
+  stopPaint(); projectionOn(0); showPlaced(null); lookUp(false); standing = null;   // a photograph painted on the city belongs to its chapter
   status(''); hideOverlay(); body.innerHTML = ''; ch.render(); body.scrollTop = 0; history.replaceState(null, '', '#' + id);
 }
 
@@ -934,7 +960,7 @@ canvas.addEventListener('click', e => {
 function resize() { const { clientWidth: w, clientHeight: h } = canvas.parentElement; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
 new ResizeObserver(resize).observe(canvas.parentElement); resize();
 renderer.setAnimationLoop(() => {
-  stepFlight(); stepPlacement(); controls.update();
+  stepFlight(); stepPlacement(); controls.update(); drawViewfinder();
   projUniforms.uProjOn.value += (projector.on - projUniforms.uProjOn.value) * 0.15;
   renderer.render(world, camera);
 });

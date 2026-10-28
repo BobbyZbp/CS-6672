@@ -91,3 +91,23 @@ Gaussians and stalled), the lidar-taught one before that change; the first step'
   from the Arts Quad), 2 refused. Mapillary: all 120 Arts Quad frames refused.
 - Tried and dropped: sight lines through lidar buildings as a check (did not separate good from bad poses);
   holding the photographer at eye height to fix the distance (leave-one-out median 1 m → 7 m).
+
+## The presentation pass (2026-10-28)
+
+A walk through every chapter and slide on the GPU at 1920×1080 and 1280×720, as the audience will see them.
+
+- "Stand where the photographer stood" did not stand there: the orbit controls keep the camera above the horizon of
+  its target, and a photographer looking up at the tower put the target above the camera, so the camera was lifted
+  12–33 m off the photographer's spot and the photograph's trees cast their shadows on the wrong walls. The clamp is
+  lifted while standing at a photographer and restored for every other flight; the camera now sits on the
+  photographer's centre to the centimetre. The paint shader also turns each lidar tree's normal by its own instance
+  matrix, so the trees facing the photographer take the photograph's colours. A viewfinder (the photograph's frame,
+  projected every frame, with the city outside it dimmed) shows where the photograph ends and the lidar city begins.
+- The slide deck kept a fixed 22 px type inside a slide that scales with the window: at 1920×1080 every slide used
+  the top half. The type now scales with the slide; no slide overflows at 1920×1080, 1440×900 or 1280×720. The deck's
+  stills are the 3D view alone (the side panel was unreadable at slide size), and the new-photograph slide shows the
+  photograph painted onto the city from its photographer's pose beside the bare city from the same pose.
+- On a short screen (a 1280×720 projector) the page drops the thesis line and shows the chapters as numbers, so the
+  chapter text keeps most of the panel; the page no longer scrolls as a whole.
+- The demo server's first placement after a quiet hour took 11 s instead of 1–2 s; it now re-runs its warm-up
+  whenever nothing was placed for five minutes.

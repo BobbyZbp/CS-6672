@@ -30,6 +30,7 @@ DIST = ROOT / 'dist'
 LIVE = ROOT / 'artifacts/live-photos'
 LIVE_URL = '/assets/timemachine/located-live/'
 MAX_BYTES = 40 * 1024 * 1024
+IDLE_S = 300   # seconds without a placement before the warm-up placement runs again
 
 
 def keep_models_loaded():
@@ -61,9 +62,24 @@ class Placer:
         self.shift = self.ref.origin - np.asarray(scene['frame']['origin_utm18n'])   # the anchor's local frame -> the scene's
         # Warm up (the networks load and the GPU compiles its kernels on the first placement, about 25 s), so the first
         # photograph dropped during the talk is placed in seconds.
-        from ghostmap.anchor.locate import locate
-        t0 = time.time(); locate(self.ref.run, [self.ref.run / 'images' / self.ref.names[0]], self.ref.anchor, render=False, ref=self.ref, out_root=LIVE / 'warm-up')
+        t0 = time.time(); self.warm()
         print(f'warmed up in {time.time() - t0:.0f} s', flush=True)
+        # Left idle, the GPU and the memory go cold (a first placement after a quiet hour took 11 s instead of 1-2 s):
+        # the warm-up placement runs again whenever nothing was placed for a few minutes.
+        threading.Thread(target=self.keep_warm, daemon=True).start()
+
+    def warm(self):
+        from ghostmap.anchor.locate import locate
+        with self.lock:
+            locate(self.ref.run, [self.ref.run / 'images' / self.ref.names[0]], self.ref.anchor, render=False, ref=self.ref, out_root=LIVE / 'warm-up')
+            self.last = time.time()
+
+    def keep_warm(self, idle_s=IDLE_S):
+        while True:
+            time.sleep(30)
+            if time.time() - self.last > idle_s:
+                try: self.warm()
+                except Exception as error: print(f'keeping warm failed: {error}', flush=True)
 
     def place(self, data, filename):
         from PIL import Image
@@ -77,6 +93,7 @@ class Placer:
         shown = LIVE / (stem + '-shown.jpg'); thumbnail(src, shown, PROJECT_PX)
         with self.lock:
             t0 = time.time(); report = locate(self.ref.run, [src], self.ref.anchor, render=False, ref=self.ref, out_root=LIVE / 'reports')[src.name]
+            self.last = time.time()
         with Image.open(src) as a, Image.open(shown) as b: sizes = (a.size, b.size)
         entry = located_entry(report, self.shift, 'located-live/' + shown.name, *sizes)
         entry.update({'title': filename, 'live': True, 'seconds': round(time.time() - t0, 1)})

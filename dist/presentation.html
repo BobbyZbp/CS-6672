@@ -4,11 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GhostMap slides</title>
+<link rel="icon" href="data:,">
 <style>
   :root { --bg: #f6f4ef; --ink: #1d221e; --muted: #5d655d; --accent: #b5532c; --ok: #2f7d4f; --bad: #b4372f; --amber: #b07a10; --line: #d8d4c9; --chip: #ece8de; }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: #111; }
-  body { font: 22px/1.42 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink); }
+  body { font: 22px/1.42 system-ui, -apple-system, "Segoe UI", sans-serif; font-size: min(1.6vw, 2.844vh); color: var(--ink); }   /* scales with the slide, so a projector shows what a laptop shows */
   .slide { display: none; position: absolute; inset: 0; margin: auto; width: min(100vw, 177.8vh); height: min(56.25vw, 100vh); background: var(--bg); padding: 3.8% 5% 4.5%; overflow: hidden; }
   .slide.on { display: flex; flex-direction: column; }
   h1 { font-size: 2.4em; margin: 0 0 .15em; line-height: 1.05; letter-spacing: -.01em; }
@@ -55,7 +56,7 @@
     <div><b>How it looked.</b> Gaussian splats from the same photographs, judged by the lidar and taught by it.</div>
     <div><b>When.</b> Twenty years of aerial flights, documented dates and dated photographs in one frame.</div>
   </div>
-  <img class="fig hero" src="assets/presentation/teacher.png" alt="The lidar-taught splat of McGraw Tower and Uris Library on the lidar campus">
+  <img class="fig hero" src="assets/presentation/snap.png" alt="The tower-and-library fragment placed in the lidar campus">
   <p class="muted" style="font-size:.62em;margin-top:.5em">Public data only: USGS 3DEP lidar, New York State orthoimagery, OpenStreetMap, Wikimedia Commons and Flickr (via Openverse) under their licences. No annotation, no geotags, no hand-picked correspondences.</p>
   <aside class="notes">Open with the one-line idea: the US already has a public 3D model of itself (lidar). Internet-photo reconstructions have always lived in a vacuum. We put them inside it — and then use it as a referee and a teacher.</aside>
 </section>
@@ -246,12 +247,13 @@
   <h2>A photograph it has never seen</h2>
   <div class="cols">
     <div>
-      <p>Drop a photograph of the tower: the most similar of the fragment's photographs are found, matched, and RANSAC says where the photographer stood and which way they looked, in seconds and <b>without GPS</b>. COLMAP could only register it into its own frame.</p>
-      <p>Then it is painted back onto the lidar city from that pose. If the placement is right, its walls land on the lidar's walls.</p>
+      <p>Drop a photograph of the tower: in seconds and <b>without GPS</b> it says where the photographer stood and which way they looked (NetVLAD, SuperPoint and LightGlue, RANSAC). COLMAP could only register it into its own frame.</p>
+      <p>Then it is painted onto the lidar city from that pose: if the placement is right, its walls land on the lidar's walls.</p>
       <div class="finding" data-fill="locate-sentence">Placed, or refused with the reason.</div>
-      <p class="muted" style="font-size:.66em">A long lens on a distant tower fixes the direction but not the distance: then the certificate says so, and the page draws where along the line of sight the photographer may have stood instead of painting from the wrong place.</p>
+      <p class="muted" style="font-size:.6em">A long lens on a distant tower fixes the direction, not the distance: the certificate says so and the photograph is not painted. Photographs from the Arts Quad side, which the internet's photographers never covered, are refused.</p>
     </div>
-    <div><img class="fig" src="assets/presentation/photo.png" alt="A new photograph placed in the lidar campus and painted back onto it"><div class="cap">Live demo, chapter 11.</div></div>
+    <div><img class="fig" style="height:31vh;object-fit:cover" src="assets/presentation/photo-stand.png" alt="The photograph painted onto the lidar city, seen from where the photographer stood"><div class="cap">From the photographer's pose: the photograph painted onto the lidar city.</div>
+      <img class="fig" style="height:31vh;object-fit:cover;margin-top:.4em" src="assets/presentation/photo-city.png" alt="The bare lidar city from the same pose"><div class="cap">The same pose, the bare lidar city: the tower is where the photograph put it. Live demo, chapter 11.</div></div>
   </div>
   <aside class="notes">Drop one of your own phone photographs of the tower (from Ho Plaza or Libe Slope) onto chapter 11, or pick one from the tray. Click "stand where the photographer stood", then drag the slider from photograph to city: the silhouettes stay put. End with "paint the photographs back".</aside>
 </section>
@@ -292,7 +294,8 @@
   <div class="kicker">Thank you</div>
   <h1 style="font-size:2em">Where · How it looked · When</h1>
   <p style="font-size:1.1em">Internet photographs, placed by the world's own 3D model, judged by it, taught by it.</p>
-  <p class="muted" style="margin-top:auto">Questions — and the live demo.</p>
+  <img class="fig hero" src="assets/presentation/photo-stand.png" alt="A photograph painted onto the lidar city from where its photographer stood">
+  <p class="muted" style="margin-top:.5em">Questions — and the live demo.</p>
 </section>
 
 <script type="module">
@@ -339,7 +342,7 @@ try {
   if (years) set('lim-time', `${fmt(dated.length)} dated photographs, ${years[0]}–${years[1]}; 6 aerial flights, 2002–2023`);
 
   const loo = r.located && r.located.leave_one_out;
-  if (loo) set('locate-sentence', `Taking each photograph out of the reconstruction and placing it again from scratch: of ${loo.with_a_plausible_reference_pose}, <b>${loo.placed} placed, median ${fmt(loo.placed_position_error_m.median, 1)} m</b> from where the reconstruction had them; ${loo.placed_distance_uncertain} with the distance stated as open; ${loo.refused} refused. All 120 street-level frames from the Arts Quad side, which the internet's photographers never covered, are refused.`);
+  if (loo) set('locate-sentence', `Each photograph taken out of the reconstruction and placed again from scratch: of ${loo.with_a_plausible_reference_pose}, <b>${loo.placed} placed, median ${fmt(loo.placed_position_error_m.median, 1)} m</b> from where the reconstruction had it; ${loo.placed_distance_uncertain} with the distance stated as open; ${loo.refused} refused.`);
 
   const c = r.placement && r.placement.certificate;
   if (c) {

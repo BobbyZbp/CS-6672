@@ -76,6 +76,17 @@
   figure.render { margin: 8px 0; } figure.render img { width: 100%; border-radius: 6px; border: 1px solid var(--line); display: block; }
   #chapter-body button { border: 1px solid var(--accent); background: var(--accent); color: #fff; border-radius: 8px; padding: 6px 12px; font: inherit; cursor: pointer; }
   #chapter-body button#play, #chapter-body button#replay { background: var(--chip); color: var(--ink); border-color: var(--line); }
+  /* The page fills the window exactly (no page scroll); on a short screen such as a 1280x720 projector the thesis line
+     goes and the chapters shrink to their numbers (titles on hover, arrow keys step), so the chapter text stays readable. */
+  body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+  main { flex: 1; height: auto; min-height: 0; }
+  @media (max-height: 860px) {
+    header { padding: 8px 20px 0; } header .thesis { display: none; }
+    #chapters { gap: 4px; padding: 8px 10px; align-items: center; }
+    #chapters .part { flex-basis: auto; margin: 0 2px 0 6px !important; }
+    #chapters button { padding: 2px 9px; min-width: 30px; } #chapters button .t { display: none; }
+  }
+  @media (max-width: 900px) { body { height: auto; overflow: visible; } }
 </style>
 <script type="importmap">{"imports": {"three": "./vendor/three.module.js"}}</script>
 </head>
