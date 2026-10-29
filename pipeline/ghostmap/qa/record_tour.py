@@ -77,7 +77,8 @@ async def bare_still(page, path):
 async def new_photo(page, seconds, stills=None):
     """A new photograph: placed, seen from the side, from where the photographer stood (photograph, then the bare
     city), then the fragment's photographs painted back one by one."""
-    await page.click('.pick[data-i="0"]'); await page.wait_for_timeout(int(1000 * seconds * 0.2))
+    # the tray's third photograph: Ho Plaza in summer, taken out of the reconstruction and placed again (the clearest match)
+    await page.click('.pick[data-i="2"]'); await page.wait_for_timeout(int(1000 * seconds * 0.2))
     await page.click('#stand'); await page.wait_for_timeout(int(1000 * seconds * 0.15))
     if stills: await bare_still(page, stills / 'photo-stand.png')
     for v in list(range(100, -1, -5)) + list(range(0, 101, 5)):

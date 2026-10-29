@@ -68,8 +68,10 @@ distant tower fixes the direction only); 2 refused. Run the page with
 `PYTHONPATH=pipeline .venv/bin/python -m ghostmap.web.demo_server` for live placement.
 
 Live demo: `http://127.0.0.1:8080/timemachine.html` (serve `dist/`, below; ← → step through
-the chapters, from 0 "Where COLMAP stops" to 11 "A photograph it has never seen", F full screen). Slides: `http://127.0.0.1:8080/presentation.html` (arrows,
-F full screen, N speaker notes); talk track: `docs/presentation/talk-track.md`.
+the chapters, from 0 "Where COLMAP stops" to 11 "A photograph it has never seen", F full screen). The talk: the
+PowerPoint deck `artifacts/presentation/ghostmap-talk.pptx` (built by `pipeline/ghostmap/package/talk_deck.js`) and its
+script in English and Chinese, `docs/presentation/talk-track.md`, which is also the deck's speaker notes. The earlier
+web deck, `http://127.0.0.1:8080/presentation.html`, follows the older chapter order.
 
 ## Repository layout
 

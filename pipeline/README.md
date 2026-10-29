@@ -85,6 +85,7 @@ as a subprocess through its entry-point name.
 | | `qa/record_demo.py` | `record_artsquad_demo.py` | Scripted headless tour recording. |
 | | `qa/record_tour.py` | `-m ghostmap.qa.record_tour` | Captioned tour of the twelve demo chapters on the GPU as a WebM fallback (`artifacts/presentation/ghostmap-tour.webm`), a still of each chapter's 3D view for the slides (`dist/assets/presentation/`), and the new-photograph chapter's view from the photographer's pose, painted and bare. |
 | | `package/presentation_bundle.py` | `-m ghostmap.package.presentation_bundle` | The presentation site (demo page, slides, vendored modules, `assets/timemachine/`) as one offline zip with `serve.py`; checks every asset the scene references. |
+| | `package/talk_deck.js` | `NODE_PATH=.cache/node/node_modules node pipeline/ghostmap/package/talk_deck.js` | The talk as a PowerPoint deck (`artifacts/presentation/ghostmap-talk.pptx`): every number read from `scene.json` and the reports beside it, every slide's speaker notes (English and Chinese) its section of `docs/presentation/talk-track.md`, pictures from the tour's stills. Needs `npm install --prefix .cache/node pptxgenjs@3.12.0`. |
 
 ## Conventions
 
