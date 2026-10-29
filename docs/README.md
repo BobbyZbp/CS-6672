@@ -28,7 +28,8 @@ Module-level map: [../pipeline/README.md](../pipeline/README.md).
 
 | File | What it is |
 | --- | --- |
-| [talk-track.md](presentation/talk-track.md) | Run of show for the CS 6672 presentation: pre-flight, timings, clicks, likely questions, fallbacks. |
+| [talk-track.md](presentation/talk-track.md) | The eight-minute talk, slide by slide, in English and Chinese (also the deck's speaker notes): pre-flight, timings, clicks, likely questions, fallbacks. |
+| [directions-tried.md](presentation/directions-tried.md) | The three directions before GhostMap (Boardman Hall from postcards, one model of the campus, a twenty-year time machine), what stopped each and whether compute was the cause; the material behind the deck's third slide. |
 
 ## checkpoints/ — dated measurements (oldest first)
 
