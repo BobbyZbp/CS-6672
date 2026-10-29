@@ -33,9 +33,10 @@ public lidar, without GPS, and make it say when it can't. / COLMAP 的坐标系�
    on the desktop ready to drag. Photographs from the Arts Quad side are refused (the internet never photographed it
    from there). / 你自己的照片：在 Ho Plaza 或 Libe Slope 用手机拍 3–5 张钟楼，开定位，放在桌面上随时拖。从 Arts Quad
    那一侧拍的会被拒绝。
-5. Fallbacks: the tour video `artifacts/presentation/ghostmap-tour.webm`; every slide has its own still. On a
-   1280×720 projector the page shows its chapters as numbers; the arrow keys step through them. / 备用：tour 视频；
-   每页幻灯片都有截图。1280×720 投影仪上页面章节只显示数字，方向键照常翻。
+5. Fallbacks: the tour video `artifacts/presentation/ghostmap-tour.webm`; every slide has its own still. The page's
+   chapters are a row of numbers; → steps through a chapter's steps (each shows one thing and leaves one result),
+   PgDn jumps a chapter, A opens the whole chapter at once if you need everything on screen. / 备用：tour 视频；
+   每页幻灯片都有截图。页面章节是一排数字；→ 一步步推进（每步只展示一件事、留下一个结果），PgDn 跳章，按 A 整章全展开。
 
 ## Slide by slide / 逐页讲稿
 
@@ -194,8 +195,9 @@ is stored per cell, so any cue's profile over scale or heading can be read off a
 
 ### Slide 10 · Step 4 · the certificate (4:50–5:25)
 
-**Show / 操作:** the list on the left, then the placed fragment and its numbers; optionally demo chapter 2 for the snap. /
-先左边的清单，再右边放好的片段和数字；可以切到演示第 2 章看吸附。
+**Show / 操作:** the list on the left, then the placed fragment and its numbers; optionally demo chapter 2, press → once
+(its second step plays the snap; `#snap/2` opens it there). / 先左边的清单，再右边放好的片段和数字；可以切到演示第 2 章，
+按一下 →（第二步才播放吸附；`#snap/2` 直接打开那一步）。
 
 **Say:** The certificate is what the search writes down. Bands: how far each number can move before the objective
 drops by a tenth of its range. The runner-up: the best heading more than 20 degrees away must score under 80 percent of
@@ -247,7 +249,7 @@ confirm it, and the certificate says exactly that.
 
 ### Slide 13 · Watch it snap (6:25–6:45)
 
-**Show / 操作:** click the clip (or demo chapter 2). / 点视频（或切到演示第 2 章）。
+**Show / 操作:** click the clip (or demo chapter 2 at its second step, `#snap/2`). / 点视频（或切到演示第 2 章的第二步，`#snap/2`）。
 
 **Say:** The fragment floating in COLMAP's frame, then the placement applied: it lands among the lidar buildings and the
 certificate appears. Nothing about the model changed; only the seven numbers.

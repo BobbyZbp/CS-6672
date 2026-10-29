@@ -68,7 +68,7 @@ async def teacher(page, seconds):
 
 async def bare_still(page, path):
     """The 3D view alone, without the caption, the year bar or the legend: a picture for a slide."""
-    hide = "(on) => { for (const id of ['tour-caption', 'timebar', 'legend']) { const e = document.getElementById(id); if (e) e.style.visibility = on ? 'hidden' : ''; } }"
+    hide = "(on) => { for (const id of ['tour-caption', 'timebar', 'legend', 'now']) { const e = document.getElementById(id); if (e) e.style.visibility = on ? 'hidden' : ''; } }"
     await page.evaluate(hide, True)
     try: await page.locator('#viewport').screenshot(path=str(path), timeout=180000)
     finally: await page.evaluate(hide, False)
@@ -86,6 +86,7 @@ async def new_photo(page, seconds, stills=None):
         await page.wait_for_timeout(int(1000 * seconds * 0.25 / 42))
         if stills and v == 0: await bare_still(page, stills / 'photo-city.png')
     await page.click('#side'); await page.wait_for_timeout(int(1000 * seconds * 0.1))
+    await page.evaluate('window.__tm.next()'); await page.wait_for_timeout(600)   # the chapter's next step: painted back onto the city
     await page.click('#paint-all'); await page.wait_for_timeout(int(1000 * seconds * 0.3))
 
 
@@ -122,6 +123,7 @@ async def tour(base_url, stills=STILLS, video_dir=VIDEO, width=1600, height=900,
         for chapter, dwell, caption, years in TOUR:
             await page.evaluate(CAPTION_JS, caption)
             await page.click(f'#chapters button[data-chapter="{chapter}"]')
+            if chapter == 'snap': await page.evaluate('window.__tm.show("snap", 1)')   # the chapter's second step plays the snap
             # Chapters that load splats say so in #status; wait until it clears (or give up after two minutes).
             try: await page.wait_for_function("!(document.getElementById('status') || {}).textContent", timeout=120000)
             except Exception: report['errors'].append(f'{chapter}: still loading after two minutes')
@@ -136,7 +138,7 @@ async def tour(base_url, stills=STILLS, video_dir=VIDEO, width=1600, height=900,
             else:
                 await page.wait_for_timeout(1000 * dwell)
             await page.evaluate(CAPTION_JS, '')
-            try: await page.locator('#viewport').screenshot(path=str(stills / f'{chapter}.png'), timeout=180000)
+            try: await bare_still(page, stills / f'{chapter}.png')
             except Exception as e: report['errors'].append(f'{chapter}: screenshot failed ({type(e).__name__})')
             text = await page.inner_text('#chapter-body')
             report['chapters'][chapter] = {'characters': len(text), 'still': f'assets/presentation/{chapter}.png'}

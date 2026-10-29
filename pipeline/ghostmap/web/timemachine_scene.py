@@ -246,7 +246,14 @@ def located_photos(run, comp, shift, records, output):
     order = {'placed': 0, 'placed, distance uncertain': 1, 'refused': 2}
     photos.sort(key=lambda e: (order.get(e['verdict'], 3), not e['left_out'], e['name']))
     loo = folder / 'leave-one-out' / 'report.json'
-    return {'photos': photos, 'leave_one_out': json.loads(loo.read_text())['summary'] if loo.exists() else None,
+    # Street-level frames from the side nobody photographed (Mapillary), placed by the same rule: how many, how many refused.
+    street = ROOT / 'artifacts/georegistration/new-photos-mapillary.json'
+    street_test = None
+    if street.exists():
+        m = json.loads(street.read_text())
+        street_test = {'what': m['what'], 'result': m['result'], 'frames': len(m['rows']),
+                       'refused': sum(1 for row in m['rows'] if row.get('verdict') == 'refused'), 'max_inliers': m.get('max_inliers')}
+    return {'photos': photos, 'leave_one_out': json.loads(loo.read_text())['summary'] if loo.exists() else None, 'street_test': street_test,
             'rule': 'anchor/locate.py: NetVLAD retrieval, SuperPoint + LightGlue to the fragment, RANSAC pose from several focal priors; placed, placed with the distance uncertain, or refused'}
 
 

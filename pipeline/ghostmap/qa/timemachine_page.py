@@ -64,7 +64,11 @@ async def check(base_url, output):
                 report['photo_projection'] = await page.evaluate('window.__tm.projector.on')
                 await page.screenshot(path=str(output / 'photo-placed.png'), timeout=SHOT_MS)
             text = await page.inner_text('#chapter-body')
-            report['chapters'][chapter] = {'characters': len(text), 'year_shown': await page.inner_text('#year'), 'year_set': years[-1]}
+            report['chapters'][chapter] = {'characters': len(text), 'year_shown': await page.inner_text('#year'), 'year_set': years[-1], 'steps': {}}
+            for k in range(1, await page.evaluate('window.__tm.steps()')):   # the chapter's further steps, each with its caption
+                await page.evaluate(f'window.__tm.show("{chapter}", {k})'); await page.wait_for_timeout(1500)
+                report['chapters'][chapter]['steps'][k + 1] = {'characters': len(await page.inner_text('#chapter-body')), 'caption': await page.inner_text('#now')}
+                await page.screenshot(path=str(output / f'{chapter}-step{k + 1}.png'), timeout=SHOT_MS)
         await page.close()   # its CPU-rendered WebGL would keep the CPU busy and starve the slide screenshots
         for deck in DECKS:   # every deck the server has (an offline bundle carries only the main one)
             slides = await browser.new_page(viewport={'width': 1600, 'height': 900}); stem = Path(deck).stem

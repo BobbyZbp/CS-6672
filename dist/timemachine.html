@@ -6,94 +6,13 @@
 <title>GhostMap</title>
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="ghostmap.css">
-<style>
-  #timebar { position: absolute; left: 10px; right: 10px; top: 10px; background: color-mix(in srgb, var(--panel) 90%, transparent); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px 6px; display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; }
-  #timebar input[type=range] { width: 100%; }
-  #year { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 86px; }
-  #ticks { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); padding: 0 2px; }
-  #ticks span { position: relative; }
-  #ticks span.flight::before { content: ''; display: block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin: 0 auto 2px; }
-  #basis { font-size: 12px; color: var(--muted); text-align: right; max-width: 260px; }
-  .strip { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin: 8px 0; }
-  .strip figure { margin: 0; } .strip img { width: 100%; border-radius: 4px; border: 1px solid var(--line); display: block; }
-  .strip figcaption { font-size: 11px; text-align: center; color: var(--muted); }
-  .strip figure.on img { outline: 3px solid var(--accent); }
-  .state { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
-  .state.before { background: #e6e2d8; color: #5f675f; } .state.works { background: #f6e3b0; color: #7a5a00; } .state.present { background: #d7eedd; color: #1f5f36; } .state.stable { background: #dde6f5; color: #2a4a7f; }
-  .yearbar { display: flex; gap: 2px; align-items: flex-end; height: 42px; margin: 6px 0; }
-  .yearbar div { flex: 1; background: var(--accent); opacity: .35; min-height: 2px; } .yearbar div.on { opacity: 1; }
-  .yearlabels { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); }
-  footer .keys { margin-right: 10px; font-weight: 600; }
-  #overlay { position: absolute; inset: 0; background: #0e1114; display: flex; align-items: center; justify-content: center; z-index: 2; }
-  #overlay[hidden] { display: none; }
-  .wipe { position: relative; overflow: hidden; border-radius: 6px; box-shadow: 0 2px 16px rgba(0,0,0,.4); }
-  .wipe img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; user-select: none; -webkit-user-drag: none; }
-  .wipe img.b { clip-path: inset(0 0 0 50%); }
-  .wipe .bar { position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; background: #fff; box-shadow: 0 0 6px rgba(0,0,0,.6); pointer-events: none; }
-  .wipe .lab { position: absolute; top: 8px; padding: 2px 8px; border-radius: 6px; background: rgba(0,0,0,.55); color: #fff; font-size: 12.5px; }
-  .wipe .lab.a { left: 8px; } .wipe .lab.b { right: 8px; }
-  .wipe input[type=range] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: ew-resize; margin: 0; }
-  #overlay .flybar { position: absolute; left: 50%; transform: translateX(-50%); bottom: 14px; display: flex; gap: 8px; align-items: center; background: rgba(0,0,0,.55); color: #fff; padding: 4px 10px; border-radius: 8px; font-size: 12.5px; z-index: 3; }
-  #overlay .flybar input { width: 260px; }
-  .fly { display: flex; flex-direction: column; gap: 8px; color: #e8e6e0; font-size: 13px; }
-  .fly .flyhead { line-height: 1.35; }
-  .fly .panes { display: flex; gap: 10px; }
-  .fly .panes figure { position: relative; margin: 0; border-radius: 6px; overflow: hidden; background: #000; }
-  .fly .panes img { width: 100%; height: 100%; display: block; object-fit: cover; }
-  .fly .panes figcaption { position: absolute; top: 8px; left: 8px; padding: 3px 9px; border-radius: 6px; background: rgba(0,0,0,.6); color: #fff; font-weight: 650; font-size: 14px; }
-  .fly .panes .share { position: absolute; bottom: 8px; left: 8px; padding: 2px 8px; border-radius: 6px; background: rgba(0,0,0,.6); color: #fff; font-size: 12.5px; }
-  .fly .panes .share:empty { display: none; }
-  .fly .flyfoot { display: flex; gap: 14px; align-items: flex-start; }
-  .fly .minimap { flex: none; border-radius: 6px; }
-  .fly .flytext { flex: 1; min-width: 0; }
-  .fly .flytext p { margin: 0 0 6px; line-height: 1.4; }
-  .fly .sw { display: inline-block; width: 11px; height: 11px; border-radius: 2px; margin: 0 4px -1px 8px; }
-  .fly .ctl { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-  .fly .ctl input[type=range] { width: 220px; }
-  .fly .ctl button { background: #fff; color: #111; border: 0; border-radius: 6px; padding: 2px 10px; cursor: pointer; font: inherit; }
-  .fly .truth { flex: none; margin: 0; width: 150px; }
-  .fly .truth[hidden] { display: none; }
-  .fly .truth img { width: 150px; max-height: 170px; object-fit: contain; border-radius: 4px; display: block; background: #000; }
-  .fly .truth figcaption { font-size: 11.5px; color: #c8c2b4; margin-top: 3px; }
-  .tray { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
-  #chapter-body button.pick { padding: 0; border: 1px solid var(--line); background: var(--chip); border-radius: 6px; width: 86px; overflow: hidden; display: flex; flex-direction: column; }
-  .pick img { width: 86px; height: 62px; object-fit: cover; display: block; }
-  .pick span { font-size: 10px; padding: 2px; line-height: 1.2; color: var(--ink); }
-  .pick .state { font-size: 10px; padding: 1px 4px; }
-  .drop { display: block; border: 2px dashed var(--line); border-radius: 8px; padding: 10px; font-size: 13px; color: var(--muted); margin: 6px 0; }
-  .drop.over { border-color: var(--accent); background: var(--chip); }
-  .drop input { font-size: 12px; max-width: 100%; }
-  .placed-card { display: grid; grid-template-columns: 110px 1fr; gap: 10px; margin: 8px 0; }
-  .placed-card img { width: 110px; border-radius: 6px; }
-  #overlay .flybar button { background: #fff; color: #111; border: 0; border-radius: 6px; padding: 2px 10px; cursor: pointer; font: inherit; }
-  header h1 .sub { font-size: 14px; font-weight: 500; color: var(--muted); margin-left: 8px; letter-spacing: 0; }
-  #chapters .part { flex-basis: 100%; font-size: 11px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); margin: 2px 0 -2px 2px; }
-  #chapters .part:not(:first-child) { margin-top: 6px; }
-  #chapter-body h3 { font-size: 15px; margin: 14px 0 4px; }
-  figure.chart { margin: 8px 0; } figure.chart svg { width: 100%; height: auto; display: block; }
-  figure.chart figcaption, figure.render figcaption { font-size: 11.5px; color: var(--muted); }
-  figure.chart .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin: 0 4px -1px 6px; }
-  figure.render { margin: 8px 0; } figure.render img { width: 100%; border-radius: 6px; border: 1px solid var(--line); display: block; }
-  #chapter-body button { border: 1px solid var(--accent); background: var(--accent); color: #fff; border-radius: 8px; padding: 6px 12px; font: inherit; cursor: pointer; }
-  #chapter-body button#play, #chapter-body button#replay { background: var(--chip); color: var(--ink); border-color: var(--line); }
-  /* The page fills the window exactly (no page scroll); on a short screen such as a 1280x720 projector the thesis line
-     goes and the chapters shrink to their numbers (titles on hover, arrow keys step), so the chapter text stays readable. */
-  body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-  main { flex: 1; height: auto; min-height: 0; }
-  @media (max-height: 860px) {
-    header { padding: 8px 20px 0; } header .thesis { display: none; }
-    #chapters { gap: 4px; padding: 8px 10px; align-items: center; }
-    #chapters .part { flex-basis: auto; margin: 0 2px 0 6px !important; }
-    #chapters button { padding: 2px 9px; min-width: 30px; } #chapters button .t { display: none; }
-  }
-  @media (max-width: 900px) { body { height: auto; overflow: visible; } }
-</style>
+<link rel="stylesheet" href="timemachine.css">
 <script type="importmap">{"imports": {"three": "./vendor/three.module.js"}}</script>
 </head>
 <body>
 <header>
   <h1>GhostMap <span class="sub">an interactive 3D time machine of Cornell</span></h1>
-  <p class="thesis"><b>Geographically grounded · time-aware · visually immersive.</b> Licensed internet photographs, reconstructed with COLMAP, placed without GPS inside the world's own 3D model (public USGS lidar), rendered as Gaussian splats that the lidar checks and teaches, and replayed over twenty years.</p>
+  <p class="thesis"><b>Geographically grounded · time-aware · visually immersive.</b> Licensed internet photographs, reconstructed with COLMAP, placed without GPS inside the world's own 3D model (public USGS lidar), rendered as Gaussian splats that the lidar checks and teaches, and replayed over twenty years. Each chapter is a few steps: what you see, what it does, what came out.</p>
 </header>
 <main>
   <section id="viewport" aria-label="3D view">
@@ -104,15 +23,17 @@
       <div id="basis"></div>
     </div>
     <div id="overlay" hidden></div>
+    <div id="now" aria-live="polite"></div>
     <div id="legend"></div>
     <div id="status" role="status">Loading measured data…</div>
   </section>
   <aside id="panel">
     <nav id="chapters" aria-label="Chapters"></nav>
     <article id="chapter-body"></article>
+    <div id="stepnav"></div>
   </aside>
 </main>
-<footer><span class="keys">← → chapters · F full screen · drag to orbit, scroll to zoom</span> <span id="attribution"></span></footer>
+<footer><span class="keys">← → steps · PgUp PgDn chapters · A whole chapter · F full screen · drag to orbit, scroll to zoom</span> <span id="attribution"></span></footer>
 <script type="module" src="timemachine.js"></script>
 </body>
 </html>

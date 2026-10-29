@@ -495,29 +495,11 @@ function recordStrip(b) {
   if (!r || !r.strip.length) return '';
   return `<div class="strip">${r.strip.map(s => `<figure><a href="${s.source_url || '#'}" target="_blank" rel="noopener"><img src="${BASE + s.photo}" alt="${s.title || ''}" title="${(s.title || '') + ' — ' + (s.artist || '') + ', ' + (s.license || '')}"></a><figcaption>${s.date}</figcaption></figure>`).join('')}</div>`;
 }
-function buildingChapter(name, intro) {
-  const b = building(name); const c = centroid(b.ring);
-  body.innerHTML = `<h2>${name.replace('Bill and Melinda ', '')}</h2><p>${intro}</p>${evidence(b)}`;
-  const span = Math.max(...b.ring.map(p => p[0])) - Math.min(...b.ring.map(p => p[0]));
-  flyTo([c[0], c[1], b.ground + 5], Math.max(160, span * 2.4), 0.55, -2.3);
-  legend([['#b5532c', 'buildings that changed (outline; volume from 2020 lidar when standing)'], ['#303030', 'other footprints (OpenStreetMap)']]);
-  setYear(year);
-}
 // Where the photographers stood, as seen from the tower: the side from which the splat is best seen.
 function photographersAzimuth(tower) {
   const c = centroid(tower.ring), own = scene.photographers.filter(p => p.reconstruction === (mainCloud() || {}).meta?.tag);
   const v = own.reduce((a, p) => [a[0] + p.centre[0] - c[0], a[1] + p.centre[1] - c[1]], [0, 0]);
   return Math.atan2(v[1], v[0]);
-}
-function splatNumbers(s) {
-  return `<div class="stat">
-      <div>Gaussians shown (inside the lidar's measured volume)</div><div>${fmt(s.splat_gaussians)}</div>
-      <div>in air the lidar saw empty</div><div class="${s.free_space.in_free_air > 0.1 ? 'bad' : 'ok'}">${pct(s.free_space.in_free_air)}</div>
-      <div>buried under the bare ground</div><div>${pct(s.free_space.buried)}</div>
-      <div>on lidar surfaces (within 2.5 m)</div><div>${pct(s.free_space.on_surfaces)}</div>
-      <div>median distance to the nearest lidar return</div><div>${fmt(s.overall.median_m, 2)} m</div>
-      <div>held-out photographs, PSNR (mean; range)</div><div>${s.psnr && s.psnr.test_mean ? fmt(s.psnr.test_mean, 1) + ' dB; ' + fmt(Math.min(...s.psnr.test.map(x => x.psnr)), 0) + '–' + fmt(Math.max(...s.psnr.test.map(x => x.psnr)), 0) : '—'}</div>
-    </div>`;
 }
 // --- the wipe overlay: two images of the same view, a vertical divider to drag ------------------------------
 const overlay = document.getElementById('overlay');
@@ -612,299 +594,522 @@ const photographerOf = pose => scene.photographers.find(p => p.name === pose.ima
 
 const LEGEND_LIDAR = [['#28b34a', 'on a lidar surface'], ['#d9b316', '3 m or more from the nearest lidar return'], ['#e02924', 'in air the lidar saw empty'], ['#8c40bf', 'under the bare ground']];
 
+// --- chapters, each a sequence of steps ---------------------------------------------------------------
+// A chapter: { id, part, title, purpose, setup() -> ctx, steps }. A step: { title, see, body(ctx), after(ctx), view(ctx), sum(ctx) }.
+// `see` is the one sentence the viewport caption shows (what the 3D view is showing now), `body` the step's text and
+// result, `after` binds the controls once the body is in the page, `view` sets the 3D view, `sum` the one-line result
+// the step collapses to once it is taken. Steps are self-contained: any step can be opened from a link.
+const stat = (v, label, meaning, wide) => `<div class="r${wide ? ' wide' : ''}"><div class="v">${v}</div><div class="l">${label}</div>${meaning ? `<div class="m">${meaning}</div>` : ''}</div>`;
+const results = (...cards) => `<div class="result">${cards.join('')}</div>`;
+const strong = (v, unit = '') => `<b>${v}</b>${unit}`;
+// The cues of the placement (anchor/georegister.py), in words; their scores at the optimum come from the certificate.
+const CUES = [
+  ['walls', 'Walls', 'the reconstructed points should lie on the footprint walls, and every wall in view should carry points'],
+  ['roof_edges', 'Roof edges', 'where a wall meets the lidar roof fixes the height of that facade, and with it the scale'],
+  ['camera_height', 'Camera height', 'photographers stand at eye height on the lidar ground'],
+  ['landmark', 'Tower top', 'the highest cluster of points is the top of McGraw Tower, whose lidar height is known'],
+  ['free_space', 'Free space', 'the line from a camera to each point it saw must not pass through a building'],
+  ['outside', 'Cameras outside', 'no photographer stands inside a footprint'],
+];
+const cueCards = scores => `<div class="cuelist">${CUES.map(([k, name, what]) => `<div class="cue"><div class="head"><b>${name}</b>${scores ? `<span class="score">${fmt(scores[k], 2)}</span>` : ''}</div><div class="what">${what}</div>${scores ? `<div class="bar"><i style="width:${(100 * scores[k]).toFixed(0)}%"></i></div>` : ''}</div>`).join('')}</div>`;
+const towerView = (distance = 240, elevation = 0.42) => { const t = building('McGraw Tower'), c = centroid(t.ring); flyTo([c[0], c[1], t.ground + 20], distance, elevation, photographersAzimuth(t), 1.6); };
+const campusView = () => { const t = building('McGraw Tower'), c = centroid(t.ring); flyTo([c[0] + 60, c[1] + 120, t.ground], 760, 0.95, -1.9); };
+const settled = () => { if (placement.mode !== 'placed') { placement.mode = 'placed'; poseAt(1, 0); } };   // the fragment in its placed pose
+const fragmentOf = tag => scene.photographers.filter(p => p.reconstruction === tag);
+const CITY_LEGEND = [['#c8a96a', 'buildings: OpenStreetMap footprints raised to the USGS lidar roofs'], ['#4f7a3a', 'trees: one per lidar canopy peak']];
+const CHANGED_LEGEND = [['#b5532c', 'buildings that changed (outline; volume from 2020 lidar when standing)'], ['#303030', 'other footprints (OpenStreetMap)']];
+
+// What the page shows of a building that changed: documented dates, the flights, the ground record, one flight per step.
+function buildingSteps(name, intro, years) {
+  const b = building(name), d = b.documented, g = b.ground_photographs;
+  const label = y => ({ before: `not yet built — ${d.before}`, works: 'under construction', present: 'standing' })[state(b, y)] || 'standing';
+  const go = y => {
+    const c = centroid(b.ring), span = Math.max(...b.ring.map(p => p[0])) - Math.min(...b.ring.map(p => p[0]));
+    setView(); flyTo([c[0], c[1], b.ground + 5], Math.max(160, span * 2.4), 0.55, -2.3); legend(CHANGED_LEGEND); setYear(y);
+  };
+  const crops = Object.keys(b.aerial_crops || {});
+  return {
+    setup: () => ({ b }),
+    steps: [
+      { title: 'Documented', see: () => `the site in the ${flightYearFor(years[0])} flight: ${label(years[0])}.`,
+        body: () => `<p>${intro}</p><p><span class="state" data-state-of="${name}"></span></p><p><b>Documented.</b> ${d.documented}${d.source ? ` <a href="${d.source}" target="_blank" rel="noopener">source</a>` : ''}.</p>`,
+        view: () => go(years[0]), sum: () => d.documented },
+      { title: 'From the air', see: () => `the site in the ${flightYearFor(years[1])} flight. The strip shows it in every flight, this one outlined; the volume follows the documented dates, not the picture.`,
+        body: () => `<p>New York State orthoimagery, one flight every few years, draped on the lidar terrain. The number under each crop is the building's own-outline edge score, a diagnostic: it rises when the building appears, but stable buildings vary between flights by as much, so the dates on this page are the documented ones.</p>${strip(b)}`,
+        view: () => go(years[1]), sum: () => `${crops.length} flights, ${crops[0]}–${crops[crops.length - 1]}` },
+      { title: 'From the ground', see: () => `${years[2]}: ${label(years[2])}. The volume is the 2020 lidar shape, drawn only in years the documented dates say the building stood.`,
+        body: () => `<p>${g ? `${fmt(g.points)} reconstructed points on this building; first photographed ${g.earliest_photograph}, last ${g.latest_photograph}.` : groundRecord(b)}</p>${recordStrip(b)}`,
+        view: () => go(years[2]), sum: () => g ? `first photographed from the ground ${g.earliest_photograph}` : (b.ground_record ? `${fmt(b.ground_record.photographs)} licensed photographs; no anchored ground model` : 'no licensed photographs in the collection') },
+    ],
+  };
+}
+
 const chapters = [
-  { id: 'colmap', part: 'Beyond COLMAP', title: '0 · Where COLMAP stops', render() {
-      const r = mainCloud().meta, st = scene.placement_study || {}, own = scene.photographers.filter(p => p.reconstruction === r.tag);
+  { id: 'colmap', part: 'Beyond COLMAP', title: '0 · Where COLMAP stops', purpose: 'What the page starts from, where COLMAP stops on internet photographs of a real place, and what GhostMap adds.',
+    setup() {
+      const r = mainCloud().meta, st = scene.placement_study || {}, own = fragmentOf(r.tag);
       const tagged = (st.fragments || []).find(f => f.run === r.tag.slice(0, 8) && String(f.fragment) === r.tag.split('-')[1]);
-      const frs = (st.fragments || []).filter(f => f.run !== (r.tag || '').slice(0, 8)), refused = frs.filter(f => f.verdict !== 'usable');
+      const frs = (st.fragments || []).filter(f => f.run !== r.tag.slice(0, 8)), refused = frs.filter(f => f.verdict !== 'usable');
       const agree = (st.agreement_with_validated_frame || []).filter(a => a.building === 'McGraw Tower').map(a => a.median_distance_m);
-      const years = own.filter(p => p.year).map(p => p.year), S = r.splats || [], plain = S.find(s => !s.lidar_taught), taught = S.find(s => s.lidar_taught);
-      const go = (id, label) => `<button type="button" class="jump" data-go="${id}">${label} →</button>`;
-      const rows = [
-        ['A model in its own frame (no scale, north or up); a map needs GPS or hand-picked control points.',
-         'Placement without GPS, inside public lidar and building footprints.',
-         tagged ? gpsSentence(tagged.geotags, own.length) : '', go('void', 'chapters 1–2')],
-        ['Never says when a placement cannot be trusted.',
-         'A certificate: which cue fixed what, or a refusal with the reason.',
-         `${refused.length} of ${frs.length} campus fragments refused, each with a stated reason`, go('refuse', 'chapter 3')],
-        ['Disconnected fragments, each in its own frame.',
-         'One shared world frame.',
-         agree.length ? `wherever the tower pins another fragment, its tower points coincide within ${fmt(Math.min(...agree), 1)}–${fmt(Math.max(...agree), 1)} m` : '', go('refuse', 'chapter 3')],
-        ['Splats trained on its output float paint in mid-air, unchecked.',
-         'The lidar as referee and as teacher.',
-         plain && taught ? `on lidar surfaces ${pct(plain.free_space.on_surfaces)} → ${pct(taught.free_space.on_surfaces)}; under the ground ${pct(plain.free_space.buried)} → ${pct(taught.free_space.buried)}` : '', go('referee', 'chapters 4–5')],
-        ['One static scene: twenty years blended into one moment.',
-         'Years per point; dated buildings and aerial flights.',
-         years.length ? `${years.length} dated photographs, ${Math.min(...years)}–${Math.max(...years)}; 6 aerial flights, 2002–2023` : '', go('above', 'chapters 6–9')],
-        ['Registers a new photograph only into that same frame of its own.',
-         'A new photograph placed on the campus in seconds, with its own certificate, and painted back onto the lidar city.',
-         r.located && r.located.leave_one_out ? `taken out and placed again: median ${fmt(r.located.leave_one_out.placed_position_error_m.median, 1)} m from the reconstruction's own pose` : '', go('photo', 'chapter 11')]];
-      body.innerHTML = `<h2>Where COLMAP stops</h2>
-        <p>Everything here starts from COLMAP's cameras and points (pycolmap, SuperPoint and LightGlue). On internet photographs of a real place, six of its limits show; GhostMap builds past each one with public data only.</p>
-        ${rows.map(([lim, add, ev, link], i) => `<div class="limit"><div class="n">${i + 1}</div><div>
-          <p class="lim"><b>COLMAP:</b> ${lim}</p><p><b>GhostMap:</b> ${add}</p><p class="ev">${ev} ${link}</p></div></div>`).join('')}
-        <p class="note">The hack in one line: COLMAP's frame is arbitrary, so search for the one similarity transform that puts the reconstruction inside the lidar campus you see here — and say when no such transform is determined.</p>`;
-      for (const b of body.querySelectorAll('[data-go]')) b.onclick = () => show(b.dataset.go);
-      setView({ points: false, photographers: false }); legend([['#c8a96a', 'buildings: OpenStreetMap footprints raised to the USGS lidar roofs'], ['#4f7a3a', 'trees: one per lidar canopy peak']]);
-      const t = building('McGraw Tower'), c = centroid(t.ring); flyTo([c[0] + 90, c[1] + 140, t.ground], 820, 0.62, -2.05);
-      setYear(2023);
-    } },
-  { id: 'void', part: 'Where', title: '1 · Lost in space', render() {
-      const c = mainCloud(), r = c.meta, cert = r.placement && r.placement.certificate, st = scene.placement_study || {}, gt = st.geotags || {};
-      const own = scene.photographers.filter(p => p.reconstruction === r.tag);
+      const years = own.filter(p => p.year).map(p => p.year), S = r.splats || [];
+      const t = scene.sites.quad.terrain;
+      return { r, own, tagged, frs, refused, agree, years, plain: S.find(s => !s.lidar_taught), taught: S.find(s => s.lidar_taught), box: t.x1 - t.x0, buildings: scene.buildings.length };
+    },
+    steps: [
+      { title: 'The world already has a 3D model',
+        see: ctx => `the campus from measurement only: OpenStreetMap footprints raised to the USGS lidar roofs, one tree per lidar canopy peak, the 2023 aerial flight draped over the lidar ground.`,
+        body: ctx => `<p>Everything here starts from COLMAP's cameras and points (pycolmap, SuperPoint and LightGlue). GhostMap puts them inside <b>this</b> model, with public data only: USGS 3DEP airborne lidar, in metres, and OpenStreetMap building footprints. No GPS, no hand-picked point.</p>
+          ${results(stat(fmt(ctx.buildings), 'buildings', 'footprints inside the lidar box, each raised to its lidar roof'), stat(fmt(ctx.box) + ' m', 'lidar box', 'bare ground and surface, from the public lidar'))}
+          <p class="note">The chapters: <b>where</b> a fragment stands (1–3, and 11 for a photograph it has never seen), <b>how it looked</b> (4–5: Gaussian splats refereed and taught by the lidar), <b>when</b> (6–10: twenty years of aerial flights and dated points).</p>`,
+        view() { setView({ points: false, photographers: false }); legend(CITY_LEGEND); const t = building('McGraw Tower'), c = centroid(t.ring); flyTo([c[0] + 90, c[1] + 140, t.ground], 820, 0.62, -2.05); setYear(2023); },
+        sum: ctx => `public lidar and footprints: ${fmt(ctx.buildings)} buildings in a ${fmt(ctx.box)} m box` },
+      { title: 'Six limits, six answers',
+        see: 'the same campus. The tower-and-library fragment, COLMAP\'s output, is not in it yet: that is chapter 1.',
+        body: ctx => {
+          const { r, own, tagged, frs, refused, agree, years, plain, taught } = ctx;
+          const go = (id, label) => `<button type="button" class="jump" data-go="${id}">${label} →</button>`;
+          const rows = [
+            ['A model in its own frame (no scale, north or up); a map needs GPS or hand-picked control points.', 'Placement without GPS, inside public lidar and building footprints.', tagged ? gpsSentence(tagged.geotags, own.length) : '', go('void', 'chapters 1–2')],
+            ['Never says when a placement cannot be trusted.', 'A certificate: which cue fixed what, or a refusal with the reason.', `${refused.length} of ${frs.length} campus fragments refused, each with a stated reason`, go('refuse', 'chapter 3')],
+            ['Disconnected fragments, each in its own frame.', 'One shared world frame.', agree.length ? `wherever the tower pins another fragment, its tower points coincide within ${fmt(Math.min(...agree), 1)}–${fmt(Math.max(...agree), 1)} m` : '', go('refuse', 'chapter 3')],
+            ['Splats trained on its output float paint in mid-air, unchecked.', 'The lidar as referee and as teacher.', plain && taught ? `on lidar surfaces ${pct(plain.free_space.on_surfaces)} → ${pct(taught.free_space.on_surfaces)}; under the ground ${pct(plain.free_space.buried)} → ${pct(taught.free_space.buried)}` : '', go('referee', 'chapters 4–5')],
+            ['One static scene: twenty years blended into one moment.', 'Years per point; dated buildings and aerial flights.', years.length ? `${years.length} dated photographs, ${Math.min(...years)}–${Math.max(...years)}; ${YEARS.length} aerial flights, ${YEARS[0]}–${YEARS[YEARS.length - 1]}` : '', go('above', 'chapters 6–9')],
+            ['Registers a new photograph only into that same frame of its own.', 'A new photograph placed on the campus in seconds, with its own certificate, and painted back onto the lidar city.', r.located && r.located.leave_one_out ? `taken out and placed again: median ${fmt(r.located.leave_one_out.placed_position_error_m.median, 1)} m from the reconstruction's own pose` : '', go('photo', 'chapter 11')]];
+          return `${rows.map(([lim, add, ev, link], i) => `<div class="limit"><div class="n">${i + 1}</div><div><p class="lim"><b>COLMAP:</b> ${lim}</p><p><b>GhostMap:</b> ${add}</p><p class="ev">${ev} ${link}</p></div></div>`).join('')}
+            <p class="note">The hack in one line: COLMAP's frame is arbitrary, so search for the one similarity transform that puts the reconstruction inside the lidar campus you see here, and say when no such transform is determined.</p>
+            <p><button type="button" id="start">Start: the fragment in its void →</button></p>`;
+        },
+        after() { for (const b of body.querySelectorAll('[data-go]')) b.onclick = () => show(b.dataset.go); document.getElementById('start').onclick = () => show('void'); },
+        view() { setView({ points: false, photographers: false }); legend(CITY_LEGEND); setYear(2023); },
+        sum: () => 'COLMAP\'s frame is arbitrary; GhostMap searches for the one similarity transform that puts it inside the lidar campus, and says when none is determined' },
+    ] },
+
+  { id: 'void', part: 'Where', title: '1 · Lost in space', purpose: 'What COLMAP hands over, why the photographs\' GPS cannot fix it here, and what the world already knows.',
+    setup() {
+      const c = mainCloud(), r = c.meta, st = scene.placement_study || {}, own = fragmentOf(r.tag), years = own.filter(p => p.year).map(p => p.year);
       const tagged = (st.fragments || []).find(f => f.run === r.tag.slice(0, 8) && String(f.fragment) === r.tag.split('-')[1]);
-      body.innerHTML = `<h2>What COLMAP gives you: a model in a void</h2>
-        <p>${fmt(own.length)} licensed internet photographs of McGraw Tower and Uris Library, reconstructed by COLMAP (SuperPoint and LightGlue features). The result floats in its own coordinate frame: <b>no scale, no north, no up</b>.</p>
-        <div class="stat"><div>Wikimedia Commons photographs in the collection</div><div>${fmt(gt.photographs)}</div><div>with a GPS tag at all</div><div>${fmt(gt.with_gps)}</div>
-          <div>GPS tags among this fragment's ${fmt(own.length)} photographs</div><div>${tagged ? fmt(tagged.geotags.carried) + ((tagged.geotags.wrong_off_m || []).length ? ', ' + tagged.geotags.wrong_off_m.map(dist).join(', ') + ' off' : '') : '—'}</div>
-          ${tagged && tagged.geotags.without_metadata ? `<div>Flickr copies among them, with no metadata at all</div><div>${fmt(tagged.geotags.without_metadata)}</div>` : ''}</div>
-        <p>The usual fix, aligning to the photographs' GPS, needs at least three good tags and cannot even start. But the world already has a 3D model: public USGS airborne lidar covers most of the United States, and OpenStreetMap maps the buildings' footprints.</p>
-        <p><button type="button" id="go-snap">Place it in the world →</button></p>`;
-      document.getElementById('go-snap').onclick = () => show('snap');
-      setView({ terrain: false, outlines: false, volumes: false, dark: true, allPhotographers: true });
-      float();
-      const ac = c.anchoredCentre || centroid3(c.anchored);
-      flyTo([ac[0] - 150, ac[1] - 110, ac[2] + 140], 150, 0.25, -2.2);
-      legend([['#2a6fdb', 'photographers, as COLMAP placed them'], ['#c8c2b4', 'reconstructed points (photo colours)']]);
-      setYear(2023);
-    } },
-  { id: 'snap', part: 'Where', title: '2 · Snap to the world', render() {
-      const r = mainCloud().meta, P = r.placement || {}, cert = P.certificate, fs = P.sparse_points_free_space || {};
-      body.innerHTML = `<h2>Snap to the world, with a certificate</h2>
-        <p>Placed in metres in the 2020 USGS lidar using only public data and physics: building walls from OpenStreetMap, the lidar roof edges, the tower top, photographers standing at eye height on the lidar ground, and free space along every camera ray. <b>No GPS tag, no hand-picked point.</b></p>
-        ${cert ? `<p>${verdictBadge(cert.verdict, cert.failure_mode)} scale fixed by ${cert.scale_fixed_by.join(' and ')} (±${fmt(100 * cert.scale_uncertainty_relative, 1)} %)</p>
-        <div class="stat"><div>scale</div><div>${fmt(cert.scale_m_per_unit, 2)} m per model unit</div>
-          <div>its points on lidar surfaces (within 2.5 m)</div><div>${pct(fs.surface)}</div>
-          <div>best other heading reaches</div><div>${pct(Math.max(...Object.values(cert.yaw_contrast).filter(v => v !== null)))} of the best</div>
-          ${cert.levelling_correction_deg ? `<div>vertical levelled by the photographers' heights</div><div>${fmt(cert.levelling_correction_deg, 1)}°</div>` : ''}</div>
-        ${cert.levelling_correction_deg ? `<p class="note">The vertical comes from the facades. The photographers' heights over the lidar ground still showed a ${fmt(cert.levelling_tilt_deg, 1)}° tilt; of the verticals tried (none, a third, two thirds or all of that tilt), turning by ${fmt(cert.levelling_correction_deg, 1)}° scored best on all cues together.</p>` : ''}
-        ${profileChart(cert)}
-        <table><tr><th>cue</th><th class="num">score</th><th class="num">removing it moves the scale by</th></tr>${Object.entries(cert.cue_scores).map(([k, v]) => `<tr><td>${k.replace(/_/g, ' ')}</td><td class="num">${fmt(v, 2)}</td><td class="num">${pct(Math.abs((cert.cue_ablation[k] || {}).scale_ratio - 1), 1)}</td></tr>`).join('')}</table>` : ''}
-        <p><button type="button" id="replay">↺ replay the snap</button></p>`;
-      setView({ allPhotographers: true });
+      const t = scene.sites.quad.terrain;
+      return { c, r, own, years, tagged, gt: st.geotags || {}, artists: new Set(own.map(p => p.artist)).size, box: t.x1 - t.x0, buildings: scene.buildings.length };
+    },
+    steps: [
+      { title: 'What COLMAP hands over',
+        see: ctx => `the fragment in a void: ${fmt(ctx.own.length)} photographers (blue) and their ${fmt(ctx.r.points)} points in COLMAP's own coordinates, slowly turning. No scale, no north, no up.`,
+        body: ctx => `<p>${fmt(ctx.own.length)} licensed internet photographs of McGraw Tower and Uris Library by ${fmt(ctx.artists)} photographers${ctx.years.length ? ` (the dated ones ${Math.min(...ctx.years)}–${Math.max(...ctx.years)})` : ''}, reconstructed with pycolmap, SuperPoint and LightGlue. Structure from motion recovers a scene only up to a similarity: <b>one scale, three rotations and three translations</b>, seven numbers, are free.</p>
+          ${results(stat(fmt(ctx.own.length), 'photographs', 'Wikimedia Commons and Flickr (via Openverse), each with its licence'), stat(fmt(ctx.r.points), 'points', 'COLMAP\'s sparse reconstruction'), stat(fmt(ctx.artists), 'photographers', 'different people, different cameras, different years'), stat('7', 'free numbers', 'scale, heading, two tilts, three positions'))}`,
+        view(ctx) { setView({ terrain: false, outlines: false, volumes: false, dark: true, allPhotographers: true }); float(); const ac = ctx.c.anchoredCentre || centroid3(ctx.c.anchored); flyTo([ac[0] - 150, ac[1] - 110, ac[2] + 140], 150, 0.25, -2.2); legend([['#2a6fdb', 'photographers, as COLMAP placed them'], ['#c8c2b4', 'reconstructed points (photo colours)']]); setYear(2023); },
+        sum: ctx => `${fmt(ctx.own.length)} photographs, ${fmt(ctx.r.points)} points, seven free numbers` },
+      { title: 'Why GPS cannot fix it here',
+        see: 'the same fragment, still turning in its void.',
+        body: ctx => { const g = ctx.tagged ? ctx.tagged.geotags : null;
+          return `<p>COLMAP's own fix, <code>model_aligner</code>, needs the cameras' positions, usually from GPS tags. Here they are missing where they matter.</p>
+          ${results(stat(`${fmt(ctx.gt.with_gps)} of ${fmt(ctx.gt.photographs)}`, 'Commons photographs with any GPS tag', 'across the whole campus collection'),
+                    g ? stat(`${fmt(g.carried)} of ${fmt(ctx.own.length)}`, 'tags in this fragment', (g.wrong_off_m || []).length ? `and ${g.wrong_off_m.length === 1 ? 'it is' : 'they are'} ${g.wrong_off_m.map(dist).join(', ')} off` : '') : '',
+                    g && g.without_metadata ? stat(fmt(g.without_metadata), 'with no metadata at all', 'Flickr web copies: no camera, no date, no place', true) : '')}
+          <p class="note">A similarity needs at least three good tags; the fit cannot even start. Where tags exist elsewhere on the campus, some are kilometres off (chapter 3).</p>`; },
+        sum: ctx => { const g = ctx.tagged ? ctx.tagged.geotags : null; return g ? `${fmt(g.carried)} GPS tag in ${fmt(ctx.own.length)} photographs${(g.wrong_off_m || []).length ? ', ' + g.wrong_off_m.map(dist).join(', ') + ' off' : ''}` : 'no usable GPS'; } },
+      { title: 'But the world already has a 3D model',
+        see: ctx => `the campus as the lidar measured it, ${fmt(ctx.buildings)} buildings in a ${fmt(ctx.box)} m box, with the fragment still floating above it in its own frame.`,
+        body: () => `<p>Public USGS airborne lidar covers most of the United States, in metres; OpenStreetMap maps every building's footprint. Between them they know where the walls, the roofs, the ground and the tower top are. The question becomes: <b>which similarity transform puts COLMAP's fragment into this model?</b></p>
+          <p><button type="button" id="go-snap">Place it in the world →</button></p>`,
+        after() { document.getElementById('go-snap').onclick = () => show('snap'); },
+        view(ctx) { setView({ allPhotographers: true }); float(); const ac = ctx.c.anchoredCentre || centroid3(ctx.c.anchored); flyTo([ac[0] - 60, ac[1] - 40, ac[2] + 60], 420, 0.45, -2.2, 1.6); legend([['#2a6fdb', 'photographers, as COLMAP placed them'], ...CITY_LEGEND]); setYear(2023); },
+        sum: () => 'public lidar and OpenStreetMap footprints: walls, roofs, ground, tower top' },
+    ] },
+
+  { id: 'snap', part: 'Where', title: '2 · Snap to the world', purpose: 'Six cues from public data and physics, a search over every heading and scale, and a certificate that says which cue fixed what.',
+    setup() {
+      const c = mainCloud(), r = c.meta, P = r.placement || {}, cert = P.certificate, fs = P.sparse_points_free_space || {};
       const tower = building('McGraw Tower'), tc = centroid(tower.ring), az = photographersAzimuth(tower);
-      const go = () => { float(); placement.t0 = performance.now(); snapIntoPlace(); placement.done = () => flyTo([tc[0], tc[1], tower.ground + 20], 240, 0.42, az, 1.6); };
-      document.getElementById('replay').onclick = go;
-      const ac = mainCloud().anchoredCentre || centroid3(mainCloud().anchored);
-      flyTo([ac[0] - 60, ac[1] - 40, ac[2] + 60], 420, 0.45, -2.2, 1.0); go();
-      legend([['#2a6fdb', 'photographers, placed'], ['#303030', 'OpenStreetMap footprints'], ['#b5532c', 'buildings that changed since 2002']]);
-      setYear(2023);
-    } },
-  { id: 'refuse', part: 'Where', title: "3 · Knowing when it can't", render() {
-      const st = scene.placement_study || {}, frs = (st.fragments || []).filter(f => f.run !== (mainCloud().meta.tag || '').slice(0, 8));
+      const other = Math.max(...Object.entries(cert.cue_ablation).filter(([k]) => k !== 'landmark').map(([, v]) => v.position_shift_m));
+      return { c, r, cert, fs, tower, tc, az, own: fragmentOf(r.tag), runnerUp: Math.max(...Object.values(cert.yaw_contrast).filter(v => v !== null)), other };
+    },
+    steps: [
+      { title: 'Six cues, from public data and physics',
+        see: ctx => `the fragment floating above the campus in COLMAP's own frame: ${fmt(ctx.own.length)} photographers (blue) and ${fmt(ctx.r.points)} points at an arbitrary size and heading. The lidar city below is what it has to agree with.`,
+        body: () => `<p>Any candidate placement (a scale, a heading, two tilts, a position) gets a score from six cues. None needs a GPS tag or a hand-picked point:</p>${cueCards(null)}`,
+        view(ctx) { setView({ allPhotographers: true }); float(); const ac = ctx.c.anchoredCentre || centroid3(ctx.c.anchored); flyTo([ac[0] - 60, ac[1] - 40, ac[2] + 60], 420, 0.45, -2.2, 1.0); legend([['#2a6fdb', 'photographers, as COLMAP placed them'], ['#303030', 'OpenStreetMap footprints']]); setYear(2023); },
+        sum: () => 'walls, roof edges, camera height, tower top, free space, cameras outside' },
+      { title: 'The search',
+        see: 'the fragment turning, shrinking and sliding into the lidar campus: the placement that scores best over every heading and a band of scales, its position settled by descent.',
+        body: () => `<p>Every heading is tried at every scale of the band; at each, the position settles by descent and the vertical is levelled by the photographers' heights. <b>Every placement keeps its score</b>, not only the winner: the certificate reads those scores afterwards.</p>
+          <p><button type="button" id="replay">↺ replay the snap</button></p>`,
+        after(ctx) { document.getElementById('replay').onclick = () => ctx.go(); },
+        view(ctx) {
+          ctx.go = () => { float(); placement.t0 = performance.now(); snapIntoPlace(); placement.done = () => flyTo([ctx.tc[0], ctx.tc[1], ctx.tower.ground + 20], 240, 0.42, ctx.az, 1.6); };
+          setView({ allPhotographers: true }); const ac = ctx.c.anchoredCentre || centroid3(ctx.c.anchored); flyTo([ac[0] - 60, ac[1] - 40, ac[2] + 60], 420, 0.45, -2.2, 1.0); ctx.go();
+          legend([['#2a6fdb', 'photographers, placed'], ['#303030', 'OpenStreetMap footprints'], ['#b5532c', 'buildings that changed since 2002']]); setYear(2023);
+        },
+        sum: ctx => `placed: ${fmt(ctx.cert.scale_m_per_unit, 2)} m per model unit` },
+      { title: 'The certificate',
+        see: 'the fragment placed: its points on the lidar walls and roofs, the photographers on Ho Plaza and Libe Slope at eye height, McGraw Tower in the middle.',
+        body: ctx => { const { cert, fs, runnerUp } = ctx;
+          return `<p>${verdictBadge(cert.verdict, cert.failure_mode)} scale fixed by ${cert.scale_fixed_by.join(', ')}.</p>
+          ${results(stat(fmt(cert.scale_m_per_unit, 2) + ' m', 'per model unit', `the scale, known to ±${fmt(100 * cert.scale_uncertainty_relative, 1)} %: three cues fix it independently and agree`),
+                    stat(pct(runnerUp), 'runner-up heading', 'the best other heading scores this much of the winner: the heading is settled, not a near tie'),
+                    cert.levelling_correction_deg ? stat(fmt(cert.levelling_correction_deg, 1) + '°', 'levelled', `the photographers' heights over the lidar ground showed a ${fmt(cert.levelling_tilt_deg, 1)}° tilt in the facades' vertical; turning by this much scored best on all cues together`) : '',
+                    stat(pct(fs.surface), 'points on lidar surfaces', 'of COLMAP\'s points within 2.5 m of a lidar return; ' + pct(cert.points_within_1m_of_walls) + ' within 1 m of a footprint wall'),
+                    stat(`${fmt(cert.cameras_in_height_band)} of ${fmt(cert.cameras)}`, 'photographers at eye height', 'the rest stand on stairs, slopes and the tower itself: the cue has a low weight for that reason', true))}`; },
+        view(ctx) { settled(); setView({ allPhotographers: true }); flyTo([ctx.tc[0], ctx.tc[1], ctx.tower.ground + 20], 240, 0.42, ctx.az, 1.6); legend([['#2a6fdb', 'photographers, placed'], ['#303030', 'OpenStreetMap footprints']]); setYear(2023); },
+        sum: ctx => `${verdictBadge(ctx.cert.verdict, ctx.cert.failure_mode)} scale ±${fmt(100 * ctx.cert.scale_uncertainty_relative, 1)} %, runner-up heading ${pct(ctx.runnerUp)}` },
+      { title: 'Which cue fixed what',
+        see: 'the placed fragment, from the photographers\' side.',
+        body: ctx => { const { cert } = ctx;
+          return `<p>Each cue's score at the optimum, and how far the optimum moves when that cue is left out of the fit:</p>
+          ${cueCards(cert.cue_scores)}
+          <table><tr><th>without</th><th class="num">the optimum moves</th><th class="num">the scale changes</th></tr>${Object.entries(cert.cue_ablation).map(([k, v]) => `<tr><td>${CUES.find(c => c[0] === k)?.[1] || k.replace(/_/g, ' ')}</td><td class="num">${fmt(v.position_shift_m, 1)} m, ${fmt(Math.abs(v.yaw_shift_deg), 1)}°</td><td class="num">${pct(Math.abs(v.scale_ratio - 1), 1)}</td></tr>`).join('')}</table>
+          <p class="note">The tower top matters most: without it the optimum moves ${fmt(cert.cue_ablation.landmark.position_shift_m, 1)} m; without any other single cue, under ${fmt(Math.ceil(ctx.other * 10) / 10, 1)} m. The walls score low here because airborne lidar and footprints see walls thinly; they still fix the scale on their own (parallel walls in view).</p>
+          ${profileChart(cert)}`; },
+        view(ctx) { settled(); setView({ allPhotographers: true }); flyTo([ctx.tc[0], ctx.tc[1], ctx.tower.ground + 20], 240, 0.42, ctx.az, 1.6); legend([['#2a6fdb', 'photographers, placed'], ['#303030', 'OpenStreetMap footprints']]); setYear(2023); },
+        sum: ctx => `the tower top fixes most: without it the optimum moves ${fmt(ctx.cert.cue_ablation.landmark.position_shift_m, 1)} m` },
+    ] },
+
+  { id: 'refuse', part: 'Where', title: "3 · Knowing when it can't", purpose: 'The whole campus reconstructed at once: every fragment the evidence cannot pin down is refused, with the reason, and a synthetic hall shows why.',
+    setup() {
+      const st = scene.placement_study || {}, tag = (mainCloud().meta.tag || '').slice(0, 8);
+      const frs = (st.fragments || []).filter(f => f.run !== tag), refused = frs.filter(f => f.verdict !== 'usable');
+      const checked = frs.filter(f => f.ours_vs_geotags_m).map(f => f.ours_vs_geotags_m.median);
       const agree = (st.agreement_with_validated_frame || []).filter(a => a.building === 'McGraw Tower').map(a => a.median_distance_m);
       const lib = (st.agreement_with_validated_frame || []).filter(a => a.building === 'Uris Library');
       const synth = (st.identifiability || []).filter(x => x.cues === 'all cues' && x.camera_height_noise_m === 0 && x.seed === 0);
-      body.innerHTML = `<h2>Knowing when it can't</h2>
-        <p>The whole campus collection reconstructed at once on the GPU (${fmt(st.campus_run ? st.campus_run.photographs : null)} photographs in minutes, ${fmt(st.campus_run ? st.campus_run.registered : null)} registered): ${frs.length} fragments with eight or more cameras. The certificate refuses every one, each for a stated reason, and every placement the photographs' own GPS tags could check was far off, and refused.</p>
-        <table><tr><th>fragment</th><th class="num">cameras</th><th>certificate</th><th class="num">GPS tags</th><th class="num">off by</th></tr>
-          ${frs.map(f => `<tr><td>${f.building.replace('Bill and Melinda ', '')}</td><td class="num">${f.cameras}</td><td>${verdictBadge(f.verdict, f.failure_mode)}</td><td class="num">${f.geotags.plausible}/${f.geotags.carried}</td><td class="num">${f.ours_vs_geotags_m ? fmt(f.ours_vs_geotags_m.median) + ' m' : '—'}</td></tr>`).join('')}</table>
-        ${agree.length ? `<p class="note">Against the validated tower-and-library placement: wherever the tower pins a campus fragment, its tower points coincide within ${fmt(Math.min(...agree), 1)}–${fmt(Math.max(...agree), 1)} m${lib.length ? `; the largest fragment's library points are ${fmt(lib[0].median_distance_m)} m off — its heading around the tower is wrong, and it was refused` : ''}.</p>` : ''}
-        <h3>Why: a synthetic hall with a known answer</h3>
-        <table><tr><th>facades in view</th><th class="num">roof-edge error</th><th class="num">scale</th><th class="num">heading</th><th>certificate</th></tr>
-          ${synth.map(x => `<tr><td>${x.facades}</td><td class="num">${fmt(x.roof_edge_error_m)} m</td><td class="num">×${fmt(x.scale_ratio, 3)}</td><td class="num">${fmt(x.yaw_error_deg, 1)}°</td><td>${verdictBadge(x.verdict, x.failure_mode)}</td></tr>`).join('')}</table>
-        <p class="note">One facade cannot fix its own scale; two parallel facades slide along each other; a wrong lidar roof edge is caught when walls fix the scale independently ("cues disagree"), and otherwise shows up as the stated scale uncertainty.</p>`;
-      setView({ allPhotographers: true }); legend([['#303030', 'OpenStreetMap footprints']]);
-      const t = building('McGraw Tower'), c = centroid(t.ring); flyTo([c[0] + 60, c[1] + 120, t.ground], 760, 0.95, -1.9);
-      setYear(2023);
-    } },
-  { id: 'referee', part: 'How it looked', title: '4 · The lidar as referee', render() {
+      return { st, frs, refused, checked, agree, lib, synth, run: st.campus_run || {} };
+    },
+    steps: [
+      { title: 'The whole campus at once',
+        see: 'the campus from above, with the placed tower-and-library fragment in the middle. The other fragments are not drawn: none could be placed.',
+        body: ctx => `<p>Every licensed photograph of the campus collection, reconstructed in one run on the GPU: many fragments, each in its own frame, named by the building most of its photographs show.</p>
+          ${results(stat(fmt(ctx.run.photographs), 'photographs', 'the whole campus collection'), stat(fmt(ctx.run.registered), 'registered', 'placed by COLMAP in some fragment'), stat(fmt(ctx.run.fragments), 'fragments', 'disconnected pieces'), stat(fmt(ctx.frs.length), 'with eight or more cameras', 'the ones the placement was tried on'))}`,
+        view() { setView({ allPhotographers: true }); legend([['#303030', 'OpenStreetMap footprints']]); campusView(); setYear(2023); },
+        sum: ctx => `${fmt(ctx.run.photographs)} photographs → ${fmt(ctx.run.fragments)} fragments, ${fmt(ctx.frs.length)} with eight or more cameras` },
+      { title: 'Every one refused, with its reason',
+        see: 'the same view.',
+        body: ctx => `<table><tr><th>fragment</th><th class="num">cameras</th><th>certificate</th><th class="num">GPS tags</th><th class="num">off by</th></tr>
+          ${ctx.frs.map(f => `<tr><td>${f.building.replace('Bill and Melinda ', '')}</td><td class="num">${f.cameras}</td><td>${verdictBadge(f.verdict, f.failure_mode)}</td><td class="num">${f.geotags.plausible}/${f.geotags.carried}</td><td class="num">${f.ours_vs_geotags_m ? fmt(f.ours_vs_geotags_m.median) + ' m' : '—'}</td></tr>`).join('')}</table>
+          <p class="note">"GPS tags": plausible tags of all carried. "Off by": how far the fit's cameras land from those tags. ${ctx.checked.length ? `Every placement the tags could check was ${fmt(Math.min(...ctx.checked))}–${fmt(Math.max(...ctx.checked))} m off, and every one of them was refused: the certificate caught each wrong placement without seeing a single tag.` : ''}</p>`,
+        view() { setView({ allPhotographers: true }); legend([['#303030', 'OpenStreetMap footprints']]); campusView(); setYear(2023); },
+        sum: ctx => `${fmt(ctx.refused.length)} of ${fmt(ctx.frs.length)} refused${ctx.checked.length ? `; the ${ctx.checked.length} that GPS could check were ${fmt(Math.min(...ctx.checked))}–${fmt(Math.max(...ctx.checked))} m off` : ''}` },
+      { title: 'The same tower through two fragments',
+        see: 'the placed tower-and-library fragment; the campus fragments that also see McGraw Tower put its points within about a metre of these.',
+        body: ctx => `<p>A free check: where two fragments contain the same building, their placed copies of it should coincide.</p>
+          ${results(ctx.agree.length ? stat(`${fmt(Math.min(...ctx.agree), 1)}–${fmt(Math.max(...ctx.agree), 1)} m`, 'McGraw Tower, fragment to fragment', 'median distance between the tower points of a campus fragment and of the validated fragment, wherever the tower pins the campus fragment') : '',
+                    ctx.lib.length ? stat(fmt(ctx.lib[0].median_distance_m) + ' m', 'Uris Library, the largest campus fragment', 'its heading around the tower is wrong, and that fragment was refused: the disagreement is on the refused side') : '')}`,
+        view() { settled(); setView({ allPhotographers: true }); legend([['#2a6fdb', 'photographers, placed'], ['#303030', 'OpenStreetMap footprints']]); towerView(260, 0.5); setYear(2023); },
+        sum: ctx => ctx.agree.length ? `tower points agree within ${fmt(Math.min(...ctx.agree), 1)}–${fmt(Math.max(...ctx.agree), 1)} m${ctx.lib.length ? `; the library ${fmt(ctx.lib[0].median_distance_m)} m off where the heading was refused` : ''}` : '' },
+      { title: 'Why: a synthetic hall with a known answer',
+        see: 'the campus; the hall is synthetic, not drawn.',
+        body: ctx => `<p>A hall whose true placement is known, seen through one facade, two parallel facades, a corner or three facades, with and without a ${fmt(Math.max(...ctx.synth.map(x => x.roof_edge_error_m)))} m error in the lidar roof edge:</p>
+          <table><tr><th>facades in view</th><th class="num">roof-edge error</th><th class="num">scale</th><th class="num">heading</th><th>certificate</th></tr>
+          ${ctx.synth.map(x => `<tr><td>${x.facades}</td><td class="num">${fmt(x.roof_edge_error_m)} m</td><td class="num">×${fmt(x.scale_ratio, 3)}</td><td class="num">${fmt(x.yaw_error_deg, 1)}°</td><td>${verdictBadge(x.verdict, x.failure_mode)}</td></tr>`).join('')}</table>
+          <p class="note">One facade cannot fix its own scale; two parallel facades slide along each other; a wrong lidar roof edge is caught when the walls fix the scale independently ("cues disagree"), and otherwise shows up as the stated scale uncertainty.</p>`,
+        view() { setView({ allPhotographers: true }); legend([['#303030', 'OpenStreetMap footprints']]); campusView(); setYear(2023); },
+        sum: () => 'one facade: scale undetermined; two parallel: position undetermined; a corner or three facades: usable' },
+    ] },
+
+  { id: 'referee', part: 'How it looked', title: '4 · The lidar as referee', purpose: 'A Gaussian splat trained from the same photographs, in the lidar\'s metres, so every Gaussian can be checked against what the lidar measured.',
+    setup() {
       const r = mainCloud().meta, plain = (r.splats || []).find(s => !s.lidar_taught) || (r.splats || [])[0];
-      if (!plain) { body.innerHTML = '<h2>The lidar as referee</h2><p>No Gaussian splat has been trained for this fragment yet.</p>'; setView(); setYear(2023); return; }
-      const fs = r.placement ? r.placement.sparse_points_free_space : null;
+      if (!plain) return { r };
       const pb = Object.entries(plain.per_building).sort((a, b) => b[1].gaussians - a[1].gaussians).slice(0, 4);
-      const poses = (plain.views && plain.views.poses) || [];
-      body.innerHTML = `<h2>How it looked, checked against the world</h2>
-        <p>A Gaussian splat trained from the same ${fmt(plain.images ? plain.images.train : null)} photographs (${fmt(plain.images ? plain.images.test : null)} held out), directly in the lidar's metres. Because it lives in the lidar frame, every Gaussian can be checked against what the lidar measured.</p>
-        <div class="cues" id="refmode">
-          ${poses.map((p, i) => `<label><input type="radio" name="refmode" value="pose-${i}" ${i === 0 ? 'checked' : ''}>${poseLabel(p, i)}</label>`).join('')}
-          <label><input type="radio" name="refmode" value="campus" ${poses.length ? '' : 'checked'}>in the lidar campus</label>
-          <label><input type="radio" name="refmode" value="verdict">the lidar's verdict on every Gaussian</label></div>
-        <p class="note" id="refhint"></p>
-        ${splatNumbers(plain)}
-        <table><tr><th>building</th><th class="num">Gaussians</th><th class="num">median to lidar</th><th class="num">in free air</th><th class="num">covers the lidar building</th></tr>
-          ${pb.map(([n, v]) => `<tr><td>${n}</td><td class="num">${fmt(v.gaussians)}</td><td class="num">${fmt(v.median_m, 2)} m</td><td class="num">${pct(v.in_free_air)}</td><td class="num">${pct(v.coverage)}</td></tr>`).join('')}</table>
-        ${fs ? `<p class="note">For scale: COLMAP's own sparse points of this fragment sit on lidar surfaces ${pct(fs.surface)} of the time (${pct(fs.air)} in free air). Airborne lidar sees roofs and ground densely and walls thinly, so the distance is a conservative score for wall Gaussians.</p>` : ''}`;
-      const tower = building('McGraw Tower'), c = centroid(tower.ring);
-      const apply = () => {
-        const mode = document.querySelector('input[name=refmode]:checked').value, hint = document.getElementById('refhint');
-        if (mode.startsWith('pose-')) {
-          const p = poses[+mode.slice(5)], ph = photographerOf(p);
-          setView({ points: false, photographers: false, splat: null }); legend([]);
-          showWipe({ url: p.photo_url, label: 'the photograph' }, { url: p.render_url, label: 'the splat, from the same pose' }, p.size);
-          if (ph) flyToPhotographer(ph, 0.01);
-          hint.textContent = (p.held_out ? 'A photograph the splat never saw. ' : 'A training photograph. ') + 'Drag across the image to compare; gsplat renders from the photographer\'s pose, colour fitted to the photograph as in the held-out PSNR.';
-        } else {
-          hideOverlay();
-          const verdict = mode === 'verdict';
-          setView({ points: false, photographers: false, splat: verdict ? null : plain.name, splatLayer: verdict ? plain.name : null });
-          legend(verdict ? LEGEND_LIDAR : [['#b5532c', 'buildings that changed since 2002']]); setYear(year);
-          if (!verdict) showSplat(plain.name, 'referee');
-          flyTo([c[0], c[1], tower.ground + 18], 190, 0.35, photographersAzimuth(tower));
-          hint.textContent = verdict ? 'Every opaque Gaussian inside the lidar\'s measured volume, coloured by what the lidar says about where it sits.' : 'The live splat inside the lidar campus. Away from the photographers\' viewpoints a splat of internet photographs is only half constrained: what you see from up here is the reason it needs a referee.';
-        }
-      };
-      for (const x of document.querySelectorAll('input[name=refmode]')) x.onchange = apply;
-      apply(); setYear(2023);
-    } },
-  { id: 'teacher', part: 'How it looked', title: '5 · The lidar as teacher', render() {
+      return { r, plain, fs: r.placement ? r.placement.sparse_points_free_space : null, pb, poses: (plain.views && plain.views.poses) || [], tower: building('McGraw Tower') };
+    },
+    steps: [
+      { title: 'The splat, from where a photographer stood',
+        see: ctx => ctx.plain ? 'left, the photograph; right, the Gaussian splat rendered from the same pose. Drag the divider across.' : 'the campus; no splat has been trained for this fragment yet.',
+        body: ctx => { const { plain, poses } = ctx; if (!plain) return '<p>No Gaussian splat has been trained for this fragment yet.</p>';
+          return `<p>A Gaussian splat trained from ${fmt(plain.images ? plain.images.train : null)} of the photographs (${fmt(plain.images ? plain.images.test : null)} held out), ${fmt(plain.steps)} steps, directly in the lidar frame. Near the photographers' viewpoints it reproduces the photographs; away from them, a splat of internet photographs is only half constrained.</p>
+          <div class="cues" id="refmode">
+            ${poses.map((p, i) => `<label><input type="radio" name="refmode" value="pose-${i}" ${i === 0 ? 'checked' : ''}>${poseLabel(p, i)}</label>`).join('')}
+            <label><input type="radio" name="refmode" value="campus" ${poses.length ? '' : 'checked'}>in the lidar campus</label>
+            <label><input type="radio" name="refmode" value="verdict">the lidar's verdict on every Gaussian</label></div>
+          <p class="note" id="refhint"></p>
+          ${results(stat(plain.psnr && plain.psnr.test_mean ? fmt(plain.psnr.test_mean, 1) + ' dB' : '—', 'held-out PSNR, mean', `over the ${fmt(plain.images ? plain.images.test : null)} held-out photographs; the best-covered view reaches ${fmt(plain.psnr_best_covered_view, 1)} dB`), stat(fmt(plain.seconds / 60) + ' min', 'training', 'on a laptop GPU'))}`; },
+        after(ctx) { if (!ctx.plain) return;
+          const { plain, poses, tower } = ctx, c = centroid(tower.ring);
+          const apply = () => {
+            const mode = document.querySelector('input[name=refmode]:checked').value, hint = document.getElementById('refhint');
+            if (mode.startsWith('pose-')) {
+              const p = poses[+mode.slice(5)], ph = photographerOf(p);
+              setView({ points: false, photographers: false, splat: null }); legend([]);
+              showWipe({ url: p.photo_url, label: 'the photograph' }, { url: p.render_url, label: 'the splat, from the same pose' }, p.size);
+              if (ph) flyToPhotographer(ph, 0.01);
+              hint.textContent = (p.held_out ? 'A photograph the splat never saw. ' : 'A training photograph. ') + 'gsplat renders from the photographer\'s pose, colour fitted to the photograph as in the held-out PSNR.';
+            } else {
+              hideOverlay(); const verdict = mode === 'verdict';
+              setView({ points: false, photographers: false, splat: verdict ? null : plain.name, splatLayer: verdict ? plain.name : null });
+              legend(verdict ? LEGEND_LIDAR : [['#b5532c', 'buildings that changed since 2002']]); setYear(year);
+              if (!verdict) showSplat(plain.name, 'referee');
+              flyTo([c[0], c[1], tower.ground + 18], 190, 0.35, photographersAzimuth(tower));
+              hint.textContent = verdict ? 'Every opaque Gaussian inside the lidar\'s measured volume, coloured by what the lidar says about where it sits.' : 'The live splat inside the lidar campus: what you see from up here is the reason it needs a referee.';
+            }
+          };
+          for (const x of document.querySelectorAll('input[name=refmode]')) x.onchange = apply;
+          ctx.apply = apply;
+        },
+        view(ctx) { if (ctx.apply) ctx.apply(); else { setView(); legend([]); } setYear(2023); },
+        sum: ctx => ctx.plain ? `held-out PSNR ${fmt(ctx.plain.psnr.test_mean, 1)} dB mean, ${fmt(ctx.plain.psnr_best_covered_view, 1)} dB on the best-covered view` : 'no splat yet' },
+      { title: 'Every Gaussian, judged by the lidar',
+        see: 'every opaque Gaussian inside the lidar\'s measured volume, coloured by the lidar\'s verdict: green on a measured surface, red in air the lidar saw empty, purple under the bare ground.',
+        body: ctx => { const s = ctx.plain; if (!s) return '';
+          return `<p>Because the splat lives in the lidar frame, each Gaussian's distance to the nearest lidar return is a measurement, not an impression.</p>
+          ${results(stat(pct(s.free_space.on_surfaces), 'on lidar surfaces', 'within 2.5 m of a lidar return: the paint that is where the world is'),
+                    stat(pct(s.free_space.in_free_air), 'in air the lidar saw empty', 'paint floating in mid-air to explain the photographs'),
+                    stat(pct(s.free_space.buried), 'under the bare ground', 'paint below the terrain, invisible from the photographs'),
+                    stat(fmt(s.overall.median_m, 2) + ' m', 'median distance to the lidar', `over the ${fmt(s.splat_gaussians)} Gaussians inside the measured volume`))}
+          ${ctx.fs ? `<p class="note">For scale: COLMAP's own sparse points of this fragment sit on lidar surfaces ${pct(ctx.fs.surface)} of the time (${pct(ctx.fs.air)} in free air).</p>` : ''}`; },
+        view(ctx) { if (!ctx.plain) return; hideOverlay(); const t = ctx.tower, c = centroid(t.ring); setView({ points: false, photographers: false, splatLayer: ctx.plain.name }); legend(LEGEND_LIDAR); flyTo([c[0], c[1], t.ground + 18], 190, 0.35, photographersAzimuth(t)); setYear(2023); },
+        sum: ctx => ctx.plain ? `${pct(ctx.plain.free_space.on_surfaces)} on lidar surfaces, ${pct(ctx.plain.free_space.in_free_air)} in empty air, ${pct(ctx.plain.free_space.buried)} under the ground` : '' },
+      { title: 'Building by building',
+        see: 'the same verdict layer.',
+        body: ctx => { if (!ctx.plain) return '';
+          return `<table><tr><th>building</th><th class="num">Gaussians</th><th class="num">median to lidar</th><th class="num">in free air</th><th class="num">covers the lidar building</th></tr>
+          ${ctx.pb.map(([n, v]) => `<tr><td>${n}</td><td class="num">${fmt(v.gaussians)}</td><td class="num">${fmt(v.median_m, 2)} m</td><td class="num">${pct(v.in_free_air)}</td><td class="num">${pct(v.coverage)}</td></tr>`).join('')}</table>
+          <p class="note">Airborne lidar sees roofs and ground densely and walls thinly, so a Gaussian on a wall is judged against the nearest roof edge or ground return: the distance is a conservative score for walls.</p>`; },
+        view(ctx) { if (!ctx.plain) return; hideOverlay(); const t = ctx.tower, c = centroid(t.ring); setView({ points: false, photographers: false, splatLayer: ctx.plain.name }); legend(LEGEND_LIDAR); flyTo([c[0], c[1], t.ground + 18], 190, 0.35, photographersAzimuth(t)); setYear(2023); },
+        sum: ctx => ctx.pb && ctx.pb.length ? `${ctx.pb[0][0]}: ${fmt(ctx.pb[0][1].median_m, 2)} m median to the lidar` : '' },
+    ] },
+
+  { id: 'teacher', part: 'How it looked', title: '5 · The lidar as teacher', purpose: 'The same photographs and the same steps, with one extra rule from the lidar; what the rule changes, in a fly-through and in numbers.',
+    setup() {
       const r = mainCloud().meta, S = r.splats || [], plain = S.find(s => !s.lidar_taught), taught = S.find(s => s.lidar_taught);
-      if (!plain || !taught) { body.innerHTML = '<h2>The lidar as teacher</h2><p>The lidar-taught splat has not been trained yet.</p>'; setView(); setYear(2023); return; }
-      const row = (label, f, cls) => `<tr><td>${label}</td><td class="num">${f(plain)}</td><td class="num ${cls || ''}">${f(taught)}</td></tr>`;
+      if (!plain || !taught) return { r };
       const poses = (plain.views && taught.views) ? plain.views.poses.filter(p => taught.views.poses.some(q => q.photo === p.photo)) : [];
-      const fly = plain.views && taught.views && plain.views.fly && taught.views.fly;
-      body.innerHTML = `<h2>The lidar as teacher</h2>
-        <p>Same photographs, same steps, one extra rule from the lidar: <b>the air above the measured surface is empty</b>, and nothing lies under the bare ground. Gaussians that break it are made transparent, and the ones far in the air are removed.</p>
-        <div class="cues" id="tchmode">
-          ${fly ? `<label><input type="radio" name="tchmode" value="fly" checked>fly-through</label>` : ''}
-          ${poses.map((p, i) => `<label><input type="radio" name="tchmode" value="pose-${i}" ${!fly && i === 0 ? 'checked' : ''}>${poseLabel(p, i)}</label>`).join('')}
-          <label><input type="radio" name="tchmode" value="campus" ${!fly && !poses.length ? 'checked' : ''}>in the lidar campus</label></div>
-        <div class="cues" id="tchcampus" hidden><label><input type="radio" name="tch" value="${taught.name}" checked>lidar-taught</label><label><input type="radio" name="tch" value="${plain.name}">plain</label><label><input type="checkbox" id="tch-layer">show the lidar's verdict</label></div>
-        <p class="note" id="tchhint"></p>
-        <table><tr><th></th><th class="num">plain</th><th class="num">lidar-taught</th></tr>
-          ${row('on lidar surfaces', s => pct(s.free_space.on_surfaces, 1), taught.free_space.on_surfaces > plain.free_space.on_surfaces ? 'ok' : '')}
-          ${row('under the bare ground', s => pct(s.free_space.buried, 1), taught.free_space.buried < plain.free_space.buried ? 'ok' : '')}
-          ${row('in air the lidar saw empty', s => pct(s.free_space.in_free_air, 1), taught.free_space.in_free_air < plain.free_space.in_free_air ? 'ok' : 'bad')}
-          ${row('median distance to the lidar', s => fmt(s.overall.median_m, 2) + ' m', taught.overall.median_m < plain.overall.median_m ? 'ok' : '')}
-          ${row('Gaussians in the measured volume', s => fmt(s.gaussians.in_measured_volume))}
-          ${row('held-out PSNR (mean of ' + fmt(plain.images ? plain.images.test : null) + ')', s => s.psnr && s.psnr.test_mean ? fmt(s.psnr.test_mean, 1) + ' dB' : '—')}
-          ${row('training time', s => s.seconds ? fmt(s.seconds / 60) + ' min' : '—')}</table>
-        <p class="note">${taught.prior ? `Removed during training: ${fmt(taught.prior.pruned)} Gaussians more than ${fmt(taught.prior.prune_above_m)} m into measured free air.` : ''} The far field (sky and the background beyond the lidar crop) is not judged and not shown.</p>
-        ${(r.splat_ablations || []).map(a => {
-          const floor = r.placement ? r.placement.sparse_points_free_space.surface : null, drop = taught.psnr_best_covered_view - a.psnr_best_covered_view;
-          return `<p class="finding">How far can the teacher go? A ${fmt(a.prior.weight / taught.prior.weight)}-times stronger rule puts ${pct(a.free_space.on_surfaces)} of the Gaussians on lidar surfaces${floor === null ? '' : a.free_space.on_surfaces > floor ? ` — more than COLMAP's own points (${pct(floor)})` : ` (COLMAP's own points: ${pct(floor)})`}, and the best-covered held-out view goes from ${fmt(taught.psnr_best_covered_view, 1)} to ${fmt(a.psnr_best_covered_view, 1)} dB${drop > 1 ? ': at that strength it carves real structure that the lidar\'s 2.5 m tolerance and the placement\'s error put outside. The demo keeps the gentler rule.' : '.'}</p>`; }).join('')}`;
-      const tower = building('McGraw Tower'), c = centroid(tower.ring);
-      const apply = () => {
-        const mode = document.querySelector('input[name=tchmode]:checked').value, hint = document.getElementById('tchhint');
-        document.getElementById('tchcampus').hidden = mode !== 'campus';
-        if (mode === 'fly') {
-          setView({ points: false, photographers: false }); legend([]);
-          showFly({ views: plain.views, label: 'plain splat', splat: plain }, { views: taught.views, label: 'lidar-taught splat', splat: taught });
-          hint.textContent = 'The same camera path through both splats, between the photographers who face the tower. It pauses at each photographer\'s spot and shows the photograph taken there; tick the box to paint every Gaussian by what the lidar says about it.';
-        } else if (mode.startsWith('pose-')) {
-          const p = poses[+mode.slice(5)], q = taught.views.poses.find(x => x.photo === p.photo), ph = photographerOf(p);
-          setView({ points: false, photographers: false }); legend([]);
-          showWipe({ url: p.render_url, label: 'plain' + (p.psnr ? ' · ' + fmt(p.psnr, 1) + ' dB' : '') }, { url: q.render_url, label: 'lidar-taught' + (q.psnr ? ' · ' + fmt(q.psnr, 1) + ' dB' : '') }, p.size);
-          if (ph) flyToPhotographer(ph, 0.01);
-          hint.textContent = (p.held_out ? 'A photograph neither splat saw. ' : 'A training photograph. ') + 'Drag across the image: plain on the left, lidar-taught on the right.';
-        } else {
-          hideOverlay();
-          const name = document.querySelector('input[name=tch]:checked').value, layer = document.getElementById('tch-layer').checked;
-          setView({ points: false, photographers: false, splat: layer ? null : name, splatLayer: layer ? name : null });
-          legend(layer ? LEGEND_LIDAR : [['#b5532c', 'buildings that changed since 2002']]); setYear(year); if (!layer) showSplat(name, 'teacher');
-          flyTo([c[0], c[1], tower.ground + 18], 190, 0.35, photographersAzimuth(tower));
-          hint.textContent = 'Inside the lidar campus; switch between the two splats, or show the lidar\'s verdict on every Gaussian.';
-        }
-      };
-      for (const x of document.querySelectorAll('input[name=tchmode], input[name=tch], #tch-layer')) x.onchange = apply;
-      apply(); setYear(2023);
-    } },
-  { id: 'above', part: 'When', title: '6 · From above', render() {
-      body.innerHTML = `<h2>The campus from above, 2002 to 2023</h2>
-        <p>Public New York State orthoimagery, one flight every few years, draped on USGS lidar terrain. Drag the year. The three outlined buildings did not exist in 2002.</p>
-        <p><button type="button" id="play">▶ play the years</button></p>
-        <ul>${changed.map(b => `<li><b>${b.name.replace('Bill and Melinda ', '')}</b> — <span class="state" data-state-of="${b.name}"></span></li>`).join('')}</ul>
-        <p class="note">Flight years: ${YEARS.join(', ')}. Between flights the latest earlier image is shown. Building volumes are the 2020 lidar shape, shown only in years the documented dates say the building stood.</p>`;
-      document.getElementById('play').onclick = play;
-      setView();
-      legend([['#b5532c', 'buildings that changed (outline; volume from 2020 lidar when standing)'], ['#303030', 'other footprints (OpenStreetMap)']]);
-      const t = building('McGraw Tower'), c = centroid(t.ring);
-      flyTo([c[0] + 60, c[1] + 40, t.ground], 900, 0.95, -1.9); setYear(year);
-    } },
-  { id: 'gates', part: 'When', title: '7 · Gates Hall', render() { setView(); buildingChapter('Bill and Melinda Gates Hall', 'A parking lot until 2012; a Thom Mayne building from 2014. Slide from 2007 to 2015 and watch the air photographs change; the volume is the lidar shape of the finished building.'); } },
-  { id: 'klarman', part: 'When', title: '8 · Klarman Hall', render() { setView(); buildingChapter('Klarman Hall', 'The courtyard behind Goldwin Smith Hall until the 2012 flight, under construction in the 2015 flight, a glass atrium from 2016.'); } },
-  { id: 'tower', part: 'When', title: '9 · Twenty years of one tower', render() {
-      const r = mainCloud().meta;
-      const own = scene.photographers.filter(p => p.reconstruction === r.tag); const dated = own.filter(p => p.year);
-      const counts = {}; for (const p of dated) counts[p.year] = (counts[p.year] || 0) + 1;
-      const maxc = Math.max(1, ...Object.values(counts));
-      body.innerHTML = `<h2>McGraw Tower: the thing that does not change</h2>
-        <p>${fmt(own.length)} photographs of the tower and Uris Library, ${fmt(r.dated_photographs)} of them dated from ${Math.min(...dated.map(p => p.year))} to ${Math.max(...dated.map(p => p.year))}. Each reconstructed point carries the years in which photographs observed it; the slider shows the points seen by that year.</p>
-        <div class="yearbar">${Array.from({ length: MAX_YEAR - MIN_YEAR + 1 }, (_, i) => MIN_YEAR + i).map(y => `<div data-year="${y}" style="height:${100 * (counts[y] || 0) / maxc}%" title="${y}: ${counts[y] || 0} dated photographs"></div>`).join('')}</div>
-        <div class="yearlabels"><span>${MIN_YEAR}</span><span>dated photographs per year</span><span>${MAX_YEAR}</span></div>
-        <div class="cues"><label><input type="radio" name="col" value="photo" ${colourMode === 'photo' ? 'checked' : ''}>photo colours</label><label><input type="radio" name="col" value="first" ${colourMode === 'first' ? 'checked' : ''}>colour by first year seen</label>${r.mesh ? `<label><input type="checkbox" id="surface" ${mainCloud().surface ? '' : 'disabled'}>dense surface (${fmt(r.mesh.faces)} faces)</label>` : ''}</div>
-        <p>Click a photographer (sphere) to see the photograph; red = taken in the selected year.</p><div id="pick"></div>`;
-      for (const x of document.querySelectorAll('input[name=col]')) x.onchange = () => { colourMode = x.value; setYear(year); };
-      setView();
-      const sf = document.getElementById('surface'); if (sf) sf.onchange = () => { setView({ surface: sf.checked, points: !sf.checked }); setYear(year); };
-      legend([['#2a6fdb', 'photographers before the selected year'], ['#d0453a', 'photographers in the selected year'], ['#9aa5b1', 'later photographers']]);
-      const t = building('McGraw Tower'), c = centroid(t.ring);
-      flyTo([c[0], c[1], t.ground + 20], 220, 0.35, photographersAzimuth(t)); setYear(year);
-    } },
-  { id: 'limits', part: 'When', title: '10 · What the record cannot show', render() {
-      const st = scene.placement_study || {};
-      body.innerHTML = `<h2>What the record cannot show</h2>
-        <ul>
-          <li><b>Most fragments cannot be placed yet.</b> Of the campus-wide run's ${(st.fragments || []).filter(f => f.run !== (mainCloud().meta.tag || '').slice(0, 8)).length} larger fragments none is certified: a square tower cannot fix its own heading, one facade cannot fix its own scale, and close-ups of an entrance show no facade the map knows. The certificate says which, instead of placing them wrongly.</li>
+      return { r, plain, taught, poses, fly: !!(plain.views && taught.views && plain.views.fly && taught.views.fly), tower: building('McGraw Tower') };
+    },
+    steps: [
+      { title: 'One extra rule',
+        see: ctx => ctx.fly ? 'the same camera path through both splats, plain on the left, lidar-taught on the right. It pauses where a photographer stood and shows the photograph taken there.' : 'the campus; the lidar-taught splat has not been trained yet.',
+        body: ctx => { const { plain, taught, poses, fly } = ctx; if (!taught) return '<p>The lidar-taught splat has not been trained yet.</p>';
+          return `<p>Same photographs, same steps, one extra rule from the lidar: <b>the air above the measured surface is empty</b>, and nothing lies under the bare ground. Gaussians that break it are made transparent, and the ones far out in the air are removed.</p>
+          <div class="cues" id="tchmode">
+            ${fly ? `<label><input type="radio" name="tchmode" value="fly" checked>fly-through</label>` : ''}
+            ${poses.map((p, i) => `<label><input type="radio" name="tchmode" value="pose-${i}" ${!fly && i === 0 ? 'checked' : ''}>${poseLabel(p, i)}</label>`).join('')}
+            <label><input type="radio" name="tchmode" value="campus" ${!fly && !poses.length ? 'checked' : ''}>in the lidar campus</label></div>
+          <div class="cues" id="tchcampus" hidden><label><input type="radio" name="tch" value="${taught.name}" checked>lidar-taught</label><label><input type="radio" name="tch" value="${plain.name}">plain</label><label><input type="checkbox" id="tch-layer">show the lidar's verdict</label></div>
+          <p class="note" id="tchhint"></p>
+          ${taught.prior ? `<p class="note">Removed during training: ${fmt(taught.prior.pruned)} Gaussians more than ${fmt(taught.prior.prune_above_m)} m into measured free air.</p>` : ''}`; },
+        after(ctx) { if (!ctx.taught) return;
+          const { plain, taught, poses, tower } = ctx, c = centroid(tower.ring);
+          const apply = () => {
+            const mode = document.querySelector('input[name=tchmode]:checked').value, hint = document.getElementById('tchhint');
+            document.getElementById('tchcampus').hidden = mode !== 'campus';
+            if (mode === 'fly') {
+              setView({ points: false, photographers: false }); legend([]);
+              showFly({ views: plain.views, label: 'plain splat', splat: plain }, { views: taught.views, label: 'lidar-taught splat', splat: taught });
+              hint.textContent = 'It pauses at each photographer\'s spot and shows the photograph taken there; tick the box to paint every Gaussian by what the lidar says about it.';
+            } else if (mode.startsWith('pose-')) {
+              const p = poses[+mode.slice(5)], q = taught.views.poses.find(x => x.photo === p.photo), ph = photographerOf(p);
+              setView({ points: false, photographers: false }); legend([]);
+              showWipe({ url: p.render_url, label: 'plain' + (p.psnr ? ' · ' + fmt(p.psnr, 1) + ' dB' : '') }, { url: q.render_url, label: 'lidar-taught' + (q.psnr ? ' · ' + fmt(q.psnr, 1) + ' dB' : '') }, p.size);
+              if (ph) flyToPhotographer(ph, 0.01);
+              hint.textContent = (p.held_out ? 'A photograph neither splat saw. ' : 'A training photograph. ') + 'Drag across the image: plain on the left, lidar-taught on the right.';
+            } else {
+              hideOverlay();
+              const name = document.querySelector('input[name=tch]:checked').value, layer = document.getElementById('tch-layer').checked;
+              setView({ points: false, photographers: false, splat: layer ? null : name, splatLayer: layer ? name : null });
+              legend(layer ? LEGEND_LIDAR : [['#b5532c', 'buildings that changed since 2002']]); setYear(year); if (!layer) showSplat(name, 'teacher');
+              flyTo([c[0], c[1], tower.ground + 18], 190, 0.35, photographersAzimuth(tower));
+              hint.textContent = 'Inside the lidar campus; switch between the two splats, or show the lidar\'s verdict on every Gaussian.';
+            }
+          };
+          for (const x of document.querySelectorAll('input[name=tchmode], input[name=tch], #tch-layer')) x.onchange = apply;
+          ctx.apply = apply;
+        },
+        view(ctx) { if (ctx.apply) ctx.apply(); else { setView(); legend([]); } setYear(2023); },
+        sum: () => 'the air above the measured surface is empty; nothing under the bare ground' },
+      { title: 'What the rule changed, in numbers',
+        see: ctx => ctx.fly && !overlay.hidden ? 'the fly-through, still running. Tick the box under it to paint every Gaussian by the lidar\'s verdict: red is paint in air the lidar measured empty.' : 'the same camera path through both splats.',
+        body: ctx => { const { plain, taught } = ctx; if (!taught) return '';
+          const row = (label, f, cls) => `<tr><td>${label}</td><td class="num">${f(plain)}</td><td class="num ${cls || ''}">${f(taught)}</td></tr>`;
+          return `<table><tr><th></th><th class="num">plain</th><th class="num">lidar-taught</th></tr>
+            ${row('on lidar surfaces', s => pct(s.free_space.on_surfaces, 1), taught.free_space.on_surfaces > plain.free_space.on_surfaces ? 'ok' : '')}
+            ${row('under the bare ground', s => pct(s.free_space.buried, 1), taught.free_space.buried < plain.free_space.buried ? 'ok' : '')}
+            ${row('in air the lidar saw empty', s => pct(s.free_space.in_free_air, 1), taught.free_space.in_free_air < plain.free_space.in_free_air ? 'ok' : 'bad')}
+            ${row('median distance to the lidar', s => fmt(s.overall.median_m, 2) + ' m', taught.overall.median_m < plain.overall.median_m ? 'ok' : '')}
+            ${row('Gaussians in the measured volume', s => fmt(s.gaussians.in_measured_volume))}
+            ${row('held-out PSNR (mean of ' + fmt(plain.images ? plain.images.test : null) + ')', s => s.psnr && s.psnr.test_mean ? fmt(s.psnr.test_mean, 1) + ' dB' : '—')}
+            ${row('training time', s => s.seconds ? fmt(s.seconds / 60) + ' min' : '—')}</table>
+          <p class="note">Read it as: the paint moved from the empty air and from under the ground onto the measured surfaces, and the photographs are reproduced as well as before. The far field (sky and the background beyond the lidar crop) is not judged and not shown.</p>`; },
+        view(ctx) { if (ctx.taught && ctx.fly && overlay.hidden) { setView({ points: false, photographers: false }); legend([]); showFly({ views: ctx.plain.views, label: 'plain splat', splat: ctx.plain }, { views: ctx.taught.views, label: 'lidar-taught splat', splat: ctx.taught }); } },
+        sum: ctx => ctx.taught ? `on lidar surfaces ${pct(ctx.plain.free_space.on_surfaces)} → ${pct(ctx.taught.free_space.on_surfaces)}; in empty air ${pct(ctx.plain.free_space.in_free_air)} → ${pct(ctx.taught.free_space.in_free_air)}; PSNR ${fmt(ctx.plain.psnr.test_mean, 1)} → ${fmt(ctx.taught.psnr.test_mean, 1)} dB` : '' },
+      { title: 'How far can the teacher go?',
+        see: 'the same fly-through.',
+        body: ctx => { const { r, taught } = ctx; if (!taught) return '';
+          return (r.splat_ablations || []).map(a => {
+            const floor = r.placement ? r.placement.sparse_points_free_space.surface : null, drop = taught.psnr_best_covered_view - a.psnr_best_covered_view;
+            return `<p class="finding">A ${fmt(a.prior.weight / taught.prior.weight)}-times stronger rule puts ${pct(a.free_space.on_surfaces)} of the Gaussians on lidar surfaces${floor === null ? '' : a.free_space.on_surfaces > floor ? ` — more than COLMAP's own points (${pct(floor)})` : ` (COLMAP's own points: ${pct(floor)})`}, and the best-covered held-out view goes from ${fmt(taught.psnr_best_covered_view, 1)} to ${fmt(a.psnr_best_covered_view, 1)} dB${drop > 1 ? ': at that strength it carves real structure that the lidar\'s 2.5 m tolerance and the placement\'s error put outside. The page keeps the gentler rule.' : '.'}</p>`; }).join('') || '<p class="note">No stronger rule has been tried yet.</p>'; },
+        view(ctx) { if (ctx.taught && ctx.fly && overlay.hidden) { setView({ points: false, photographers: false }); legend([]); showFly({ views: ctx.plain.views, label: 'plain splat', splat: ctx.plain }, { views: ctx.taught.views, label: 'lidar-taught splat', splat: ctx.taught }); } },
+        sum: ctx => { const a = (ctx.r.splat_ablations || [])[0]; return a && ctx.taught ? `a ${fmt(a.prior.weight / ctx.taught.prior.weight)}-times stronger rule: ${pct(a.free_space.on_surfaces)} on surfaces, but ${fmt(ctx.taught.psnr_best_covered_view - a.psnr_best_covered_view, 1)} dB lost on the best-covered view` : ''; } },
+    ] },
+
+  { id: 'above', part: 'When', title: '6 · From above', purpose: 'Public aerial flights, one every few years, draped on the lidar terrain; the buildings that changed, shown only in the years they stood.',
+    setup: () => ({}),
+    steps: [
+      { title: `${YEARS.length} flights, ${YEARS[0]}–${YEARS[YEARS.length - 1]}`,
+        see: `the Quad from above in the ${YEARS[0]} flight: New York State orthoimagery draped on the lidar terrain. Drag the year, or play it.`,
+        body: () => `<p>Between flights the latest earlier image is shown. The same frame holds the lidar, the footprints, the placed fragment and every flight, so the years line up to the metre.</p>
+          <p><button type="button" id="play">▶ play the years</button></p><p class="note">Flight years: ${YEARS.join(', ')}.</p>`,
+        after() { document.getElementById('play').onclick = play; },
+        view() { setView(); legend(CHANGED_LEGEND); const t = building('McGraw Tower'), c = centroid(t.ring); flyTo([c[0] + 60, c[1] + 40, t.ground], 900, 0.95, -1.9); setYear(YEARS[0]); },
+        sum: () => `${YEARS.length} flights, ${YEARS.join(', ')}` },
+      { title: `Three buildings that did not exist in ${YEARS[0]}`,
+        see: `${YEARS[YEARS.length - 1]}: the three outlined buildings standing. Each is drawn only in the years the documented dates say it stood.`,
+        body: () => `<ul>${changed.map(b => `<li><b>${b.name.replace('Bill and Melinda ', '')}</b> — <span class="state" data-state-of="${b.name}"></span></li>`).join('')}</ul>
+          <p class="note">Building volumes are the 2020 lidar shape, shown only in years the documented dates say the building stood. The next chapters take each in turn.</p>`,
+        view() { setView(); legend(CHANGED_LEGEND); setYear(YEARS[YEARS.length - 1]); },
+        sum: () => changed.map(b => b.name.replace('Bill and Melinda ', '')).join(', ') },
+    ] },
+
+  { id: 'gates', part: 'When', title: '7 · Gates Hall', purpose: 'A parking lot until 2012, a Thom Mayne building from 2014: documented, from the air, from the ground.',
+    ...buildingSteps('Bill and Melinda Gates Hall', 'Slide from 2007 to 2015 and watch the air photographs change; the volume is the lidar shape of the finished building.', [2007, 2013, 2016]) },
+  { id: 'klarman', part: 'When', title: '8 · Klarman Hall', purpose: 'The courtyard behind Goldwin Smith Hall until the 2012 flight, a glass atrium from 2016: documented, from the air, from the ground.',
+    ...buildingSteps('Klarman Hall', 'The courtyard behind Goldwin Smith Hall until the 2012 flight, under construction in the 2015 flight, a glass atrium from 2016.', [2012, 2015, 2018]) },
+
+  { id: 'tower', part: 'When', title: '9 · Twenty years of one tower', purpose: 'Every reconstructed point carries the years in which photographs observed it; the photographers carry their dates.',
+    setup() {
+      const r = mainCloud().meta, own = fragmentOf(r.tag), dated = own.filter(p => p.year), counts = {};
+      for (const p of dated) counts[p.year] = (counts[p.year] || 0) + 1;
+      return { r, own, dated, counts, maxc: Math.max(1, ...Object.values(counts)), tower: building('McGraw Tower') };
+    },
+    steps: [
+      { title: 'Every point knows its years',
+        see: 'the tower fragment: points seen by the selected year in colour, the rest grey. The bars under the text count the dated photographs per year.',
+        body: ctx => `<p>${fmt(ctx.own.length)} photographs of the tower and Uris Library, ${fmt(ctx.r.dated_photographs)} of them dated, from ${Math.min(...ctx.dated.map(p => p.year))} to ${Math.max(...ctx.dated.map(p => p.year))}. Each reconstructed point carries the years in which photographs observed it; the slider shows the points seen by that year.</p>
+          <div class="yearbar">${Array.from({ length: MAX_YEAR - MIN_YEAR + 1 }, (_, i) => MIN_YEAR + i).map(y => `<div data-year="${y}" style="height:${100 * (ctx.counts[y] || 0) / ctx.maxc}%" title="${y}: ${ctx.counts[y] || 0} dated photographs"></div>`).join('')}</div>
+          <div class="yearlabels"><span>${MIN_YEAR}</span><span>dated photographs per year</span><span>${MAX_YEAR}</span></div>
+          <div class="cues"><label><input type="radio" name="col" value="photo" ${colourMode === 'photo' ? 'checked' : ''}>photo colours</label><label><input type="radio" name="col" value="first" ${colourMode === 'first' ? 'checked' : ''}>colour by first year seen</label>${ctx.r.mesh ? `<label><input type="checkbox" id="surface" ${mainCloud().surface ? '' : 'disabled'}>dense surface (${fmt(ctx.r.mesh.faces)} faces)</label>` : ''}</div>`,
+        after() {
+          for (const x of document.querySelectorAll('input[name=col]')) x.onchange = () => { colourMode = x.value; setYear(year); };
+          const sf = document.getElementById('surface'); if (sf) sf.onchange = () => { setView({ surface: sf.checked, points: !sf.checked }); setYear(year); };
+        },
+        view(ctx) { setView(); legend([['#2a6fdb', 'photographers before the selected year'], ['#d0453a', 'photographers in the selected year'], ['#9aa5b1', 'later photographers']]); const c = centroid(ctx.tower.ring); flyTo([c[0], c[1], ctx.tower.ground + 20], 220, 0.35, photographersAzimuth(ctx.tower)); setYear(year); },
+        sum: ctx => `${fmt(ctx.r.dated_photographs)} dated photographs, ${Math.min(...ctx.dated.map(p => p.year))}–${Math.max(...ctx.dated.map(p => p.year))}` },
+      { title: 'Click a photographer',
+        see: 'the photographers as spheres: blue before the selected year, red in it, grey after. Click one to see the photograph and jump to its year.',
+        body: () => `<p>Each sphere is where a photographer stood, as the placement puts them. The photograph, its date, its author and its licence come up below.</p><div id="pick"></div>`,
+        view(ctx) { setView(); legend([['#2a6fdb', 'photographers before the selected year'], ['#d0453a', 'photographers in the selected year'], ['#9aa5b1', 'later photographers']]); const c = centroid(ctx.tower.ring); flyTo([c[0], c[1], ctx.tower.ground + 15], 200, 0.3, photographersAzimuth(ctx.tower)); setYear(year); },
+        sum: () => 'each photograph, its date, author and licence' },
+    ] },
+
+  { id: 'limits', part: 'When', title: '10 · What the record cannot show', purpose: 'The limits, said out loud: of the placement, of the public record, and of the time machine.',
+    setup() { const st = scene.placement_study || {}, tag = (mainCloud().meta.tag || '').slice(0, 8); return { frs: (st.fragments || []).filter(f => f.run !== tag) }; },
+    steps: [
+      { title: 'Of the placement',
+        see: 'the campus.',
+        body: ctx => `<ul>
+          <li><b>Most fragments cannot be placed yet.</b> Of the campus-wide run's ${ctx.frs.length} larger fragments none is certified: a square tower cannot fix its own heading, one facade cannot fix its own scale, and close-ups of an entrance show no facade the map knows. The certificate says which, instead of placing them wrongly.</li>
+          <li><b>Airborne lidar sees roofs and ground, not walls.</b> A Gaussian on a wall is judged against the nearest roof edge or ground return, so the distance score is conservative there; the free-air test tolerates 2.5 m horizontally for the same reason.</li></ul>`,
+        view() { setView(); legend([]); campusView(); setYear(year); },
+        sum: () => 'a square tower cannot fix its heading; one facade cannot fix its scale; lidar sees walls thinly' },
+      { title: 'Of the public record',
+        see: 'the campus.',
+        body: () => `<ul>
           <li><b>No licensed ground-level photograph of any site before construction exists online.</b> The "before" is aerial only; no 3D of the old parking lots or the courtyard is shown.</li>
-          <li><b>Airborne lidar sees roofs and ground, not walls.</b> A Gaussian on a wall is judged against the nearest roof edge or ground return, so the distance score is conservative there; the free-air test tolerates 2.5 m horizontally for the same reason.</li>
+          <li><b>Boardman Hall (demolished 1959)</b> is beyond the time machine: its postcards can be matched to the surviving tower and library, but every recovered pose is a mirror image, because no licensed modern photograph looks at the tower from the Arts Quad side.</li></ul>`,
+        view() { setView(); legend([]); setYear(year); },
+        sum: () => 'no licensed ground photograph before construction; Boardman Hall only as mirror images' },
+      { title: 'Of the time machine',
+        see: 'the campus.',
+        body: () => `<ul>
           <li><b>Building volumes are the 2020 lidar shape</b>, displayed only in years the documented dates say the building stood.</li>
-          <li><b>The automatic aerial test is a diagnostic.</b> Its outline score rises at every site when the building appears, but stable buildings vary between flights by as much, so the dates on this page are the documented ones.</li>
-          <li><b>Boardman Hall (demolished 1959)</b> is beyond the time machine: its postcards can be matched to the surviving tower and library, but every recovered pose is a mirror image, because no licensed modern photograph looks at the tower from the Arts Quad side.</li>
-        </ul>`;
-      setView(); legend([]); setYear(year);
-    } },
-  { id: 'photo', part: 'A new photograph', title: '11 · A photograph it has never seen', render() {
-      const r = mainCloud().meta, L = r.located || { photos: [] }, loo = L.leave_one_out, tower = building('McGraw Tower'), tc = centroid(tower.ring);
-      const badge = v => v === 'placed' ? '<span class="state present">placed</span>' : v === 'refused' ? '<span class="state before">refused</span>' : '<span class="state works">direction placed, distance open</span>';
-      body.innerHTML = `<h2>A photograph it has never seen</h2>
-        <p>COLMAP can register a new photograph, but only into its own frame. Here it lands on the campus: the most similar of the fragment's ${fmt(scene.photographers.filter(q => q.reconstruction === r.tag).length)} photographs are found (NetVLAD), matched (SuperPoint, LightGlue), and RANSAC says where the photographer stood and which way they looked, <b>without GPS</b>. Then the photograph is projected onto the lidar city from that pose: if the placement is right, its walls land on the lidar's walls.</p>
-        <div class="tray">${L.photos.map((q, i) => `<button type="button" class="pick" data-i="${i}"><img src="${BASE + q.photo}" alt=""><span>${badge(q.verdict)}</span><span>${q.left_out ? 'taken out, placed again' : 'never in the reconstruction'}</span></button>`).join('')}</div>
-        <label class="drop" id="drop">Drop a photograph of McGraw Tower or Uris Library here, or <input type="file" accept="image/*" id="drop-file"></label>
-        <div id="located"></div>
-        <p><button type="button" id="paint-all">▶ paint the ${fmt(scene.photographers.filter(q => q.reconstruction === r.tag).length)} photographs back, one by one</button></p>
-        ${loo ? `<p class="note">Tested by taking each photograph out of the reconstruction and placing it again from scratch: of ${loo.with_a_plausible_reference_pose} with a trustworthy reference pose, ${loo.placed} were placed (median ${fmt(loo.placed_position_error_m.median, 1)} m from where the reconstruction had them, none beyond ${fmt(Math.ceil(loo.placed_position_error_m.max / 5) * 5)} m), ${loo.placed_distance_uncertain} placed with the distance stated as open, ${loo.refused} refused. Photographs from the Arts Quad side, which the internet's photographers never covered, are refused: all 120 street-level frames from there.</p>` : ''}`;
-      const placedLegend = () => legend([['#e02924', 'the photographer, as placed; dashed: where along the line of sight they may stand']]);
-      setView({ points: false, photographers: false }); placedLegend();
-      flyTo([tc[0], tc[1], tower.ground + 15], 230, 0.42, photographersAzimuth(tower)); setYear(2023);
-      const panel = document.getElementById('located');
-      const select = q => {
-        stopPaint(); showPlaced(q.centre ? q : null); standing = null; placedLegend();
-        const d = q.centre ? Math.hypot(q.centre[0] - tc[0], q.centre[1] - tc[1]) : null;
-        panel.innerHTML = `<div class="placed-card"><img src="${BASE + q.photo}" alt=""><div>
-          <p>${badge(q.verdict)} <span class="note">${q.seconds ? 'in ' + fmt(q.seconds, 1) + ' s' : ''}</span></p>
-          <p class="note">${q.left_out ? `In the reconstruction, but taken out of it first and placed from scratch: it lands ${fmt(q.reconstruction_pose_error_m, 1)} m from where the reconstruction had it.` : q.live ? 'Dropped in just now.' : 'A photograph the reconstruction never used.'}</p>
-          ${q.reasons.length ? `<p>${q.reasons.join('; ')}.</p>` : ''}${q.notes.length ? `<p class="note">${q.notes.join('; ')}.</p>` : ''}
-          ${q.centre && q.verdict === 'placed' ? `<div class="stat"><div>from McGraw Tower</div><div>${fmt(d)} m</div><div>above the lidar ground</div><div>${fmt(q.height_over_ground_m, 1)} m</div>
-            <div>facing</div><div>${compass(q.heading_deg)}</div><div>matched points that agree</div><div>${fmt(q.inliers)}</div></div>
-            <p><button type="button" id="stand">stand where the photographer stood</button> <button type="button" id="side">see it from the side</button></p>
-            <label class="note">city <input type="range" id="blend" min="0" max="100" value="100"> photograph</label>` : ''}
-          <p class="note">${q.title.replace(/^File:/, '')}${q.artist ? ' · ' + q.artist.replace(/<[^>]+>/g, '') : ''}${q.license ? ' · ' + q.license : ''}</p></div></div>`;
-        if (!q.centre || q.verdict === 'refused') { projectionOn(0); return; }
-        if (q.verdict !== 'placed') {   // the direction is placed, the distance is not: painted from the wrong distance it would land on the wrong walls
-          projectionOn(0); panel.querySelector('.placed-card div').insertAdjacentHTML('beforeend', '<p class="note">Not painted onto the city: from the wrong distance the photograph would land on the wrong walls. The dashed line on the map is where along its line of sight the photographer may have stood.</p>');
-          const C = q.segment && q.segment.length === 2 ? q.segment.map(v => new THREE.Vector3(...v)) : [new THREE.Vector3(...q.centre)];
-          const mid = C.reduce((a, v) => a.add(v), new THREE.Vector3()).multiplyScalar(1 / C.length);
-          flyTo([(mid.x + tc[0]) / 2, (mid.y + tc[1]) / 2, tower.ground + 5], 420, 0.9, -2.0); return;
-        }
-        projectFrom(q, q.photo); projectionOn(1);
-        const side = () => { const R = q.rotation, C = new THREE.Vector3(...q.centre), f = new THREE.Vector3(...R[2]); f.z = 0; f.normalize();
-          const look = C.clone().addScaledVector(f, Math.min(80, d * 0.6)); look.z = tower.ground + 12;
-          const from = C.clone().addScaledVector(f, -40).add(new THREE.Vector3(-f.y, f.x, 0).multiplyScalar(45)); from.z = C.z + 35;
-          lookUp(false); flight = { from: { pos: camera.position.clone(), tgt: controls.target.clone() }, to: { pos: from, tgt: look }, t0: performance.now(), ms: 1400, fov: { from: camera.fov, to: 48 } }; };
-        document.getElementById('stand').onclick = () => { placedGroup.visible = false; standing = q; flyToPhotographer(q);   // inside its own frustum the outline is in the way
-          legend([['#3a3d40', 'dimmed: the lidar city; inside the white frame: the photograph, painted onto it from where it was taken']]); };
-        document.getElementById('side').onclick = () => { placedGroup.visible = true; standing = null; placedLegend(); side(); };
-        document.getElementById('blend').oninput = e => projectionOn(+e.target.value / 100);
-        side();
-      };
-      for (const b of body.querySelectorAll('.pick')) b.onclick = () => select(L.photos[+b.dataset.i]);
-      // Live placement through the demo server (web/demo_server.py); a page served by a plain file server says so.
-      const place = async file => {
-        panel.innerHTML = `<p class="note">placing ${file.name}…</p>`;
-        try {
-          const res = await fetch('api/locate', { method: 'POST', headers: { 'X-Filename': encodeURIComponent(file.name) }, body: file });
-          if (!res.ok) { const j = await res.json().catch(() => null);
-            throw new Error(res.status === 404 || res.status === 501 ? 'live placement needs the demo server: PYTHONPATH=pipeline python -m ghostmap.web.demo_server' : (j && j.error) || 'the server answered ' + res.status); }
-          select(await res.json());
-        } catch (e) { panel.innerHTML = `<p class="note">${e.message}</p>`; }
-      };
-      const drop = document.getElementById('drop');
-      drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); }; drop.ondragleave = () => drop.classList.remove('over');
-      drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); if (e.dataTransfer.files[0]) place(e.dataTransfer.files[0]); };
-      document.getElementById('drop-file').onchange = e => { if (e.target.files[0]) place(e.target.files[0]); };
-      document.getElementById('paint-all').onclick = () => paintAll(r, tower);
-    } },
+          <li><b>The automatic aerial test is a diagnostic.</b> Its outline score rises at every site when the building appears, but stable buildings vary between flights by as much, so the dates on this page are the documented ones.</li></ul>`,
+        view() { setView(); legend([]); setYear(year); },
+        sum: () => 'volumes are the 2020 shape; dates are the documented ones' },
+    ] },
+
+  { id: 'photo', part: 'A new photograph', title: '11 · A photograph it has never seen', purpose: 'A photograph lands on the campus in seconds without GPS, with its own verdict, and is painted back onto the lidar city from where it was taken.',
+    setup() {
+      const r = mainCloud().meta, L = r.located || { photos: [] }, tower = building('McGraw Tower');
+      return { r, L, loo: L.leave_one_out, street: L.street_test, tower, tc: centroid(tower.ring), az: photographersAzimuth(tower), n: fragmentOf(r.tag).length, selected: null };
+    },
+    steps: [
+      { title: 'Pick a photograph, or drop your own',
+        see: 'the lidar city around McGraw Tower, waiting for a photograph.',
+        body: ctx => { const badge = v => v === 'placed' ? '<span class="state present">placed</span>' : v === 'refused' ? '<span class="state before">refused</span>' : '<span class="state works">direction placed, distance open</span>';
+          return `<p>COLMAP can register a new photograph, but only into its own frame. Here it lands on the campus, in three moves: the most similar of the fragment's ${fmt(ctx.n)} photographs are found (NetVLAD), matched (SuperPoint, LightGlue), and RANSAC says where the photographer stood and which way they looked, <b>without GPS</b>. The verdict says how far to trust it.</p>
+          <div class="tray">${ctx.L.photos.map((q, i) => `<button type="button" class="pick" data-i="${i}" aria-pressed="${ctx.selected === q}"><img src="${BASE + q.photo}" alt=""><span>${badge(q.verdict)}</span><span>${q.left_out ? 'taken out, placed again' : 'never in the reconstruction'}</span></button>`).join('')}</div>
+          <label class="drop" id="drop">Drop a photograph of McGraw Tower or Uris Library here, or <input type="file" accept="image/*" id="drop-file"></label>
+          <div id="located"></div>`; },
+        after(ctx) {
+          const panel = document.getElementById('located');
+          const choose = q => { ctx.selected = q; show('photo', 1); };
+          for (const b of body.querySelectorAll('.pick')) b.onclick = () => choose(ctx.L.photos[+b.dataset.i]);
+          // Live placement through the demo server (web/demo_server.py); a page served by a plain file server says so.
+          const place = async file => {
+            panel.innerHTML = `<p class="note">placing ${file.name}…</p>`;
+            try {
+              const res = await fetch('api/locate', { method: 'POST', headers: { 'X-Filename': encodeURIComponent(file.name) }, body: file });
+              if (!res.ok) { const j = await res.json().catch(() => null);
+                throw new Error(res.status === 404 || res.status === 501 ? 'live placement needs the demo server: PYTHONPATH=pipeline python -m ghostmap.web.demo_server' : (j && j.error) || 'the server answered ' + res.status); }
+              choose(await res.json());
+            } catch (e) { panel.innerHTML = `<p class="note">${e.message}</p>`; }
+          };
+          const drop = document.getElementById('drop');
+          drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); }; drop.ondragleave = () => drop.classList.remove('over');
+          drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); if (e.dataTransfer.files[0]) place(e.dataTransfer.files[0]); };
+          document.getElementById('drop-file').onchange = e => { if (e.target.files[0]) place(e.target.files[0]); };
+        },
+        view(ctx) { stopPaint(); projectionOn(0); showPlaced(null); standing = null; setView({ points: false, photographers: false }); legend([]); flyTo([ctx.tc[0], ctx.tc[1], ctx.tower.ground + 15], 230, 0.42, ctx.az); setYear(2023); },
+        sum: ctx => ctx.selected ? ctx.selected.title.replace(/^File:/, '') : `${fmt(ctx.L.photos.length)} prepared photographs, or your own` },
+      { title: 'Where the photographer stood',
+        see: ctx => { const q = ctx.selected; if (!q) return 'the lidar city; pick a photograph first.';
+          return !q.centre || q.verdict === 'refused' ? 'the lidar city; this photograph was refused, so nothing is drawn for it.' : q.verdict === 'placed' ? 'the photographer (red sphere) and the frame of the photograph, seen from the side; the tower in the direction they faced.' : 'the photographer\'s direction, seen from the side; the dashed line is where along the line of sight they may have stood.'; },
+        body: ctx => { const q = ctx.selected; if (!q) return '<p class="note">Pick a photograph in step 1.</p>';
+          const badge = v => v === 'placed' ? '<span class="state present">placed</span>' : v === 'refused' ? '<span class="state before">refused</span>' : '<span class="state works">direction placed, distance open</span>';
+          const d = q.centre ? Math.hypot(q.centre[0] - ctx.tc[0], q.centre[1] - ctx.tc[1]) : null;
+          return `<div class="placed-card"><img src="${BASE + q.photo}" alt=""><div>
+            <p>${badge(q.verdict)} <span class="note">${q.seconds ? 'in ' + fmt(q.seconds, 1) + ' s' : ''}</span></p>
+            <p class="note">${q.left_out ? `In the reconstruction, but taken out of it first and placed from scratch: it lands ${fmt(q.reconstruction_pose_error_m, 1)} m from where the reconstruction had it.` : q.live ? 'Dropped in just now.' : 'A photograph the reconstruction never used.'}</p>
+            ${q.reasons.length ? `<p>${q.reasons.join('; ')}.</p>` : ''}${q.notes.length ? `<p class="note">${q.notes.join('; ')}.</p>` : ''}
+            <p class="note">${q.title.replace(/^File:/, '')}${q.artist ? ' · ' + q.artist.replace(/<[^>]+>/g, '') : ''}${q.license ? ' · ' + q.license : ''}</p></div></div>
+            ${q.centre && q.verdict === 'placed' ? results(stat(fmt(d) + ' m', 'from McGraw Tower', 'where the photographer stood'), stat(fmt(q.height_over_ground_m, 1) + ' m', 'above the lidar ground', 'eye height is the plausible band'), stat(compass(q.heading_deg), 'facing', 'the direction of the photograph'), stat(fmt(q.inliers), 'matched points that agree', 'correspondences to the fragment that fit one pose')) +
+              `<p><button type="button" id="stand">stand where the photographer stood</button> <button type="button" id="side">see it from the side</button></p>
+              <label class="note">city <input type="range" id="blend" min="0" max="100" value="100"> photograph</label>` : ''}
+            ${q.centre && q.verdict !== 'placed' && q.verdict !== 'refused' ? '<p class="note">Not painted onto the city: from the wrong distance the photograph would land on the wrong walls. The dashed line on the map is where along its line of sight the photographer may have stood.</p>' : ''}`; },
+        after(ctx) { const q = ctx.selected; if (!q || !q.centre || q.verdict !== 'placed') return;
+          const placedLegend = () => legend([['#e02924', 'the photographer, as placed; dashed: where along the line of sight they may stand']]);
+          const d = Math.hypot(q.centre[0] - ctx.tc[0], q.centre[1] - ctx.tc[1]);
+          ctx.side = () => { const R = q.rotation, C = new THREE.Vector3(...q.centre), f = new THREE.Vector3(...R[2]); f.z = 0; f.normalize();
+            const look = C.clone().addScaledVector(f, Math.min(80, d * 0.6)); look.z = ctx.tower.ground + 12;
+            const from = C.clone().addScaledVector(f, -40).add(new THREE.Vector3(-f.y, f.x, 0).multiplyScalar(45)); from.z = C.z + 35;
+            lookUp(false); flight = { from: { pos: camera.position.clone(), tgt: controls.target.clone() }, to: { pos: from, tgt: look }, t0: performance.now(), ms: 1400, fov: { from: camera.fov, to: 48 } }; };
+          document.getElementById('stand').onclick = () => { placedGroup.visible = false; standing = q; flyToPhotographer(q);   // inside its own frustum the outline is in the way
+            legend([['#3a3d40', 'dimmed: the lidar city; inside the white frame: the photograph, painted onto it from where it was taken']]); };
+          document.getElementById('side').onclick = () => { placedGroup.visible = true; standing = null; placedLegend(); ctx.side(); };
+          document.getElementById('blend').oninput = e => projectionOn(+e.target.value / 100);
+        },
+        view(ctx) { const q = ctx.selected; stopPaint(); standing = null; showPlaced(q && q.centre ? q : null); legend([['#e02924', 'the photographer, as placed; dashed: where along the line of sight they may stand']]);
+          setView({ points: false, photographers: false }); setYear(2023);
+          if (!q || !q.centre || q.verdict === 'refused') { projectionOn(0); flyTo([ctx.tc[0], ctx.tc[1], ctx.tower.ground + 15], 230, 0.42, ctx.az); return; }
+          if (q.verdict !== 'placed') {   // the direction is placed, the distance is not: painted from the wrong distance it would land on the wrong walls
+            projectionOn(0);
+            const C = q.segment && q.segment.length === 2 ? q.segment.map(v => new THREE.Vector3(...v)) : [new THREE.Vector3(...q.centre)];
+            const mid = C.reduce((a, v) => a.add(v), new THREE.Vector3()).multiplyScalar(1 / C.length);
+            flyTo([(mid.x + ctx.tc[0]) / 2, (mid.y + ctx.tc[1]) / 2, ctx.tower.ground + 5], 420, 0.9, -2.0); return;
+          }
+          projectFrom(q, q.photo); projectionOn(1); ctx.side(); },
+        sum: ctx => { const q = ctx.selected; if (!q) return ''; const badge = q.verdict === 'placed' ? 'placed' : q.verdict === 'refused' ? 'refused' : 'direction placed, distance open';
+          return q.centre && q.verdict === 'placed' ? `${badge}${q.seconds ? ' in ' + fmt(q.seconds, 1) + ' s' : ''}: ${fmt(Math.hypot(q.centre[0] - ctx.tc[0], q.centre[1] - ctx.tc[1]))} m from the tower, facing ${compass(q.heading_deg)}, ${fmt(q.inliers)} points agree` : badge; } },
+      { title: 'Painted back onto the city',
+        see: ctx => ctx.selected && ctx.selected.centre && ctx.selected.verdict === 'placed' ? 'the lidar city from where the photographer stood, the photograph painted onto it inside the white frame. If the placement is right, its walls land on the lidar\'s walls.' : 'the lidar city; only a photograph placed with its distance can be painted back.',
+        body: ctx => `<p>Every surface of the lidar city is projected into the photograph from the recovered pose and takes the photograph's colour where it is the nearest surface along that ray. ${ctx.selected && ctx.selected.verdict === 'placed' ? 'Drag the slider to blend between the bare city and the photograph.' : ''}</p>
+          ${ctx.selected && ctx.selected.verdict === 'placed' ? `<label class="note">city <input type="range" id="blend" min="0" max="100" value="100"> photograph</label>` : ''}
+          <p><button type="button" id="paint-all">▶ paint the ${fmt(ctx.n)} photographs back, one by one</button></p>
+          <p class="note">The same projection, for every photograph of the fragment from its own placed pose: a lap around the tower through the photographers' eyes.</p>`,
+        after(ctx) { document.getElementById('paint-all').onclick = () => { standing = null; paintAll(ctx.r, ctx.tower); }; const b = document.getElementById('blend'); if (b) b.oninput = e => projectionOn(+e.target.value / 100); },
+        view(ctx) { const q = ctx.selected; stopPaint(); setView({ points: false, photographers: false }); setYear(2023);
+          if (q && q.centre && q.verdict === 'placed') { projectFrom(q, q.photo); projectionOn(1); showPlaced(q); placedGroup.visible = false; standing = q; flyToPhotographer(q); legend([['#3a3d40', 'dimmed: the lidar city; inside the white frame: the photograph, painted onto it from where it was taken']]); }
+          else { projectionOn(0); showPlaced(null); standing = null; legend([]); flyTo([ctx.tc[0], ctx.tc[1], ctx.tower.ground + 15], 230, 0.42, ctx.az); } },
+        sum: () => 'its walls land on the lidar\'s walls' },
+      { title: `Tested on all ${fmt(fragmentOf(mainCloud().meta.tag).length)}`,
+        see: 'the lidar city around the tower.',
+        body: ctx => { const { loo, street } = ctx; if (!loo) return '<p class="note">The leave-one-out test has not been run.</p>';
+          return `<p>Each photograph was taken out of the reconstruction and placed again from scratch by the same rule, against the reconstruction's own pose for it (${fmt(loo.with_a_plausible_reference_pose)} of ${fmt(loo.photographs)} have a trustworthy one).</p>
+          ${results(stat(fmt(loo.placed), 'placed', `median ${fmt(loo.placed_position_error_m.median, 1)} m from the reconstruction's own pose, nine in ten within ${fmt(loo.placed_position_error_m.p90, 1)} m, none beyond ${fmt(Math.ceil(loo.placed_position_error_m.max / 5) * 5)} m`),
+                    stat(fmt(loo.placed_distance_uncertain), 'distance stated as open', `a long lens on a distant tower fixes the direction only; the true spot lies a median ${fmt(loo.distance_uncertain_truth_to_segment_m.median, 1)} m from the stated line`),
+                    stat(fmt(loo.refused), 'refused', `each would have been about ${fmt(loo.refused_position_error_m_median)} m wrong: refusing was right`),
+                    street ? stat(`${fmt(street.refused)} of ${fmt(street.frames)}`, 'street photographs refused', 'Mapillary frames from the Arts Quad side, which the internet\'s photographers never covered: the rule refuses what the fragment cannot know') : '')}`; },
+        view(ctx) { stopPaint(); projectionOn(0); showPlaced(null); standing = null; setView({ points: false, photographers: false }); legend([]); flyTo([ctx.tc[0], ctx.tc[1], ctx.tower.ground + 15], 230, 0.42, ctx.az); setYear(2023); },
+        sum: ctx => ctx.loo ? `${fmt(ctx.loo.placed)} placed (median ${fmt(ctx.loo.placed_position_error_m.median, 1)} m), ${fmt(ctx.loo.placed_distance_uncertain)} distance open, ${fmt(ctx.loo.refused)} refused` : '' },
+    ] },
 ];
 // The fragment's photographs, painted back onto the city from their own poses, one after another.
 let paintTimer = null;
@@ -925,7 +1130,56 @@ function paintAll(r, tower) {
   step();
 }
 const compass = deg => { const b = (90 - deg + 360) % 360; return ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'][Math.round(b / 45) % 8]; };
-let current = null;
+
+// --- showing a chapter at a step ------------------------------------------------------------------------------
+const stepnav = document.getElementById('stepnav'), now = document.getElementById('now');
+let current = null, stepIndex = 0;
+let reveal = new URLSearchParams(location.search).get('reveal') === 'all';   // every step of a chapter open at once
+document.body.classList.toggle('reveal', reveal);
+const chapterName = ch => ch.title.replace(/^\d+ · /, '');
+function caption(text) { now.innerHTML = text ? '<b>You are looking at</b> ' + text : ''; }
+function render(ch) {
+  const k = stepIndex, ctx = ch.ctx, n = ch.steps.length;
+  const items = ch.steps.map((s, i) => {
+    const open = reveal || i === k, cls = reveal ? (i === k ? 'now' : 'open') : i < k ? 'done' : i === k ? 'now' : 'todo';
+    const sum = !open && i < k && s.sum ? s.sum(ctx) : '';
+    return `<li class="${cls}" data-step="${i}"><span class="n">${!reveal && i < k ? '✓' : i + 1}</span><div class="step">
+      <div class="step-title">${s.title}</div>${sum ? `<div class="sum">${sum}</div>` : ''}
+      ${open ? `<div class="step-body">${s.body ? s.body(ctx) : ''}</div>` : ''}</div></li>`;
+  });
+  body.innerHTML = `<div class="chapter-head"><div class="part">${ch.part}</div><h2>${ch.title}</h2><p class="purpose">${ch.purpose}</p></div><ol class="steps">${items.join('')}</ol>`;
+  for (const li of body.querySelectorAll('li[data-step]')) li.querySelector('.step-title').onclick = () => show(ch.id, +li.dataset.step);
+  for (const [i, s] of ch.steps.entries()) if ((reveal || i === k) && s.after) s.after(ctx);
+  if (ch.steps[k].view) ch.steps[k].view(ctx);
+  const i = chapters.indexOf(ch), last = k === n - 1, nextCh = chapters[i + 1];
+  stepnav.innerHTML = `<button type="button" class="prev" ${k === 0 && i === 0 ? 'disabled' : ''} aria-label="previous step">←</button><span class="pos">step ${k + 1} of ${n}</span>
+    <button type="button" class="next" ${last && !nextCh ? 'disabled' : ''}>${last ? (nextCh ? 'Next chapter: ' + chapterName(nextCh) : 'The end') : 'Next: ' + ch.steps[k + 1].title} →</button>`;
+  stepnav.querySelector('.prev').onclick = prev; stepnav.querySelector('.next').onclick = next;
+}
+function show(id, k = 0) {
+  if (!chapters.some(c => c.id === id)) id = 'colmap';
+  const ch = chapters.find(c => c.id === id);
+  if (id !== current) {   // a new chapter: nothing of the previous chapter's view carries over
+    current = id;
+    for (const b of nav.querySelectorAll('button')) b.setAttribute('aria-current', String(b.dataset.chapter === id));
+    if (id !== 'void' && placement.mode === 'floating') { placement.mode = 'placed'; poseAt(1, 0); }
+    placement.done = null;   // a snap still running from the previous chapter must not move this chapter's camera
+    stopPaint(); projectionOn(0); showPlaced(null); lookUp(false); standing = null;   // a photograph painted on the city belongs to its chapter
+    status(''); hideOverlay();
+    ch.ctx = ch.setup ? ch.setup() : {};
+  }
+  stepIndex = Math.max(0, Math.min(ch.steps.length - 1, k));
+  render(ch);
+  const s = ch.steps[stepIndex]; caption(typeof s.see === 'function' ? s.see(ch.ctx) : s.see);
+  body.scrollTop = 0; history.replaceState(null, '', '#' + id + (stepIndex ? '/' + (stepIndex + 1) : ''));
+}
+// The next step, or the next chapter after the last step; back likewise. Returns whether a step of the same chapter was shown.
+function next() { const ch = chapters.find(c => c.id === current), i = chapters.indexOf(ch); if (stepIndex < ch.steps.length - 1) { show(current, stepIndex + 1); return true; } if (chapters[i + 1]) show(chapters[i + 1].id); return false; }
+function prev() { const ch = chapters.find(c => c.id === current), i = chapters.indexOf(ch); if (stepIndex > 0) { show(current, stepIndex - 1); return true; } if (chapters[i - 1]) show(chapters[i - 1].id, chapters[i - 1].steps.length - 1); return false; }
+function setReveal(on) { reveal = on; document.body.classList.toggle('reveal', on); show(current, stepIndex); }
+// Links: #snap opens the chapter at its first step, #snap/3 at its third.
+function fromHash() { const [id, s] = (location.hash || '#colmap').slice(1).split('/'); return [id.replace(/[^a-z]/g, ''), Math.max(0, (parseInt(s, 10) || 1) - 1)]; }
+
 let lastPart = null;
 for (const ch of chapters) {
   if (ch.part !== lastPart) { nav.append(el('span', { className: 'part' }, ch.part)); lastPart = ch.part; }
@@ -934,24 +1188,20 @@ for (const ch of chapters) {
   nav.append(Object.assign(b, { onclick: () => show(ch.id) }));
   b.dataset.chapter = ch.id;   // the recorded tour and the checks find chapters by id
 }
-function show(id) {
-  if (!chapters.some(c => c.id === id)) id = 'colmap';
-  const ch = chapters.find(c => c.id === id); current = id;
-  for (const b of nav.querySelectorAll('button')) b.setAttribute('aria-current', String(b.dataset.chapter === id));
-  if (id !== 'void' && placement.mode === 'floating') { placement.mode = 'placed'; poseAt(1, 0); }
-  placement.done = null;   // a snap still running from the previous chapter must not move this chapter's camera
-  stopPaint(); projectionOn(0); showPlaced(null); lookUp(false); standing = null;   // a photograph painted on the city belongs to its chapter
-  status(''); hideOverlay(); body.innerHTML = ''; ch.render(); body.scrollTop = 0; history.replaceState(null, '', '#' + id);
-}
 
-// --- presenter keys: arrows or page keys step through the chapters, F toggles full screen ------------------
+// --- presenter keys: arrows step, page keys change chapter, A opens the whole chapter, F toggles full screen -------
 addEventListener('keydown', e => {
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === ' ' && e.target instanceof HTMLButtonElement) return;   // a focused button (the step bar's) takes the space itself
   const i = chapters.findIndex(c => c.id === current);
-  if (['ArrowRight', 'PageDown'].includes(e.key) && i < chapters.length - 1) { e.preventDefault(); show(chapters[i + 1].id); }
-  else if (['ArrowLeft', 'PageUp'].includes(e.key) && i > 0) { e.preventDefault(); show(chapters[i - 1].id); }
+  if (['ArrowRight', ' '].includes(e.key)) { e.preventDefault(); next(); }
+  else if (e.key === 'ArrowLeft') { e.preventDefault(); prev(); }
+  else if (e.key === 'PageDown' && i < chapters.length - 1) { e.preventDefault(); show(chapters[i + 1].id); }
+  else if (e.key === 'PageUp' && i > 0) { e.preventDefault(); show(chapters[i - 1].id); }
+  else if (e.key === 'a' || e.key === 'A') setReveal(!reveal);
   else if (e.key === 'f' || e.key === 'F') { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {}); }
 });
+addEventListener('hashchange', () => { const [id, k] = fromHash(); if (id !== current || k !== stepIndex) show(id, k); });
 
 // --- picking ----------------------------------------------------------------------------------
 const ray = new THREE.Raycaster(), mouse = new THREE.Vector2();
@@ -976,6 +1226,8 @@ renderer.setAnimationLoop(() => {
 document.getElementById('attribution').textContent = scene.attribution.join(' ');
 document.getElementById('status').textContent = '';
 setYear(2007);
-show((location.hash || '#colmap').slice(1).replace(/[^a-z]/g, ''));
-window.__tm = { terrains, textures, scene, clouds, view, placement, show, camera, controls, cityParts, specialMeshes, gpuName, projector, projUniforms, projectFrom, projectionOn, flyToPhotographer };  // for the headless checks and the recorded tour
+show(...fromHash());
+// for the headless checks and the recorded tour
+window.__tm = { terrains, textures, scene, clouds, view, placement, show, next, prev, step: () => stepIndex, steps: () => chapters.find(c => c.id === current).steps.length, reveal: setReveal,
+                camera, controls, cityParts, specialMeshes, gpuName, projector, projUniforms, projectFrom, projectionOn, flyToPhotographer };
 document.documentElement.dataset.ready = 'true';
