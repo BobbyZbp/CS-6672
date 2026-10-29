@@ -9,6 +9,10 @@ data/*
 !data/README.md
 artifacts/*
 !artifacts/README.md
+# the talk's deck is kept with its script (docs/presentation/talk-track.md); the rest of presentation/ stays local
+!artifacts/presentation/
+artifacts/presentation/*
+!artifacts/presentation/ghostmap-talk.pptx
 dist/assets/*
 !dist/assets/ghostmap/
 third_party/
