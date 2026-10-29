@@ -64,6 +64,9 @@ Module-level map: [../pipeline/README.md](../pipeline/README.md).
 
 ## handoffs/
 
+[2026-10-29-presentation-handoff.md](handoffs/2026-10-29-presentation-handoff.md) is
+the brief for another Claude session (claude.ai or Claude Code on the web) to continue the
+presentation work: what the project is, what exists, every number on the slides, the owner's rules.
 [GHOSTMAP_CLAUDE_HANDOFF.md](handoffs/GHOSTMAP_CLAUDE_HANDOFF.md) is the
 2026-10-24 research handoff prompt (constraints, candidate directions, required
-review format). It is an agent brief, not project documentation.
+review format). Both are agent briefs, not project documentation.
