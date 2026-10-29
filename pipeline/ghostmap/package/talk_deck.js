@@ -111,12 +111,12 @@ const INK = C.text1, WHITE = C.background1, SLATE = C.text2, MIST = C.background
 const X0 = 0.6, W = 12.13;   // content margins
 
 pres.defineSlideMaster({ title: 'DARK', background: { color: INK },
-  objects: [{ placeholder: { options: { name: 'title', type: 'title', x: 0.7, y: 0.8, w: 6.2, h: 2.7, fontFace: THEME.headFontFace, fontSize: 48, bold: true, color: WHITE, valign: 'bottom', margin: 0 }, text: '' } }] });
+  objects: [{ placeholder: { options: { name: 'title', type: 'title', x: 0.7, y: 0.8, w: 6.2, h: 2.7, fontFace: THEME.headFontFace, fontSize: 48, bold: true, color: WHITE, valign: 'bottom', align: 'left', margin: 0 }, text: '' } }] });
 pres.defineSlideMaster({ title: 'DARK_CLOSE', background: { color: INK },
-  objects: [{ placeholder: { options: { name: 'title', type: 'title', x: 0.7, y: 0.9, w: 6.2, h: 2.5, fontFace: THEME.headFontFace, fontSize: 40, bold: true, color: WHITE, valign: 'bottom', margin: 0 }, text: '' } }] });
+  objects: [{ placeholder: { options: { name: 'title', type: 'title', x: 0.7, y: 0.9, w: 6.2, h: 2.5, fontFace: THEME.headFontFace, fontSize: 40, bold: true, color: WHITE, valign: 'bottom', align: 'left', margin: 0 }, text: '' } }] });
 pres.defineSlideMaster({ title: 'CONTENT', background: { color: WHITE },
   objects: [
-    { placeholder: { options: { name: 'title', type: 'title', x: X0, y: 0.32, w: W, h: 0.8, fontFace: THEME.headFontFace, fontSize: 32, bold: true, color: INK, valign: 'middle', margin: 0 }, text: '' } },
+    { placeholder: { options: { name: 'title', type: 'title', x: X0, y: 0.32, w: W, h: 0.8, fontFace: THEME.headFontFace, fontSize: 32, bold: true, color: INK, valign: 'middle', align: 'left', margin: 0 }, text: '' } },
     { text: { text: 'GhostMap · CS 6672      map data © OpenStreetMap contributors · lidar USGS 3DEP · aerial imagery NYS GIS Program Office', options: { x: X0, y: 7.02, w: 10.5, h: 0.3, fontSize: 10, color: GREY, margin: 0 } } }],
   slideNumber: { x: 12.23, y: 7.02, w: 0.5, h: 0.3, fontSize: 10, color: GREY, align: 'right' } });
 
@@ -180,14 +180,24 @@ function slide(master, newSection, title) {   // every slide carries its section
   const r = picture(s, still('photo-stand.png'), 7.15, 1.55, 5.5, 4.4, 'A photograph painted onto the lidar city from where its photographer stood');
   caption(s, 'A photograph painted onto the lidar model of Cornell from where it was taken. ' + credit(hoPlaza) + '.', r.x, r.y + r.h + 0.12, r.w, 0.55); }
 
-// --- 2 · the hook ----------------------------------------------------------------------------------------------------
-{ const s = slide('CONTENT', null, 'Where was this photograph taken?');
-  const r = picture(s, path.join(DIST, 'assets/timemachine', hoPlaza.photo), X0, 1.4, 6.9, 4.95, 'A photograph of McGraw Tower from Ho Plaza', 'left');
-  caption(s, `${credit(hoPlaza)}. Taken out of the reconstruction first, then placed again from scratch.`, r.x, r.y + r.h + 0.1, r.w);
-  ['No GPS.', 'No EXIF.', 'Only the pixels.'].forEach((t, i) => text(s, t, { x: 8.0, y: 1.6 + 0.75 * i, w: 4.7, h: 0.7, fontSize: 36, bold: true, fontFace: THEME.headFontFace, color: i === 2 ? TERRA : INK }));
-  s.addShape(pres.ShapeType.roundRect, { x: 8.0, y: 4.1, w: 3.3, h: 0.55, rectRadius: 0.1, fill: { color: TERRA }, line: { color: TERRA, width: 0 }, objectName: 'demo cue' });
-  text(s, 'live demo · chapter 11', { x: 8.0, y: 4.1, w: 3.3, h: 0.55, fontSize: 16, bold: true, color: WHITE, align: 'center', valign: 'middle' });
-  text(s, 'Placed in 1–2 s on a laptop GPU, then painted back onto a 3D model of the campus from where the photographer stood.', { x: 8.0, y: 4.9, w: 4.7, h: 1.2, fontSize: 16, color: SLATE }); }
+// --- 2 · what GhostMap does, in one picture -------------------------------------------------------------------------------
+{ const s = slide('CONTENT', null, 'What GhostMap does');
+  const ph = 2.3, pw = ph * 16 / 9;   // the stills are 16:9; each has its caption beside it
+  const a = picture(s, still('void.png'), X0, 1.4, pw, ph, 'COLMAP\'s reconstruction floating in its own frame', 'left');
+  text(s, `COLMAP's output: ${fmt(own.length)} internet photographs of McGraw Tower as a model in a frame of its own. No metres, no north, no up, no place on Earth.`, { x: X0 + pw + 0.2, y: a.y, w: 6.5 - pw - 0.2, h: ph, fontSize: 13, color: SLATE, valign: 'middle' });
+  arrow(s, X0 + pw / 2, a.y + a.h + 0.12, X0 + pw / 2, a.y + a.h + 0.48, 'placed');
+  const b = picture(s, still('snap.png'), X0, a.y + a.h + 0.6, pw, ph, 'The same reconstruction placed in metres on the lidar campus', 'left');
+  text(s, 'The same model placed in metres on the campus, without GPS, from public lidar and map footprints, with a certificate that says which cue fixed which number.', { x: X0 + pw + 0.2, y: b.y, w: 6.5 - pw - 0.2, h: ph, fontSize: 13, color: SLATE, valign: 'middle' });
+  const checked = campus.filter(f => f.ours_vs_geotags_m), offs = checked.map(f => f.ours_vs_geotags_m.median);
+  const rows = [
+    ['Places a COLMAP reconstruction in the real world, without GPS', `USGS lidar and OpenStreetMap footprints fix the seven numbers COLMAP leaves free; the certificate names the cue behind each (scale here: ±${pct(cert.scale_uncertainty_relative, 1)}, three independent ways)`],
+    ['Refuses when the geometry can\'t', `all ${campus.length} campus fragments refused, each with its reason; the ${checked.length} that GPS could check were ${km(Math.min(...offs))} to ${km(Math.max(...offs))} off, and all ${checked.length} had been refused`],
+    ['Places a new photograph in about two seconds', `${loo.placed} of ${loo.with_a_plausible_reference_pose} within a median ${fmt(loo.placed_position_error_m.median, 1)} m when taken out and placed again; painted back onto the lidar city from where it was taken`]];
+  rows.forEach(([h, d], i) => {
+    const y = 1.4 + i * 1.7; numbered(s, i + 1, 7.3, y + 0.02, 0.5);
+    text(s, h, { x: 7.95, y, w: 4.78, h: 0.6, fontSize: 17, bold: true, valign: 'middle' });
+    text(s, d, { x: 7.95, y: y + 0.65, w: 4.78, h: 1.0, fontSize: 13, color: SLATE }); });
+  text(s, 'Built on pycolmap and hloc, public data only; a live demo page; then the lidar as referee and teacher for the splats.', { x: 7.3, y: 6.45, w: 5.43, h: 0.5, fontSize: 12, italic: true, color: GREY }); }
 
 // --- 3 · three things tried first ------------------------------------------------------------------------------------
 { const s = slide('CONTENT', 'What we did, and why', 'Three things we tried first');

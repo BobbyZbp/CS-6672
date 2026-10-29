@@ -49,22 +49,24 @@ model in a frame that means nothing. I put it into the real world without GPS, a
 **讲:** 大家好，我是［名字］。这是 GhostMap，我的 COLMAP hacker project。一句话：COLMAP 给你的 3D 模型在一个没有意义的
 坐标系里；我不用 GPS 把它放进真实世界，而且放不了的时候让它自己说出来。
 
-### Slide 2 · Where was this photograph taken? (0:15–0:55)
+### Slide 2 · What GhostMap does (0:15–0:55)
 
-**Show / 操作:** the photograph; then the demo, chapter 11. Drop one of your own phone photographs (or click the Ho
-Plaza photograph in the tray), click "stand where the photographer stood", drag the slider to "city" and back. /
-先放这张照片；切到演示第 11 章，拖进一张你自己的手机照片（或点托盘里 Ho Plaza 那张），点"stand where the photographer
-stood"，把滑块拖到"city"再拖回来。
+**Show / 操作:** the two pictures on the left, top to bottom, then the three points. / 左边两张图从上到下，再讲右边三点。
 
-**Say:** Here's a photograph of McGraw Tower with no GPS, like most photographs on the internet once they've been
-copied around. [drop it] Two seconds later it's on the campus: this is where the photographer stood, this is the way
-they faced. Now I stand where they stood: the photograph is painted onto a 3D model of Cornell from that spot; inside
-the white frame is the photograph, the dimmed part is the model. [drag to "city"] Take the photograph away and the
-tower is still exactly there. The rest of the talk is how this came about, how it works, and what is still open.
+**Say:** What GhostMap does, in one picture. Top: what COLMAP gives you from 88 internet photographs of McGraw Tower,
+a model in a frame of its own: no metres, no north, no up, no place on Earth. Bottom: the same model placed in metres
+on the campus, with no GPS, from public lidar and map footprints, and with a certificate that says which cue fixed
+which number. Three things it does. It places a reconstruction in the real world without GPS. It refuses when the
+geometry can't: every one of the campus fragments was refused with a reason, and the three that GPS could check were
+up to 845 metres off. And it places a new photograph in about two seconds, within a median 0.7 metres, and paints it
+back onto the lidar city from where it was taken. How it got here, how it works, and what is still open: that is the
+talk.
 
-**讲:** 这是一张没有 GPS 的钟楼照片——网上的照片转几手之后大多都没有。［拖进去］两秒之后它落在了校园上：这是摄影者站的
-位置，这是他朝的方向。现在我站到他的位置上：照片从这个点投影到康奈尔的 3D 模型上，白框里是照片，外面调暗的是模型。［拖到
-"city"］把照片拿掉，钟楼还在原来的位置。接下来讲它是怎么来的、怎么做的，以及还有什么没做完。
+**讲:** 一张图讲清 GhostMap 做什么。上面：COLMAP 从 88 张钟楼的网络照片给你的东西，一个在自己坐标系里的模型，没有米、没有北、
+没有上、不知道在地球上哪里。下面：同一个模型，不用 GPS，靠公开的 lidar 和地图轮廓放进了校园，以米为单位，还带一张证书，写明
+哪条线索定了哪个数。它做三件事：不用 GPS 把重建放进真实世界；几何定不住的时候拒绝——校园的每个片段都被有理由地拒绝了，其中
+三个能用 GPS 核对的偏了最多 845 米；新照片大约两秒放好，中位误差 0.7 米，再投影回 lidar 城市。它是怎么来的、怎么做的、还有
+什么没做完，就是这次要讲的。
 
 **Transition / 过渡:** It didn't start here. / 一开始不是这个。
 
