@@ -67,7 +67,9 @@ from the reconstruction's own pose (none beyond 25 m); 21 with the distance stat
 distant tower fixes the direction only); 2 refused. Run the page with
 `PYTHONPATH=pipeline .venv/bin/python -m ghostmap.web.demo_server` for live placement.
 
-Live demo: `http://127.0.0.1:8080/timemachine.html` (serve `dist/`, below). Twelve chapters, from 0 "Where COLMAP
+Live demo: `http://127.0.0.1:8080/timemachine.html` (serve `dist/`, below), or the public copy at
+https://bobbyzbp.github.io/CS-6672/timemachine.html (GitHub Pages from the `demo` branch, published by
+`pipeline/ghostmap/package/presentation_bundle.py --publish`; everything but live placement). Twelve chapters, from 0 "Where COLMAP
 stops" to 11 "A photograph it has never seen", each a few steps: a caption on the 3D view says what is being shown,
 the step does one thing and leaves one result, and taken steps collapse to their result. ← → step, PgUp PgDn change
 chapter, A opens a whole chapter at once (`?reveal=all` does the same for every chapter), F full screen; `#snap/3`

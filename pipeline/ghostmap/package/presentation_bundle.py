@@ -8,13 +8,20 @@ exist, or packaging stops. A small `serve.py` serves the folder on http://127.0.
 binary assets need an HTTP server; opening the HTML file directly does not work). A manifest records
 every file's size and SHA-256.
 
-Usage: PYTHONPATH=pipeline python -m ghostmap.package.presentation_bundle [--output artifacts/presentation]
+`--publish` puts the same files on the repository's `demo` branch instead (an orphan branch, replaced on every
+publish), which GitHub Pages serves at https://bobbyzbp.github.io/CS-6672/ — the shareable link. Live placement
+(`/api/locate`) needs the demo server and is not on the published page; everything else is.
+
+Usage: PYTHONPATH=pipeline python -m ghostmap.package.presentation_bundle [--output artifacts/presentation] [--publish]
 """
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
+import shutil
+import subprocess
+import tempfile
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,7 +30,9 @@ from ghostmap.paths import ROOT
 
 DIST = ROOT / 'dist'
 OUTPUT = ROOT / 'artifacts/presentation'
-PAGES = ['timemachine.html', 'timemachine.js', 'ghostmap.css', 'presentation.html']
+PAGES = ['timemachine.html', 'timemachine.js', 'timemachine.css', 'ghostmap.css', 'presentation.html']
+PAGES_BRANCH = 'demo'
+PAGES_URL = 'https://bobbyzbp.github.io/CS-6672/'
 ASSET_DIRS = ['assets/timemachine', 'assets/presentation']
 VENDOR = ['vendor/three.module.js', 'vendor/OrbitControls.js', 'vendor/LICENSE.three', 'vendor/gaussian-splats-3d.module.js', 'vendor/LICENSE.gaussian-splats-3d']
 
@@ -70,13 +79,36 @@ def referenced(scene, base='assets/timemachine/'):
     return out
 
 
-def package(dist=DIST, output=OUTPUT):
-    dist, output = Path(dist), Path(output); output.mkdir(parents=True, exist_ok=True)
+def demo_files(dist):
+    """Every file the demo needs, relative to dist; stops if scene.json refers to a file that is not there."""
     scene = json.loads((dist / 'assets/timemachine/scene.json').read_text())
     # the demo's data, and the stills the slide deck shows (dist/assets/presentation, written by qa/record_tour.py)
     files = set(PAGES + VENDOR) | {p.relative_to(dist).as_posix() for folder in ASSET_DIRS for p in (dist / folder).rglob('*') if p.is_file()}
     missing = sorted(p for p in (referenced(scene) | set(PAGES + VENDOR)) if not (dist / p).exists())
     if missing: raise SystemExit('missing files referenced by the demo: ' + ', '.join(missing[:12]))
+    return scene, files
+
+
+def publish(dist=DIST, branch=PAGES_BRANCH):
+    """The demo as the repository's `demo` branch: one commit holding the files, force-pushed, for GitHub Pages."""
+    dist = Path(dist); scene, files = demo_files(dist)
+    origin = subprocess.run(['git', 'remote', 'get-url', 'origin'], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
+    with tempfile.TemporaryDirectory() as tmp:
+        site = Path(tmp) / 'site'; site.mkdir()
+        for rel in sorted(files):
+            dest = site / rel; dest.parent.mkdir(parents=True, exist_ok=True); shutil.copyfile(dist / rel, dest)
+        (site / 'index.html').write_text(INDEX); (site / '.nojekyll').write_text('')
+        (site / 'README.md').write_text(f'The GhostMap demo as GitHub Pages serves it; built by `pipeline/ghostmap/package/presentation_bundle.py --publish` from the main branch. Scene data generated {scene.get("generated_utc")}.\n')
+        git = lambda *a: subprocess.run(['git', *a], cwd=site, check=True, capture_output=True, text=True)
+        git('init', '-q', '-b', branch); git('add', '-A')
+        git('-c', 'user.name=BobbyZbp', '-c', 'user.email=143522297+BobbyZbp@users.noreply.github.com', 'commit', '-q', '-m', f'The demo page, published {datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")} UTC')
+        git('push', '-q', '--force', origin, f'{branch}:{branch}')
+    return {'branch': branch, 'files': len(files) + 3, 'bytes': sum((dist / f).stat().st_size for f in files), 'url': PAGES_URL + 'timemachine.html', 'scene_generated_utc': scene.get('generated_utc')}
+
+
+def package(dist=DIST, output=OUTPUT):
+    dist, output = Path(dist), Path(output); output.mkdir(parents=True, exist_ok=True)
+    scene, files = demo_files(dist)
     stamp = datetime.now(timezone.utc).strftime('%Y%m%d-%H%M')
     zpath = output / f'ghostmap-demo-{stamp}.zip'
     manifest = []
@@ -95,8 +127,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--dist', type=Path, default=DIST)
     parser.add_argument('--output', type=Path, default=OUTPUT)
+    parser.add_argument('--publish', action='store_true', help=f'push the demo to the {PAGES_BRANCH} branch for GitHub Pages instead of zipping it')
     args = parser.parse_args()
-    print(json.dumps(package(args.dist, args.output), indent=2))
+    print(json.dumps(publish(args.dist) if args.publish else package(args.dist, args.output), indent=2))
 
 
 if __name__ == '__main__': main()
