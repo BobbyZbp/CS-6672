@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GhostMap</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="ghostmap.css">
+<link rel="stylesheet" href="timemachine.css">
+<script type="importmap">{"imports": {"three": "./vendor/three.module.js"}}</script>
+</head>
+<body>
+<header>
+  <h1>GhostMap <span class="sub">an interactive 3D time machine of Cornell</span></h1>
+  <p class="thesis">Internet photographs of Cornell, reconstructed with COLMAP, placed without GPS inside public lidar, checked and taught by it, replayed over twenty years.</p>
+</header>
+<main>
+  <section id="viewport" aria-label="3D view">
+    <canvas id="scene"></canvas>
+    <div id="timebar">
+      <div id="year">2023</div>
+      <div><input type="range" id="slider" min="2002" max="2026" step="1" value="2023" aria-label="Year"><div id="ticks"></div></div>
+      <div id="basis"></div>
+    </div>
+    <div id="overlay" hidden></div>
+    <div id="now" aria-live="polite"></div>
+    <div id="legend"></div>
+    <div id="status" role="status">Loading measured data…</div>
+  </section>
+  <aside id="panel">
+    <nav id="chapters" aria-label="Chapters"></nav>
+    <article id="chapter-body"></article>
+    <div id="stepnav"></div>
+  </aside>
+</main>
+<footer><span class="keys">← → steps · PgUp PgDn chapters · A whole chapter · F full screen · drag to orbit, scroll to zoom</span> <span id="attribution"></span></footer>
+<script type="module" src="timemachine.js"></script>
+</body>
+</html>
